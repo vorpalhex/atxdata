@@ -1,0 +1,38 @@
+set dotenv-load := true
+
+default:
+    @just --list
+
+check-api:
+    bun run check:api
+
+list-meetings from to body='':
+    @if [ -n "{{body}}" ]; then bun --silent run list:meetings --from "{{from}}" --to "{{to}}" --body "{{body}}"; else bun --silent run list:meetings --from "{{from}}" --to "{{to}}"; fi
+
+ingest-meeting event_id:
+    bun run ingest:meeting --event-id "{{event_id}}"
+
+ingest-date date body='City Council':
+    bun run ingest:meeting --date "{{date}}" --body "{{body}}"
+
+backfill from to body='City Council':
+    bun run ingest:backfill --from "{{from}}" --to "{{to}}" --body "{{body}}"
+
+retry-failed:
+    bun run retry:failed
+
+typecheck:
+    bun run typecheck
+
+test:
+    bun test
+
+verify:
+    bun run typecheck
+    bun test
+
+smoke-list:
+    just list-meetings 2026-05-21 2026-05-21 'City Council'
+
+smoke-ingest:
+    just ingest-date 2026-05-21 'City Council'

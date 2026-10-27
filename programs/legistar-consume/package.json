@@ -1,0 +1,25 @@
+{
+  "name": "legistar-consume",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "check:api": "bun run scripts/check-legistar-api.ts",
+    "ingest:meeting": "bun run src/cli.ts ingest-meeting",
+    "ingest:backfill": "bun run src/cli.ts backfill",
+    "list:meetings": "bun run src/cli.ts list-meetings",
+    "retry:failed": "bun run src/cli.ts retry-failed",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "coverage": "bun test --coverage --coverage-reporter=lcov --coverage-reporter=text",
+    "quality:crap": "bun run coverage && crapper --use-existing-coverage src",
+    "quality:dry": "dryer --threshold 0.8 src",
+    "quality:mutate": "bun run coverage && mutator --use-existing-coverage --test-command 'bun test' --max-workers 2 src"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^6.0.3"
+  },
+  "dependencies": {
+    "commander": "^14.0.3"
+  }
+}
