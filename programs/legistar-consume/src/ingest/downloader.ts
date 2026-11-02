@@ -186,7 +186,7 @@ function decodeFilename(value: string | undefined): string | null {
   }
 }
 
-async function saveResponse(response: Response, storagePath: string, partPath: string) {
+export async function saveResponse(response: Response, storagePath: string, partPath: string) {
   try {
     mkdirSync(dirname(storagePath), { recursive: true });
     const written = await writeResponseBody(response, partPath);

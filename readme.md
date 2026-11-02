@@ -28,6 +28,7 @@ LLM contributions are acceptable, but will generally be heavily scrutinized. We 
 ## Programs
 
 - [legistar-consume](programs/legistar-consume/README.md): Bun CLI for downloading public Austin Legistar meeting documents and recording metadata in SQLite.
+- [civicclerk-consume](programs/civicclerk-consume/README.md): Serial, rate-limit-aware Bun client for Travis County CivicClerk meeting metadata and PDFs.
 
 Each program currently retains its own dependencies, configuration, and commands.
 

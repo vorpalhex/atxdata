@@ -1,0 +1,16 @@
+node_modules/
+data/
+coverage/
+.metrics/
+target/
+.cpcache/
+.scratch/
+*.sqlite
+*.sqlite-*
+*.part
+*.log
+.env
+.env.*
+!.env.example
+!bun.lock
+.DS_Store
