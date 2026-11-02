@@ -45,6 +45,16 @@ bun run src/cli.ts --help
 
 See the program README for ingestion commands and environment variables. Default runtime output stays in `programs/legistar-consume/data/` (ignored by Git). No existing databases, downloaded documents, exports, or local environment files are included in this repo.
 
+### civicclerk-consume
+
+CivicClerk is to Travis County what Legistar is to the City of Austin. It's a similar open access platform for meetings and documents. The CivicClerk client is effectively a port of legistar-consume.
+
+```sh
+cd programs/civicclerk-consume
+bun install --frozen-lockfile
+bun run src/cli.ts
+```
+
 ## Skills
 
 ### exhaustive
