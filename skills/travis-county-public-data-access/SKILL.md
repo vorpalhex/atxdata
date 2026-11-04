@@ -47,6 +47,10 @@ For bounded fiscal-year budget inventories and direct PDFs, follow [budget acqui
 
 For bounded current chapter PDFs and historical-interface discovery, follow [County Code acquisition](references/county-code.md). This standalone agent-operated workflow preserves chapter/amendment identity, source URLs and hashes, with serial curl transfers, manual cooldown gates, private provenance and file-level restart. On 2026-11-04, the landing and linked archive selector were inspected and current-reference Chapters 2 and 464 were acquired and parsed. Historical bodies and other chapters remain unverified. The online code is not the official paper record; archive labels do not establish history for every chapter. No new client or SQLite service is introduced; use the linked procedure's POSIX/Poppler prerequisites.
 
+## Tax Office Bulk Access
+
+For a bounded delinquency snapshot, use [the standalone supervised curl procedure](references/tax-office-bulk-access.md). On 2026-11-04 it acquired a complete small delinquency CSV and the published layout, validated 7,285 rows and text account IDs, and exercised checksums/full-restart recovery. This is a verified access skill, not an automated collector or complete yearly roll archive. Current/prior rolls, rates/exemptions acquisition and TCAD integration remain separate work; keep taxpayer rows and response headers private.
+
 ## Planning Coverage Model
 
 These are subjective weights for useful county-government monitoring, not measured shares of documents, bytes, departmental holdings, engineering effort, or public availability. They sum to 100 points. Treat them as a starting allocation, not objective completion metrics.
@@ -58,7 +62,7 @@ These are subjective weights for useful county-government monitoring, not measur
 | Actual spending and financial transparency | 15% | Not implemented |
 | Procurement and contracts | 10% | Not implemented |
 | GIS and infrastructure geography | 10% | Verified bounded TNR manual access procedure; no automated GIS client |
-| Property taxes and appraisal data | 10% | Not implemented; TCAD is a separate district |
+| Property taxes and appraisal data | 10% | Tax Office bounded delinquency access procedure verified; full rolls/TCAD not implemented |
 | Courts and justice data | 10% | Not implemented |
 | Recorded instruments and land records | 10% | Not implemented |
 | Elections | 5% | Not implemented |
