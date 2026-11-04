@@ -100,9 +100,11 @@ Data: geographic layers and maps cataloged through ArcGIS. Inventory each layer'
 
 Access: medium; ArcGIS catalog discovery, layer queries, export formats, record limits, and pagination.
 
-State: **sample acquired** for an anonymous TNR ArcGIS layer query during earlier reconnaissance; catalog pages reached. No connector. Voter-hub extraction and a full layer inventory remain unverified.
+State: **verified manual access procedure + bounded sample acquired** on 2026-11-04; no automated GIS client. See [TNR GeoHub access](tnr-geohub.md) for the standalone serial curl procedure, request/recovery gates, query arguments and offline checks. Current site item `2eff5d073fca4eeb97d600cda4699e46` supplies nine item-catalog groups; a public Feature Service search returned 17 distinct catalog items with `total=17`, `nextStart=-1`. This is not an inventory of every item type or service layer.
 
-Remaining: enumerate official datasets/services/layers, save identifiers and schemas, prove record completeness, retain geometry/coordinate-system metadata, and synchronize updates.
+Actual acquisition: catalog item `a8c819373dcf4535b0a7edf0a09b7f04`, Travis County Commissioner Precincts, resolves to the county GIS `Boundaries_and_Jurisdictions/Travis_County_Commissioner_Precincts/FeatureServer`, layer `0`. Two ordered pages of two acquired four polygons (IDs 5–8); before/after count and object-ID queries reconciled exactly. Full field/service/layer metadata and original geometry/SR (`102739`, latest `2277`) were retained privately; only five non-personal attributes were queried from the ten-field schema. `maxRecordCount=2000`, pagination/order supported. A deliberate size-ceiling failure did not promote a body; a full-transfer retry matched the first-page checksum. Offline checksum verification needs no refetch. Item timestamps are preserved but are not feature edit times. The service's separately advertised sharing-item ID was inaccessible; HTTP 200 JSON error detection is required.
+
+Limits: completeness applies to records/geometry of this one layer observation with selected attributes, not all attributes, concurrent-edit snapshot consistency, all catalog layers or historical coverage. No bulk export, automated update tracking, transient-retry/cooldown live branch or voter-hub extraction was verified. Remaining: broader bounded item/service/layer inventory, separately tested export/ID-batch paths where needed, and synchronization. Raw evidence and archives remain outside publishable source.
 
 ## 6. Property Taxes and Appraisal — 10 Planning Points
 
