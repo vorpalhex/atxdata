@@ -59,6 +59,10 @@ For bounded official VoteTravis result/reconciliation PDFs, follow [election doc
 
 For public discussion threads distinct from adopted Court actions, follow [message-board access](references/court-message-board.md). On 2026-11-04 a bounded anonymous curl observation verified one topic's two public posts against its category's one-reply count and single-page controls, with stable topic/post IDs and private authorship/timestamp provenance. The selected topic had no attachments; attachment retrieval, multi-page enumeration and full forum/history coverage remain unverified. This is a supervised manual access procedure, not a new client or complete archive.
 
+## Voter Registration Maps Access Workflow
+
+For one published non-personal electoral geographic layer, follow [Voter Registration Maps acquisition](references/voter-maps.md). Verified directly against this hub on 2026-11-04, this manual workflow discovers the voter hub's own catalog and downloads one small published Election Precincts shapefile ZIP. Its 308 unique precinct records, complete original geometry, native PRJ, district identity, schema and publication metadata were retained privately and validated; a size-limit failure/full-transfer recovery and offline checksum rerun were exercised. It is not a voter-roll collector, automated client or complete electoral archive. Other linked services/maps remain discovery-only; use the procedure's private pyshp environment and explicit serial transfer/cooldown gates.
+
 ## Planning Coverage Model
 
 These are subjective weights for useful county-government monitoring, not measured shares of documents, bytes, departmental holdings, engineering effort, or public availability. They sum to 100 points. Treat them as a starting allocation, not objective completion metrics.
@@ -73,7 +77,7 @@ These are subjective weights for useful county-government monitoring, not measur
 | Property taxes and appraisal data | 10% | Tax Office bounded delinquency access procedure verified; full rolls/TCAD not implemented |
 | Courts and justice data | 10% | Not implemented |
 | Recorded instruments and land records | 10% | Not implemented |
-| Elections | 5% | Verified bounded VoteTravis publication procedure + two 2022 runoff PDFs; no automated election client |
+| Elections | 5% | Verified bounded VoteTravis publication and electoral-geography access; no automated election client |
 | Campaign finance | 5% | Not implemented |
 
 Initial discussion assigned roughly 10 points of the 15-point meeting bucket to the working downloader: approximately 10% implemented and 90% remaining in this model. This is a planning placeholder, not proof that a tenth of county records has been acquired. Other departmental and request-only holdings have no measured denominator. Do not silently convert these guesses into factual progress statistics.
