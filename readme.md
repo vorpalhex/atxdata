@@ -63,6 +63,8 @@ The [county access skill](skills/travis-county-public-data-access/SKILL.md) inve
 
 For County Code reference chapters, use the standalone [County Code workflow](skills/travis-county-public-data-access/references/county-code.md). Current-reference Chapters 2 and 464 were fetched, parsed and checksum-verified; the linked archive selector was inspected, but historical chapter retrieval and complete coverage remain unverified. The online copy is not the official paper record. No automated County Code client is added.
 
+For official election publication PDFs, use the standalone [VoteTravis procedure](skills/travis-county-public-data-access/references/election-documents.md). Two June 11, 2022 runoff publications were acquired and visually verified; broader history, precinct exports and structured Clarity extraction are not implemented by this workflow.
+
 ### exhaustive
 
 Exhaustive is designed to help an LLM understand to search _every_ page of every document. It helps correct the issue of the LLM wanting to "skim" big documents or make assumptions from an index. The tradeoff is that it can make operations slower and more expensive. Generally you should use this skill, but be explicit about the tradeoffs.

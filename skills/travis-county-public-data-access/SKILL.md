@@ -51,6 +51,10 @@ For bounded current chapter PDFs and historical-interface discovery, follow [Cou
 
 For a bounded delinquency snapshot, use [the standalone supervised curl procedure](references/tax-office-bulk-access.md). On 2026-11-04 it acquired a complete small delinquency CSV and the published layout, validated 7,285 rows and text account IDs, and exercised checksums/full-restart recovery. This is a verified access skill, not an automated collector or complete yearly roll archive. Current/prior rolls, rates/exemptions acquisition and TCAD integration remain separate work; keep taxpayer rows and response headers private.
 
+## Election Publication Workflow
+
+For bounded official VoteTravis result/reconciliation PDFs, follow [election document acquisition](references/election-documents.md). On 2026-11-04, the official page and its historical section were inspected and two June 11, 2022 local runoff PDFs were acquired, parsed and visually verified. This manual procedure preserves official versus unofficial labels, jurisdiction, report/attestation identity, unknown publication dates and hashes. Other elections, the selected precinct PDF, complete revision history and structured Clarity extraction remain unverified here; no election client is added.
+
 ## Planning Coverage Model
 
 These are subjective weights for useful county-government monitoring, not measured shares of documents, bytes, departmental holdings, engineering effort, or public availability. They sum to 100 points. Treat them as a starting allocation, not objective completion metrics.
@@ -65,7 +69,7 @@ These are subjective weights for useful county-government monitoring, not measur
 | Property taxes and appraisal data | 10% | Tax Office bounded delinquency access procedure verified; full rolls/TCAD not implemented |
 | Courts and justice data | 10% | Not implemented |
 | Recorded instruments and land records | 10% | Not implemented |
-| Elections | 5% | Not implemented |
+| Elections | 5% | Verified bounded VoteTravis publication procedure + two 2022 runoff PDFs; no automated election client |
 | Campaign finance | 5% | Not implemented |
 
 Initial discussion assigned roughly 10 points of the 15-point meeting bucket to the working downloader: approximately 10% implemented and 90% remaining in this model. This is a planning placeholder, not proof that a tenth of county records has been acquired. Other departmental and request-only holdings have no measured denominator. Do not silently convert these guesses into factual progress statistics.

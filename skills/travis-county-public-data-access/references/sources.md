@@ -161,9 +161,9 @@ Data: election results, historical result documents, reconciliation forms, and s
 
 Access: trivial for direct PDFs/files, medium for structured vendor results discovery and enumeration.
 
-State: **interface inspected**; official result/form links identified. No connector. Complete structured results and precinct-level export coverage are unverified.
+State: **sample acquired / verified manual publication access**, 2026-11-04. The [standalone election document procedure](election-documents.md) follows the canonical trailing-slash VoteTravis page, whose historical sections link direct PDFs alongside newer reconciliation forms. June 11, 2022 local runoff official cumulative results (2 pages, 101616 bytes) and official reconciliation (1 page, 24807 bytes) were acquired anonymously, parsed and visually checked. The selected section contained three anchors / three unique URLs; its precinct PDF was not fetched. The cumulative text layer is corrupted, so rendered pages supplied semantic verification. Preserve differing page/body election labels, Leander/Manor contest jurisdictions, body report/attestation dates, unknown publication dates and version hashes. Clarity landing only was fetched; no structured extraction or complete export coverage is claimed. No automated election connector.
 
-Remaining: discover election identifiers, acquire final versus unofficial versions, preserve contests/precincts/jurisdictions, and validate totals. Voter-registration data is a different source with its own scope and privacy considerations.
+Remaining: other elections, selected precinct results, audit/certification PDFs, exhaustive historical inventory, remote revision history, structured vendor election identifiers/exports and contest-total validation. Current preliminary forms are explicitly unofficial: do not infer finality from filenames. The two official 2022 publications do not establish complete coverage or certification of every contest. Voter-registration data is a separate, excluded source.
 
 ## 10. Campaign Finance — 5 Planning Points
 
