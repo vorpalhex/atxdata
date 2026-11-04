@@ -67,6 +67,10 @@ For one published non-personal electoral geographic layer, follow [Voter Registr
 
 For actual vendor catalog discovery and one small structured election snapshot, use [Clarity results access](references/clarity-results.md). On 2026-11-04 the officially linked frontend led to 17 catalog EIDs and election `125662`, version `367565`: one full Detail XML ZIP with two contests and precinct/vote-type rows, reconciled against the interface's JSON. Selected visible audit material was inspected, but audit-versus-XML population, cutoff and version equivalence is not established. The audit reports zero discrepancies between its own selected electronic and hand tallies; no election-error inference follows from cross-document values. Official/final/reporting metadata is preserved without inferring certification. Numeric municipal IDs, complete history and certification remain unresolved. This supervised skill is not a Bun/SQLite collector; raw evidence remains private.
 
+## Historical Commissioners Court Minutes
+
+For older meetings outside the verified modern sample, follow [historical minutes access](references/meeting-archives.md). On 2026-11-04 the official clerk archive exposed static PDF links in 1996–2010 directories; its “2011 to Present” CivicClerk link returned a redirect to the modern portal. One January 5, 2010 voting-session minutes PDF was acquired, parsed and visually checked, with private source-chain/hash evidence and local restart/no-clobber checks. The PDF contains a conflicting opening-sentence date and qpdf linearization warnings, retained as caveats. This is a supervised bounded access procedure, not a new client, complete historical coverage or proof of modern start-date availability. Raw records and headers remain private; use the standalone procedure's POSIX/curl/Python/Poppler prerequisites.
+
 ## Planning Coverage Model
 
 These are subjective weights for useful county-government monitoring, not measured shares of documents, bytes, departmental holdings, engineering effort, or public availability. They sum to 100 points. Treat them as a starting allocation, not objective completion metrics.
