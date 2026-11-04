@@ -21,7 +21,7 @@ Set `archive_directory` and `run_directory` as tool working-directory arguments 
 Run each request through `terminal` in the private observation directory. This is the exact discovery request shape (replace only the verified URL and simple local prefix):
 
 ```python
-terminal(command="sleep 2; curl --silent --show-error --proto '=https' --connect-timeout 20 --max-time 90 --max-filesize 10000000 --user-agent 'atxdata-budget-verification/0.1' --dump-header source.headers --output source.html.part --write-out 'HTTP %{http_code}; bytes %{size_download}; effective %{url_effective}\\n' https://www.traviscountytx.gov/planning-budget/current-year", workdir=run_directory, timeout=120)
+terminal(command="sleep 2; curl --disable --silent --show-error --proto '=https' --connect-timeout 20 --max-time 90 --max-filesize 10000000 --user-agent 'atxdata-budget-verification/0.1' --dump-header source.headers --output source.html.part --write-out 'HTTP %{http_code}; bytes %{size_download}; effective %{url_effective}\\n' https://www.traviscountytx.gov/planning-budget/current-year", workdir=run_directory, timeout=120)
 ```
 
 Retain command output/exit status privately. Only rename `source.html.part` to `source.html` after checking HTTP status, body and transport success. Never overwrite an earlier snapshot.
@@ -39,7 +39,7 @@ The saved archive discovery inventory counted 109 link occurrences / 108 unique 
 
 ## Pacing, retries and stopping
 
-There must be only one in-flight request, including body consumption. Leave at least two seconds after each completed attempt; no parallel calls, HEAD probes, automatic redirects or automatic curl retries. This deliberate manual gate permits inspection before another request. No numeric published quota was present in the sampled responses; that is not permission to accelerate.
+There must be only one in-flight request, including body consumption. Keep `--disable` as curl's first argument to suppress default curlrc options that could silently add redirects, retries, URLs, cookies or authentication outside the manual gate. Leave at least two seconds after each completed attempt; no parallel calls, HEAD probes, automatic redirects or automatic curl retries. This deliberate manual gate permits inspection before another request. No numeric published quota was present in the sampled responses; that is not permission to accelerate.
 
 Before EVERY subsequent request, inspect the preceding headers for `Retry-After`, exhausted `RateLimit-Remaining`/`RateLimit-Reset`, `X-RateLimit-*` and structured `RateLimit` policies (`r=0;t=...`). Wait for the longest instruction, including on HTTP 200. HTTP-date Retry-After must account for the server Date header. If a quota or reset is ambiguous, stop and ask rather than ignore it. Server waits have no artificial cap. Persist the not-before UTC time in the private run notes before a long cooldown or stopping, and honor it on restart even in a different shell/run directory.
 
@@ -57,7 +57,7 @@ For each selected link, use `write_file` to record a private inventory row BEFOR
 For the verified adopted-budget link, the full-body command is:
 
 ```python
-terminal(command="sleep 2; curl --silent --show-error --proto '=https' --connect-timeout 20 --max-time 180 --max-filesize 52428800 --user-agent 'atxdata-budget-verification/0.1' --dump-header fy2027-adopted.headers --output fy2027-adopted.pdf.part --write-out 'HTTP %{http_code}; bytes %{size_download}; effective %{url_effective}\\n' https://www.traviscountytx.gov/images/planning_budget/Docs/2027/FY_2027_Adopted_Budget.pdf", workdir=run_directory, timeout=210)
+terminal(command="sleep 2; curl --disable --silent --show-error --proto '=https' --connect-timeout 20 --max-time 180 --max-filesize 52428800 --user-agent 'atxdata-budget-verification/0.1' --dump-header fy2027-adopted.headers --output fy2027-adopted.pdf.part --write-out 'HTTP %{http_code}; bytes %{size_download}; effective %{url_effective}\\n' https://www.traviscountytx.gov/images/planning_budget/Docs/2027/FY_2027_Adopted_Budget.pdf", workdir=run_directory, timeout=210)
 ```
 
 Use this same shape for other selected links with unique local names. The 50 MiB/180-second bounds stop unexpectedly large transfers; a bound failure is not success and does not authorize increasing it automatically. Use trusted directories, simple local filenames and no symlink targets. Never derive filesystem paths from server filenames.
