@@ -39,6 +39,10 @@ terminal(command="bun run src/cli.ts list-meetings --from 2021-01-05 --to 2021-0
 
 For ingestion, get the operator's approved archive destination and pass it as `--output` to `ingest-meeting --event-id ID`. Do not start an unbounded backfill. Preserve source documents outside the publishable tree. A single successful meeting does not establish complete historical coverage. Video, richer agenda-item/vote extraction, and legacy archive collection are not implemented by this client.
 
+## Budget Access Workflow
+
+For bounded fiscal-year budget inventories and direct PDFs, follow [budget acquisition](references/budgets.md). This verified agent-operated workflow uses serial curl requests, explicit cooldown gates, a private version inventory, atomic file promotion and checksum-verified local reruns. It is not an unattended client; no new program or SQLite database is introduced. On 2026-11-04, three official discovery pages and two FY 2027 PDFs were acquired and verified. Other years/types and complete revision history remain uncollected. Use the linked procedure's POSIX/Poppler prerequisites, not the CivicClerk commands above.
+
 ## Planning Coverage Model
 
 These are subjective weights for useful county-government monitoring, not measured shares of documents, bytes, departmental holdings, engineering effort, or public availability. They sum to 100 points. Treat them as a starting allocation, not objective completion metrics.
@@ -46,7 +50,7 @@ These are subjective weights for useful county-government monitoring, not measur
 | Source bucket | Planning weight | Repository connector state |
 | --- | ---: | --- |
 | Commissioners Court decisions and meeting records | 15% | CivicClerk PDF/event collection implemented; broader coverage incomplete |
-| Budgets and budget policy | 10% | Not implemented |
+| Budgets and budget policy | 10% | Verified manual access workflow + two FY 2027 PDFs; no automated client |
 | Actual spending and financial transparency | 15% | Not implemented |
 | Procurement and contracts | 10% | Not implemented |
 | GIS and infrastructure geography | 10% | Not implemented |
@@ -70,7 +74,7 @@ Initial discussion assigned roughly 10 points of the 15-point meeting bucket to 
 
 ## Suggested Next Work
 
-1. Budget PDFs: easiest useful addition alongside meeting documents.
+1. Budget PDFs: extend the verified manual sample to an explicitly bounded year/type inventory; automate only if repeated operational needs justify a SQLite client.
 2. Payments and contracts: high-value investigation for connecting approvals, vendors, and actual spending; complete exports remain unverified.
 3. GIS plus tax/appraisal exports: geographic context with relatively tractable acquisition.
 

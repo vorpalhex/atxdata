@@ -45,9 +45,13 @@ Data: adopted and preliminary budgets, recommendations, guidelines, budget rules
 
 Access: trivial anonymous direct PDFs. Parsing a large or scanned document is a separate problem, not an acquisition barrier.
 
-State: **interface inspected**; direct document links identified. No connector. Full multi-year acquisition/completeness has not been verified.
+State: **verified access workflow + sample acquired** (2026-11-04), not an automated connector. See [budget acquisition](budgets.md) for the bounded serial curl procedure, manual inventory fields, cooldown/retry rules, atomic promotion, checksum reruns and revision limitations. No new program or SQLite client is introduced.
 
-Remaining: discover year/archive pages, download and checksum documents, preserve fiscal-year/type identity, and track revised publications. This is the easiest useful next collector.
+Live discovery: current-year advertised FY 2027 (tax year 2026), with seven PDF links covering adopted/preliminary budgets, recommendations, guidelines, rules, tax-rate information and taxpayer impact. The [department index](https://www.traviscountytx.gov/planning-budget) linked [prior-year archives](https://www.traviscountytx.gov/planning-budget/archives), including FY 2026 adopted volumes I–IV and earlier holdings. All three HTML bodies were acquired; the index's budget-development and policies-rules links were identified but not fetched. Do not infer complete holdings or publication dates from links/filenames.
+
+Actually archived in private verification storage: FY 2027 adopted budget (29652053 bytes, 511 pages, SHA-256 `61d311a8d65f5e58cfcc266d09f06cc73f6c7ec40e0997eea3c48b114272e2f8`) and taxpayer-impact statement (127112 bytes, one page, SHA-256 `566b43f130ab8395088d566edd6df788a99322a3c385c758b536d4ed4321f5a3`). Both returned PDF bodies and parsed successfully, identifying Travis County/FY 2027; a separate process verified both local hashes without HTTP. Partial/corrupt-copy rejection and overlap-lock behavior were checked. Original bytes, HTML, headers and observation inventory remain outside source. Internal PDF metadata and proposed/adopted wording conflicts are preserved in the workflow's caveats.
+
+Remaining: other document categories and years are discovered, not downloaded/validated. Exhaustive historical coverage, prior revisions, unattended scheduling and automatic remote-change detection remain unimplemented. Manual file-level restart is supported, not byte-range resume. New-client SQLite integrity/typecheck and code-quality metrics are not applicable to this documentation-only access workflow. Independent review completed with PASS for the bounded manual workflow/sample on 2026-11-04; chief acceptance remains pending.
 
 ## 3. Actual Spending and Financial Transparency — 15 Planning Points
 

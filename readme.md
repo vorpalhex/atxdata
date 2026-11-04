@@ -57,6 +57,10 @@ bun run src/cli.ts
 
 ## Skills
 
+### travis-county-public-data-access
+
+The [county access skill](skills/travis-county-public-data-access/SKILL.md) inventories official sources and distinguishes available records, implemented collectors and actual sample acquisitions. Its [budget workflow](skills/travis-county-public-data-access/references/budgets.md) supports bounded manual fiscal-year inventories and direct PDF downloads, with serial pacing, private provenance, checksums and file-level restart. Two FY 2027 PDFs were verified; other years/types and automated collection remain incomplete. Keep original records and runtime evidence outside the checkout.
+
 ### exhaustive
 
 Exhaustive is designed to help an LLM understand to search _every_ page of every document. It helps correct the issue of the LLM wanting to "skim" big documents or make assumptions from an index. The tradeoff is that it can make operations slower and more expensive. Generally you should use this skill, but be explicit about the tradeoffs.
