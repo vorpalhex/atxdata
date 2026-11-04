@@ -1,27 +1,63 @@
 # CivicClerk consumer
 
-Minimal Bun client for public CivicClerk meeting metadata and PDFs. Defaults to Travis County; no account or API key required.
+Bun/SQLite client for public CivicClerk event metadata and published PDFs. Default tenant: Travis County. No account/API key is required for the verified endpoints. This is not a complete county archive.
 
-From this directory:
+## Commands
+
+From this program directory, install locked dependencies and run local tests:
 
 ```sh
-bun install
-bun run src/cli.ts list-meetings --from 2021-01-01 --to 2021-01-31
-bun run src/cli.ts ingest-meeting --event-id 59 --output data/documents
+bun install --frozen-lockfile
 bun test
 bun run typecheck
+bun run src/cli.ts list-meetings --from 2021-01-05 --to 2021-01-05
 ```
 
-`list-meetings` prints a JSON array of normalized events. Dates are inclusive UTC calendar dates. `ingest-meeting` prints `{downloaded, skipped}` and writes `civicclerk.sqlite` plus PDFs in `event-59/` under the chosen output directory. Errors go to stderr with a nonzero exit code.
+Dates are inclusive UTC calendar dates, not a conversion of the meeting's local timezone. Listing prints normalized event JSON. OData queries request `$top=25` and `$count=true`, permit at most 20 pages, retain the original date/publication filters on every page, and reject changed bounds, duplicates, out-of-range records, cycles, oversized pages and inconsistent counts when supplied. Missing counts do not establish completeness. Continuations must target the exact same-origin `Events` collection (never event detail, file/media streams or actions). Only the unchanged `$filter`/`$top`/`$count` and exactly one `$skip` or `$skiptoken` are allowed; duplicate/extra query keys, credentials, fragments, traversal and encoded paths are refused before transport. Offsets must be canonical safe integer advances; opaque tokens must be nonblank, control-free and at most 4096 characters. Relative, query-only and same-origin absolute collection links are supported by fixtures, not a new live pagination observation.
 
-SQLite stores meeting metadata, document discovery/download status, and ingestion runs, using WAL and foreign keys like the Legistar client. Keys include the tenant API base and event/file identity. Each output directory is bound to one tenant; another tenant must use a separate output directory to prevent PDF filename collisions. Each completed file checkpoints its size, SHA-256, source URL, and type/file ID; failed transfers record the error and failed run. The database closes after each ingestion. Reruns verify file bytes before skipping; missing/corrupt files download again. Transfers stream through atomic `.part` files using the Legistar downloader helper. Metadata filenames and download URLs are computed locally, never taken from server paths. Only published file types 1 (agenda), 2 (packet), 4 (minutes), and 5 (transcript) are downloaded, and responses must have PDF content type. Video and unknown types are not downloaded.
+For the existing CLI's full supported-PDF selection, set `CIVICCLERK_ARCHIVE_ROOT` to an operator-approved private archive outside the checkout, then run:
 
-Requests and full response consumption are serial through `PoliteHttpClient`. The default gap is one second after each completed attempt; three retries use exponential backoff (500 ms base, 30-second cap) plus up to 250 ms jitter. The longer of backoff, configured pacing, and server cooldown wins; server cooldowns are not capped. `Retry-After` seconds/HTTP dates, exhausted `RateLimit-Remaining`/`RateLimit-Reset`, `X-RateLimit-*` epoch resets, and structured `RateLimit` `r=0;t=...` are honored even on successful responses. Transient HTTP 408/409/425/429/5xx and connection/timeout failures retry; permanent HTTP errors fail immediately. The default 180-second timeout covers headers and body consumption. This queue is per client instance, not a cross-process limiter.
+```sh
+bun run src/cli.ts ingest-meeting --event-id 59 --output "$CIVICCLERK_ARCHIVE_ROOT"
+```
 
-Set `CIVICCLERK_API_BASE` to another public tenant's `/v1` endpoint. Optional transport settings: `HTTP_MAX_RETRIES`, `HTTP_TIMEOUT_MS`, `HTTP_MIN_INTERVAL_MS`, and `HTTP_USER_AGENT`. Pagination stays on the configured origin and API path.
+That selects published types 1 (agenda), 2 (packet), 4 (minutes), and 5 (transcript), subject to a 12 MiB combined byte ceiling and 100-document ceiling. It may fail on large packets. Both library budgets must be finite safe nonnegative integers: NaN, infinities, negatives, fractions and unsafe integers reject before locks, discovery or filesystem writes, including cached/offline invocations. Defaults are applied once at that public boundary and snapshotted across asynchronous work. Zero permits an empty selected-file set only; nonempty selections fail without requesting a PDF, and cached/pending bytes cannot be promoted over the remaining budget. A too-small finite quota fails the run but preserves valid download checkpoints, so a later adequate offline quota can reuse/recover them without HTTP. It is NOT the two-document verification command below. Unknown types and media are not downloaded. Output is `{downloaded,skipped}`; failures exit nonzero.
 
-Existing JSON manifests are left untouched and are no longer read or written. The first SQLite-backed ingestion redownloads files without database checkpoints; subsequent runs resume from SQLite. CLI JSON output remains unchanged.
+For bounded sampling and offline verification, use the same client library. Set the archive variable first. This exact invocation was exercised offline against the verified sample; omit `OFFLINE=1` only for an explicitly authorized new acquisition:
 
-For library use, import `CivicClerkClient` from `src/client.ts`, inject a `PoliteHttpClient` from `src/http.ts`, and call `listEvents(from, to)`, `getEvent(id)`, or `downloadEvent(id, output)`. The constructor's optional second argument overrides the API base.
+```sh
+OFFLINE=1 bun -e '
+import { CivicClerkClient } from "./src/client";
+import { PoliteHttpClient } from "./src/http";
+const api = new CivicClerkClient(new PoliteHttpClient({ minIntervalMs: 2200, maxRetries: 0 }));
+console.log(await api.downloadEvent(59, process.env.CIVICCLERK_ARCHIVE_ROOT ?? "", {
+  fileTypes: [1, 4], maxDocuments: 2, maxBytes: 12 * 1024 * 1024,
+  expectedDate: "2021-01-05", offline: process.env.OFFLINE === "1"
+}));'
+```
 
-Use a trusted output directory and one writer per event. Existing event/file symlinks are rejected; this is not a sandbox against concurrent local filesystem changes. A failed transfer stops ingestion; rerun the same command to resume. No video, agenda-item expansion, bulk scheduler or account access is included. Tests use injected responses and loopback HTTP, not the live service. Downloaded records are not repository source; keep production archives outside the checkout.
+`expectedDate` checks metadata before any PDF transfer. `offline` reads SQLite's latest normalized event snapshot, validates it and checks local PDFs without any HTTP, including discovery. It cannot discover new files or remote changes. A normal rerun refreshes event metadata but skips checksum-matching PDFs; it does not revalidate a same-ID/same-name PDF against a changed remote body.
+
+## HTTP contract
+
+`PoliteHttpClient` serializes discovery and complete body consumption, not just headers. Default pacing is 2 seconds after each completed attempt; use at least 2 seconds or a stricter published limit for live acquisition. Lower injected timing values are for local fixtures only. The queue/cooldown is per instance; do not run other source probes concurrently. An archive-wide exclusive lock prevents overlapping ingestions before discovery. Listing alone has no cross-process lock.
+
+Redirects are manual and fail without following. Default retries are zero. Optional `HTTP_MAX_RETRIES` explicitly enables bounded transient retries; each emits an attempt number to stderr without a source URL. Backoff is exponential (500 ms base, 30-second cap, up to 250 ms jitter). The longest backoff, pacing and server cooldown wins. Retry-After seconds/dates, exhausted standard/legacy rate-limit headers and structured RateLimit instructions are honored even on successful responses and are never capped. The default 180-second timeout includes body consumption. HTTP 408/409/425/429/5xx and recognized transport failures may retry; other statuses and content-validation failures stop. Denial/challenge responses are not permission to find a bypass.
+
+Optional settings: `CIVICCLERK_API_BASE`, `HTTP_TIMEOUT_MS`, `HTTP_MIN_INTERVAL_MS`, `HTTP_USER_AGENT`, `HTTP_MAX_RETRIES`. Another tenant needs a separate archive. Preserve the default tenant for Travis County; do not reuse downloaded access material or enumerate broad history.
+
+## Storage and recovery
+
+Archives must use normalized absolute non-root paths (no trailing slash, dot segments or symlink ancestors). SQLite, event directories, PDFs, partials and database sidecars reject symlinks. Use a trusted local filesystem and private permissions/umask; this is not a sandbox against a malicious process changing paths concurrently. The client does not persist HTTP headers. Any operator-recorded headers must also remain private, regular, exclusively created files.
+
+`civicclerk.sqlite` uses WAL and foreign keys. `archive_settings` binds the tenant; `meetings`, `documents` and `ingest_runs` record identities/current status. `event_snapshots` retains distinct normalized metadata versions keyed by SHA-256 and their latest observation times, not raw responses. `document_versions` retains checksum/size/source/filename observations when downloads are checkpointed; old non-null checkpoints are migrated on opening. Raw metadata fields discarded by normalization are not promised as archived client metadata. JSON stdout is not persistence; legacy JSON manifests remain untouched.
+
+The shared Legistar streaming/checksum helper writes `.part` to `.pending`. The CivicClerk layer bounds bytes and validates PDF content type and `%PDF-` signature before checkpointing and promoting with an atomic no-clobber hard link. PDF syntax, meeting identity and content dates still need a parser/content check; a signature is not a semantic guarantee. Failed validation propagates to failed document/run status without a final PDF. SQLite records a valid pending checksum before promotion, allowing an interrupted promotion to recover offline without a repeated PDF request.
+
+A matching local checkpoint skips downloading. Existing mismatched/uncheckpointed final files or orphan partials are NEVER silently overwritten. Preserve/quarantine and investigate them; only an operator's explicit removal enables a full-file restart. There is no HTTP range resume. A crashed process can leave a lock containing PID/token/start time and a `running` run; neither is silently reclaimed or relabeled. Confirm that exact owner has exited before removing its stale lock, preserve the unfinished run as evidence, then rerun. A matching `.pending` is promoted; uncheckpointed partials require operator action. These are process-interruption safeguards, not power-loss or network-filesystem durability guarantees.
+
+## Verified coverage and limitations
+
+On 2026-11-04, one January 5, 2021 Commissioners Court Voting Session (event 59) was verified. A bounded day listing returned count 1, one unique event and no next link. Two PDFs were actually acquired, parsed, checksum-checked and retained privately: agenda file 157 (263461 bytes, 5 pages) and minutes file 3733 (138403 bytes, 8 pages); combined 401864 bytes. Both identify Travis County/Commissioners Court and January 5, 2021. qpdf reported agenda linearization/hint-table warnings (exit 3); minutes passed (exit 0). Original bytes are unchanged. Five source calls were observed in total: four traced client calls plus one preceding event-detail curl discovery. Actual serial trace peak was 1, with 2204/2202/2201 ms gaps after complete bodies. The later budget/continuation fixes used only local fixtures and retained private byte copies, with no new public requests or PDF downloads. Offline reruns skipped both with zero HTTP; SQLite integrity and foreign keys passed. Fixtures exercise actual process exit after checkpoint, stale-lock-controlled recovery, interruption, corruption/no-clobber, path/symlink safety, bounds and cooldown behavior.
+
+The event response advertised four published PDF identities, `agendaId=59`, `hasAgenda=true`, `hasMedia=true`, on-demand media and a nonempty media-stream field. Packet/transcript were discovered but NOT acquired in this observation. No item/vote collections were present in the event response. Agenda-item/vote APIs and media availability/content remain unverified; flags/paths are not proof of playable video, and no media was requested. The normalizer currently retains only event ID/name/date and published file IDs/types/names. Structured item/vote/video ingestion is not implemented. Legacy archives, County Code and the message board are separate systems; see the county access skill's standalone CivicClerk reference for the supervised acquisition procedure.

@@ -9,12 +9,12 @@ function snapshot(root: string) {
 }
 import { calendarDate, CivicClerkClient } from "../src/client";
 import { createHash } from "node:crypto";
-import { mkdtemp, readFile, writeFile, rm, readdir, symlink, mkdir } from "node:fs/promises";
+import { realpath, mkdtemp, readFile, writeFile, rm, readdir, symlink, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
 test("rejects symlink escape paths and non-PDF responses; records empty events", async () => {
-  const root = await mkdtemp(join(tmpdir(), "civic-safety-"));
+  const root = await mkdtemp(join(await realpath(tmpdir()), "civic-safety-"));
   const file = { fileId: 1, fileType: 1, type: "Agenda", name: "Agenda" };
   const make = (files = [file], response = new Response("error", { headers: { "content-type": "text/html" } })) => new CivicClerkClient({
     async getJson<T>(): Promise<T> { return { ...event, publishedFiles: files } as T; },
@@ -42,7 +42,7 @@ test("rejects symlink escape paths and non-PDF responses; records empty events",
 });
 
 test("resumes after a broken stream without keeping partial documents", async () => {
-  const root = await mkdtemp(join(tmpdir(), "civic-resume-"));
+  const root = await mkdtemp(join(await realpath(tmpdir()), "civic-resume-"));
   let fail = true;
   const urls: string[] = [];
   const api = new CivicClerkClient({
@@ -70,8 +70,8 @@ test("resumes after a broken stream without keeping partial documents", async ()
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
-test("streams documents serially and repairs missing or corrupt files using checksums", async () => {
-  const root = await mkdtemp(join(tmpdir(), "civic-client-"));
+test("streams serially and refuses corrupt checkpoints before explicit repair", async () => {
+  const root = await mkdtemp(join(await realpath(tmpdir()), "civic-client-"));
   const body = "%PDF-1.7\nfixture";
   let active = false;
   let calls = 0;
@@ -103,6 +103,9 @@ test("streams documents serially and repairs missing or corrupt files using chec
     expect(calls).toBe(4);
     await writeFile(join(folder, manifest.files[0].filename), "corrupt");
     await rm(join(folder, manifest.files[1].filename));
+    await expect(api.downloadEvent(59, root)).rejects.toThrow("checkpoint");
+    expect(calls).toBe(4);
+    await rm(join(folder, manifest.files[0].filename));
     expect(await api.downloadEvent(59, root)).toMatchObject({ downloaded: 2, skipped: 2 });
     expect(calls).toBe(6);
     expect((await readdir(folder)).filter(name => name.endsWith(".part"))).toEqual([]);
@@ -120,7 +123,7 @@ function client(pages: unknown[]) {
 }
 
 test("rejects a second tenant before it can overwrite archived PDFs", async () => {
-  const root = await mkdtemp(join(tmpdir(), "civic-tenant-"));
+  const root = await mkdtemp(join(await realpath(tmpdir()), "civic-tenant-"));
   const make = (tenant: string) => new CivicClerkClient({
     async getJson<T>(): Promise<T> { return { ...event, publishedFiles: [{ fileId: 1, fileType: 1, type: "Agenda", name: "Final" }] } as T; },
     async request<T>(_url: string, consume: (response: Response) => Promise<T>): Promise<T> { return consume(new Response(`%PDF-${tenant}`, { headers: { "content-type": "application/pdf" } })); },
@@ -136,7 +139,7 @@ test("rejects a second tenant before it can overwrite archived PDFs", async () =
 test("resolves query-only next links against the current page", async () => {
   const { api, urls } = client([{ value: [], "@odata.nextLink": "?$skip=1" }, { value: [] }]);
   await api.listEvents("2021-01-01", "2021-01-01");
-  expect(urls[1]).toBe(`${base}Events?$skip=1`);
+  expect(new URL(urls[1]!).searchParams.get("$skip")).toBe("1");
 });
 
 test("rejects unsafe or cyclic pagination before fetching the next page", async () => {
@@ -204,8 +207,8 @@ test("rejects invalid calendar dates and malformed event timestamps", async () =
   }
 });
 
-test("repairs size-only and hash-only checkpoint mismatches independently", async () => {
-  const root = await mkdtemp(join(tmpdir(), "civic-checksum-"));
+test("refuses size-only and hash-only checkpoint mismatches independently", async () => {
+  const root = await mkdtemp(join(await realpath(tmpdir()), "civic-checksum-"));
   const body = "%PDF-fixture";
   let calls = 0;
   const api = new CivicClerkClient({
@@ -219,9 +222,13 @@ test("repairs size-only and hash-only checkpoint mismatches independently", asyn
     await api.downloadEvent(59, root);
     const db = new Database(join(root, "civicclerk.sqlite"));
     try { db.run("UPDATE documents SET byte_size=byte_size+1"); } finally { db.close(); }
+    await expect(api.downloadEvent(59, root)).rejects.toThrow("checkpoint");
+    await rm(join(root, "event-59", "type-1_file-1_final.pdf"));
     expect(await api.downloadEvent(59, root)).toEqual({ downloaded: 1, skipped: 0 });
     await writeFile(join(root, "event-59", "type-1_file-1_final.pdf"), "%PDF-corrupt");
     expect(Buffer.byteLength("%PDF-corrupt")).toBe(Buffer.byteLength(body));
+    await expect(api.downloadEvent(59, root)).rejects.toThrow("checkpoint");
+    await rm(join(root, "event-59", "type-1_file-1_final.pdf"));
     expect(await api.downloadEvent(59, root)).toEqual({ downloaded: 1, skipped: 0 });
     expect(calls).toBe(3);
     expect(await readFile(join(root, "event-59", "type-1_file-1_final.pdf"), "utf8")).toBe(body);
@@ -236,7 +243,7 @@ test("rejects unsuccessful, missing-type and bodyless PDF responses and persists
     new Response(null, { status: 404 }),
     new Response(null, { headers: { "content-type": "application/pdf" } }),
   ]) {
-    const root = await mkdtemp(join(tmpdir(), "civic-response-"));
+    const root = await mkdtemp(join(await realpath(tmpdir()), "civic-response-"));
     const api = new CivicClerkClient({
       async getJson<T>(): Promise<T> { return { ...event, publishedFiles: [{ fileId: 1, fileType: 1, type: "Agenda", name: "Final" }] } as T; },
       async request<T>(_url: string, consume: (response: Response) => Promise<T>): Promise<T> { return consume(response); },
@@ -258,5 +265,5 @@ test("lists published events across relative OData pages with inclusive dates", 
   const { api, urls } = client([{ value: [event], "@odata.nextLink": "Events?$skip=1" }, { value: [{ ...event, id: 60 }] }]);
   expect((await api.listEvents("2021-01-01", "2021-01-31")).map(e => e.id)).toEqual([59, 60]);
   expect(new URL(urls[0]!).searchParams.get("$filter")).toBe("eventDate ge 2021-01-01T00:00:00Z and eventDate lt 2021-02-01T00:00:00Z and isPublished eq 'Published'");
-  expect(urls[1]).toBe(`${base}Events?$skip=1`);
+  expect(new URL(urls[1]!).searchParams.get("$skip")).toBe("1");
 });

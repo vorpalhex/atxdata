@@ -89,5 +89,6 @@ test("SQLite upserts preserve downloads and record failed runs", () => {
     expect(store.db.query("SELECT event_name FROM meetings").get()).toEqual({ event_name: "Updated Court" });
     expect(() => store.discover(60, file)).toThrow();
     expect(store.db.query("PRAGMA foreign_keys").get()).toEqual({ foreign_keys: 1 });
+    expect(store.db.query("SELECT sha256 FROM document_versions ORDER BY rowid").all()).toEqual([{ sha256: "digest" }, { sha256: "new" }]);
   } finally { store.close(); }
 });

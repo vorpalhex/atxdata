@@ -28,7 +28,7 @@ Read [the source inventory](references/sources.md) for primary URLs, data types,
 
 ## Current Connector
 
-`programs/civicclerk-consume/` provides public event listing and serial downloads of published agenda, packet, minutes, and transcript PDFs. It uses SQLite meeting/document/run records, checksums, atomic partial files, tenant-bound output directories, server cooldowns, and exponential-jitter retries. See `programs/civicclerk-consume/README.md` for the exact commands and settings; paths in this paragraph are relative to the repository root.
+`programs/civicclerk-consume/` provides bounded public event listing and serial downloads of published agenda, packet, minutes, and transcript PDFs. Follow [the standalone CivicClerk procedure](references/civicclerk.md) and the program README (repository-root path `programs/civicclerk-consume/README.md`). On 2026-11-04, event 59 (January 5, 2021) and two PDFs were verified: one agenda and one minutes document, not complete history. SQLite retains tenant-bound meeting/document/run state, normalized metadata versions and PDF checksum history. The client defaults to two-second full-body serial pacing, manual redirects and zero retries; explicit retries honor server cooldowns and log attempts. Archive locks, no-clobber promotion, signature/size checks and offline checkpoint recovery are exercised. Use bounded library options for the two-document sample, not the CLI all-types default. Richer agenda-item/vote APIs and video remain unverified; advertised media flags are not playback proof.
 
 Run through `terminal` with the working directory set to the resolved program directory:
 
