@@ -63,6 +63,10 @@ For public discussion threads distinct from adopted Court actions, follow [messa
 
 For one published non-personal electoral geographic layer, follow [Voter Registration Maps acquisition](references/voter-maps.md). Verified directly against this hub on 2026-11-04, this manual workflow discovers the voter hub's own catalog and downloads one small published Election Precincts shapefile ZIP. Its 308 unique precinct records, complete original geometry, native PRJ, district identity, schema and publication metadata were retained privately and validated; a size-limit failure/full-transfer recovery and offline checksum rerun were exercised. It is not a voter-roll collector, automated client or complete electoral archive. Other linked services/maps remain discovery-only; use the procedure's private pyshp environment and explicit serial transfer/cooldown gates.
 
+## Structured Clarity Results
+
+For actual vendor catalog discovery and one small structured election snapshot, use [Clarity results access](references/clarity-results.md). On 2026-11-04 the officially linked frontend led to 17 catalog EIDs and election `125662`, version `367565`: one full Detail XML ZIP with two contests and precinct/vote-type rows, reconciled against the interface's JSON. Selected visible audit material was inspected, but audit-versus-XML population, cutoff and version equivalence is not established. The audit reports zero discrepancies between its own selected electronic and hand tallies; no election-error inference follows from cross-document values. Official/final/reporting metadata is preserved without inferring certification. Numeric municipal IDs, complete history and certification remain unresolved. This supervised skill is not a Bun/SQLite collector; raw evidence remains private.
+
 ## Planning Coverage Model
 
 These are subjective weights for useful county-government monitoring, not measured shares of documents, bytes, departmental holdings, engineering effort, or public availability. They sum to 100 points. Treat them as a starting allocation, not objective completion metrics.
@@ -77,7 +81,7 @@ These are subjective weights for useful county-government monitoring, not measur
 | Property taxes and appraisal data | 10% | Tax Office bounded delinquency access procedure verified; full rolls/TCAD not implemented |
 | Courts and justice data | 10% | Not implemented |
 | Recorded instruments and land records | 10% | Not implemented |
-| Elections | 5% | Verified bounded VoteTravis publication and electoral-geography access; no automated election client |
+| Elections | 5% | Verified bounded VoteTravis publications, Clarity structured snapshot and electoral-geography access; no automated election client |
 | Campaign finance | 5% | Not implemented |
 
 Initial discussion assigned roughly 10 points of the 15-point meeting bucket to the working downloader: approximately 10% implemented and 90% remaining in this model. This is a planning placeholder, not proof that a tenth of county records has been acquired. Other departmental and request-only holdings have no measured denominator. Do not silently convert these guesses into factual progress statistics.

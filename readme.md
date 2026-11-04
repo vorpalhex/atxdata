@@ -67,6 +67,8 @@ For official election publication PDFs, use the standalone [VoteTravis procedure
 
 For electoral geography, use the standalone [Voter Registration Maps workflow](skills/travis-county-public-data-access/references/voter-maps.md). One small published Election Precincts shapefile ZIP was acquired and verified: 308 unique precincts, original geometry/coordinate system, district fields and publication metadata. This is bounded manual bulk-file access, not individual voter-roll collection, an automated client, current election results or a complete map archive. Raw files and signed download URLs remain private.
 
+For structured results, the separate [Clarity procedure](skills/travis-county-public-data-access/references/clarity-results.md) follows the actual catalog/frontend to one December 2025 election XML export with contest/precinct identities and version/reporting metadata. XML/JSON totals reconcile. Audit-versus-XML population, cutoff and version equivalence is unestablished; no election-error inference is supported. The audit reports zero selected electronic-versus-hand tally discrepancies. Source date labels and final/reporting flags are retained without inferring certification. This is bounded supervised access, not complete history or an automated collector.
+
 ### exhaustive
 
 Exhaustive is designed to help an LLM understand to search _every_ page of every document. It helps correct the issue of the LLM wanting to "skim" big documents or make assumptions from an index. The tradeoff is that it can make operations slower and more expensive. Generally you should use this skill, but be explicit about the tradeoffs.
