@@ -35,7 +35,11 @@ Verified API base: `https://traviscotx.api.civicclerk.com/v1/`.
 
 Persistence: `civicclerk.sqlite` under the selected output directory, plus `event-ID/` PDFs. Each output is bound to one tenant. JSON CLI output is not the persistence layer; old JSON manifests are neither consumed nor updated. The client uses the shared Legistar streaming helper, not the Legistar API.
 
-Remaining: video, richer agenda-item/vote extraction, historical archive discovery/backfill, County Code/message-board collection, and ongoing completeness checks. The initial roadmap credits roughly 10 of this bucket's 15 points, solely as a subjective planning placeholder.
+County Code state: **verified manual access workflow + sample acquired** (2026-11-04); see [standalone County Code acquisition](county-code.md). The landing exposed 80 chapter-PDF anchors / 80 unique chapter URLs, plus separate searchable code and Title 30 routes. Two current-reference PDFs were actually acquired and parsed: Chapter 2 (amendments through August 16, 2022, Item 25; 15 pages) and Chapter 464 (through October 21, 2025, Item 45; 64 pages). Source URLs, byte counts, hashes, serial curl commands, private provenance and verified file-level restart are in the procedure. Raw records/headers remain private; no automated client or new persistence stack was added.
+
+County Code historical discovery: the officially linked [enCodePlus archive selector](https://online.encodeplus.com/regs/traviscounty-tx/archivedialog.aspx) exposed 157 non-placeholder option occurrences / 127 unique values, with labels spanning 1995-03-28 to 2026-09-15. Some labels name non-land-development chapters, despite the landing's land-development-only warning. These are interface labels, not proof those historical chapter bodies are available: no archive selection or historical document retrieval was exercised. Online PDFs remain reference copies, not the official paper record; complete history for every chapter is not established.
+
+Remaining: video, richer agenda-item/vote extraction, historical meeting archive discovery/backfill, other County Code chapter bodies and historical-content verification, message-board collection, and ongoing completeness checks. The initial roadmap credits roughly 10 of this bucket's 15 points, solely as a subjective planning placeholder. County Code independent review remains a separate chief-owned gate.
 
 ## 2. Budgets and Budget Policy — 10 Planning Points
 

@@ -43,6 +43,10 @@ For ingestion, get the operator's approved archive destination and pass it as `-
 
 For bounded fiscal-year budget inventories and direct PDFs, follow [budget acquisition](references/budgets.md). This verified agent-operated workflow uses serial curl requests, explicit cooldown gates, a private version inventory, atomic file promotion and checksum-verified local reruns. It is not an unattended client; no new program or SQLite database is introduced. On 2026-11-04, three official discovery pages and two FY 2027 PDFs were acquired and verified. Other years/types and complete revision history remain uncollected. Use the linked procedure's POSIX/Poppler prerequisites, not the CivicClerk commands above.
 
+## County Code Access Workflow
+
+For bounded current chapter PDFs and historical-interface discovery, follow [County Code acquisition](references/county-code.md). This standalone agent-operated workflow preserves chapter/amendment identity, source URLs and hashes, with serial curl transfers, manual cooldown gates, private provenance and file-level restart. On 2026-11-04, the landing and linked archive selector were inspected and current-reference Chapters 2 and 464 were acquired and parsed. Historical bodies and other chapters remain unverified. The online code is not the official paper record; archive labels do not establish history for every chapter. No new client or SQLite service is introduced; use the linked procedure's POSIX/Poppler prerequisites.
+
 ## Planning Coverage Model
 
 These are subjective weights for useful county-government monitoring, not measured shares of documents, bytes, departmental holdings, engineering effort, or public availability. They sum to 100 points. Treat them as a starting allocation, not objective completion metrics.
