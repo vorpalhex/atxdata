@@ -55,6 +55,10 @@ For a bounded delinquency snapshot, use [the standalone supervised curl procedur
 
 For bounded official VoteTravis result/reconciliation PDFs, follow [election document acquisition](references/election-documents.md). On 2026-11-04, the official page and its historical section were inspected and two June 11, 2022 local runoff PDFs were acquired, parsed and visually verified. This manual procedure preserves official versus unofficial labels, jurisdiction, report/attestation identity, unknown publication dates and hashes. Other elections, the selected precinct PDF, complete revision history and structured Clarity extraction remain unverified here; no election client is added.
 
+## Commissioners Court Message Board
+
+For public discussion threads distinct from adopted Court actions, follow [message-board access](references/court-message-board.md). On 2026-11-04 a bounded anonymous curl observation verified one topic's two public posts against its category's one-reply count and single-page controls, with stable topic/post IDs and private authorship/timestamp provenance. The selected topic had no attachments; attachment retrieval, multi-page enumeration and full forum/history coverage remain unverified. This is a supervised manual access procedure, not a new client or complete archive.
+
 ## Planning Coverage Model
 
 These are subjective weights for useful county-government monitoring, not measured shares of documents, bytes, departmental holdings, engineering effort, or public availability. They sum to 100 points. Treat them as a starting allocation, not objective completion metrics.

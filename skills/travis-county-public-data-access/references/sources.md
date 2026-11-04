@@ -19,7 +19,7 @@ Primary sources:
 - [CivicClerk public portal](https://traviscotx.portal.civicclerk.com/).
 - [County Clerk meeting archives](https://countyclerk.traviscountytx.gov/departments/commissioners-court/cc-archives/): historical coverage requires separate discovery.
 - [County Code](https://www.traviscountytx.gov/commissioners-court/county-code): reference chapter PDFs and searchable code. The page explicitly says the online version is not official; Commissioners Court Minutes maintains the official paper record. Only land-development chapters have the described online historical versions.
-- [Commissioners Court message board](https://www.traviscountytx.gov/forum): a separate public HTML source, not collected by the current client.
+- [Commissioners Court message board](https://www.traviscountytx.gov/forum): separate public Kunena HTML discussion; [bounded manual access](court-message-board.md) verified, not collected by CivicClerk.
 
 Data: event metadata, agendas, agenda packets, minutes, transcripts, video; separate historical records, policy/code documents, and public message-board material.
 
@@ -39,7 +39,9 @@ County Code state: **verified manual access workflow + sample acquired** (2026-1
 
 County Code historical discovery: the officially linked [enCodePlus archive selector](https://online.encodeplus.com/regs/traviscounty-tx/archivedialog.aspx) exposed 157 non-placeholder option occurrences / 127 unique values, with labels spanning 1995-03-28 to 2026-09-15. Some labels name non-land-development chapters, despite the landing's land-development-only warning. These are interface labels, not proof those historical chapter bodies are available: no archive selection or historical document retrieval was exercised. Online PDFs remain reference copies, not the official paper record; complete history for every chapter is not established.
 
-Remaining: video, richer agenda-item/vote extraction, historical meeting archive discovery/backfill, other County Code chapter bodies and historical-content verification, message-board collection, and ongoing completeness checks. The initial roadmap credits roughly 10 of this bucket's 15 points, solely as a subjective planning placeholder. County Code independent review remains a separate chief-owned gate.
+Message-board state: **verified manual access workflow + sample acquired** (2026-11-04); see [standalone message-board access](court-message-board.md). Anonymous serial full-body curl acquired the index, Purchasing Office category and topic 302. The category advertised one reply; two unique post IDs (479/482) reconciled root plus reply, with only page 1 and disabled next/end controls. Exact timestamps and forum-versus-quoted authorship remain in private provenance. Selected-topic attachment metadata was absent; no attachment downloaded. Discussion and quoted vote claims are not independent proof of adopted Court action. Local checksum reruns and offline-copy recovery checks were verified; complete forum history, multi-page enumeration, attachment retrieval and remote edit tracking remain unverified. No new collector/persistence stack was added; independent review remains chief-owned.
+
+Remaining: video, richer agenda-item/vote extraction, historical meeting archive discovery/backfill, other County Code chapter bodies and historical-content verification, broader message-board/attachment collection, and ongoing completeness checks. The initial roadmap credits roughly 10 of this bucket's 15 points, solely as a subjective planning placeholder. County Code independent review remains a separate chief-owned gate.
 
 ## 2. Budgets and Budget Policy — 10 Planning Points
 
