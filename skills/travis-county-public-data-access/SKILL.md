@@ -55,6 +55,10 @@ For a bounded delinquency snapshot, use [the standalone supervised curl procedur
 
 For TCAD, a separate appraisal district, follow [bounded public exports](references/tcad-exports.md). On 2026-11-04, explicit expanded authorization permitted one complete 557228168-byte certified appraisal ZIP: all 21 members passed streamed integrity checks; the first 25 Property rows matched the retained bulk layout, with positive valuation amounts and string year/supplement identity. The earlier small waterfront CSV and layout ZIP remain separate evidence. Supplemental/JSON bodies and complete historical/data-quality coverage remain unverified. This is a supervised skill, not an unattended collector. It enforces checkpoint/attempt-aware no-request boundaries, rejects header symlinks, and documents ten-second pacing plus longer server cooldowns; reuse the verified archive offline, never repeat its GET.
 
+## Vendor Payment Fiscal-Year Export
+
+Use the [supervised Financial Transparency browser workflow](references/financial-transparency.md), not the unfinished API client. One FY2027 publisher CSV was acquired and one payment's two lines reconciled across twelve displayed data fields. The file has 19,459 parsed records, including one malformed 14-field record under a 13-field header; preserve it unchanged and do not claim clean ingestion, complete-year coverage or a payment-filtered export. The standalone collector remains unaccepted.
+
 ## Criminal Insights and Official Monthly Reports
 
 Follow [supervised dashboard use and the official OCA report fallback](references/criminal-insights.md). Normal browser selection was verified for Travis, January 2025, County division; one original two-page OCA misdemeanor activity report was acquired and reconciled narrowly against visible Added Type percentages. This is a separate official reporting source, not a successful Qlik export. Qlik CSV export remains denied; full dataset/history and district/felony reports are unverified. No standalone collector is added.
@@ -103,7 +107,7 @@ These are subjective weights for useful county-government monitoring, not measur
 | --- | ---: | --- |
 | Commissioners Court decisions and meeting records | 15% | CivicClerk PDF/event collection implemented; broader coverage incomplete |
 | Budgets and budget policy | 10% | Verified manual access workflow + two FY 2027 PDFs; no automated client |
-| Actual spending and financial transparency | 15% | Not implemented |
+| Actual spending and financial transparency | 15% | Supervised FY2027 vendor-payment CSV acquired; source anomaly, client defects and historical completeness unresolved |
 | Procurement and contracts | 10% | Verified bounded contract-metadata browser workflow; solicitations, original files and bulk history unimplemented |
 | GIS and infrastructure geography | 10% | Verified bounded TNR manual access procedure; no automated GIS client |
 | Property taxes and appraisal data | 10% | Tax Office delinquency and TCAD one-certified-snapshot access verified; history/all-row validation not implemented |
@@ -127,7 +131,7 @@ Initial discussion assigned roughly 10 points of the 15-point meeting bucket to 
 ## Suggested Next Work
 
 1. Budget PDFs: extend the verified manual sample to an explicitly bounded year/type inventory; automate only if repeated operational needs justify a SQLite client.
-2. Payments and contracts: high-value investigation for connecting approvals, vendors, and actual spending; complete exports remain unverified.
+2. Payments and contracts: high-value investigation for connecting approvals, vendors, and actual spending; one fiscal-year payment file and bounded contract metadata are verified, not complete historical coverage.
 3. GIS plus tax/appraisal exports: geographic context with relatively tractable acquisition.
 
 Meetings, budgets, spending, and procurement together account for 50 points in the planning model. This is a monitoring milestone, not an estimate of half the county's records.

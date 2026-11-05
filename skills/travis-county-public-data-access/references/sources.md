@@ -75,9 +75,9 @@ Data surfaces include vendor payments and financial reporting; the portal also a
 
 Access: medium, potentially substantial engineering. The Vendor Payment Register wrapper embeds a Power BI Government report hosted by `app.powerbigov.us`.
 
-State: **interface inspected**. No connector. A complete transaction-level export and its pagination/limits have not been verified.
+State: **supervised fiscal-year payment export acquired and sample reconciled** through the [normal-browser workflow](financial-transparency.md). The portal says VPR and VPD have merged into Vendor Payment Details; its current tile led to VPR. One original FY2027 CSV was downloaded (3,211,435 bytes; SHA-256 `2e2ec55d399ba381e3564f78d380c7d65359b3b82ce97402e6c5083b3b14f8c0`). CSV parsing found 19,459 data records: 19,458 with the 13 header fields and one malformed 14-field record retained unchanged. The width-valid records span October 1–November 4, 2026. One selected payment's two rows reconcile across all twelve UI data fields and a zero net amount. The fiscal-year file is not limited to the table's payment filter, and no whole-year/completeness or clean-source claim is made. The unfinished Bun/SQLite client remains defective and is not used by this workflow.
 
-Remaining: inspect the report's actual data/export interfaces, identify authoritative fields and stable keys, prove enumeration, and establish what can be collected without accounts or prohibited workarounds. Reaching the wrapper is not acquiring the register. This is the main gap for comparing approved spending with actual payments.
+Remaining: independently review the browser skill/evidence; keep the source-format anomaly explicit, verify additional years/Checks/report surfaces separately if needed, and establish stable row identities before automated ingestion. This is actual register acquisition, not just the report wrapper; full historical enumeration remains unverified.
 
 ## 4. Procurement and Contracts — 10 Planning Points
 
