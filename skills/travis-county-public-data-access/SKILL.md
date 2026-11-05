@@ -55,6 +55,10 @@ For a bounded delinquency snapshot, use [the standalone supervised curl procedur
 
 For TCAD, a separate appraisal district, follow [bounded public exports](references/tcad-exports.md). On 2026-11-04, explicit expanded authorization permitted one complete 557228168-byte certified appraisal ZIP: all 21 members passed streamed integrity checks; the first 25 Property rows matched the retained bulk layout, with positive valuation amounts and string year/supplement identity. The earlier small waterfront CSV and layout ZIP remain separate evidence. Supplemental/JSON bodies and complete historical/data-quality coverage remain unverified. This is a supervised skill, not an unattended collector. It enforces checkpoint/attempt-aware no-request boundaries, rejects header symlinks, and documents ten-second pacing plus longer server cooldowns; reuse the verified archive offline, never repeat its GET.
 
+## Criminal Insights and Official Monthly Reports
+
+Follow [supervised dashboard use and the official OCA report fallback](references/criminal-insights.md). Normal browser selection was verified for Travis, January 2025, County division; one original two-page OCA misdemeanor activity report was acquired and reconciled narrowly against visible Added Type percentages. This is a separate official reporting source, not a successful Qlik export. Qlik CSV export remains denied; full dataset/history and district/felony reports are unverified. No standalone collector is added.
+
 ## Legacy Campaign Finance — WILL NOT IMPLEMENT
 
 The [legacy search exists, but all attempted original-document links returned 404](references/legacy-finance.md), including ten samples spread across 1997–2021. Implementation is intentionally declined; do not resume without explicit operator authorization. Modern EasyVote is separate.
@@ -103,7 +107,7 @@ These are subjective weights for useful county-government monitoring, not measur
 | Procurement and contracts | 10% | Verified bounded contract-metadata browser workflow; solicitations, original files and bulk history unimplemented |
 | GIS and infrastructure geography | 10% | Verified bounded TNR manual access procedure; no automated GIS client |
 | Property taxes and appraisal data | 10% | Tax Office delinquency and TCAD one-certified-snapshot access verified; history/all-row validation not implemented |
-| Courts and justice data | 10% | Not implemented |
+| Courts and justice data | 10% | Verified Criminal Insights browser selection and one official OCA fallback report; full export, Civil Insights and Odyssey unimplemented |
 | Recorded instruments and land records | 10% | Not implemented |
 | Elections | 5% | Verified bounded VoteTravis publications, Clarity structured snapshot and electoral-geography access; no automated election client |
 | Campaign finance | 5% | Verified bounded EasyVote original filing workflow; legacy WILL NOT IMPLEMENT; modern amendments and broader coverage unimplemented |

@@ -145,11 +145,11 @@ Data: published civil/criminal dataset/report surfaces and a separate individual
 
 Access: medium for dataset/report discovery. Individual case searches/documents are a separate, provisional automation target; official/certified physical copies and staff-mediated requests have different costs/rules.
 
-State: **interface inspected**. Direct retrieval reached Civil/Criminal Insights HTML after clean-page extraction failed; no full data export was proved. No connector.
+State: **Criminal Insights supervised browser access and one official fallback report verified**; see the [workflow and source distinctions](criminal-insights.md). The dashboard was filtered to Travis, calendar 2025, January, County division. Its previously denied Qlik CSV export was not retried. The official OCA public report builder separately delivered an original two-page Travis misdemeanor activity PDF for January 1–31, 2025 (83,831 bytes; SHA-256 `54757a4968a26e604649f7face6d7520bfe560a965e8ef587a316c08bbc041be`). Structure, readable text, both rendered pages and report identity/counts were checked. Three Added Type percentages reconcile narrowly with the filtered dashboard; no identical full-dataset/version or history claim is made. Civil Insights remains interface-only and Odyssey remains separate; no standalone collector.
 
 The District Clerk describes free online viewing of public digital records and identifies portal coverage as civil/family from 2006 and criminal from 2008. It separately describes paid physical/certified copies and request routes. Do not describe all court access as paywalled, assume all older records are online, or imply sealed/restricted records are public.
 
-Remaining: inspect actual dataset interfaces and record scopes, prove export completeness, and investigate case-document search access separately. Handle sensitive personal information conservatively.
+Remaining: Criminal Insights full export remains restricted; district/felony and broader OCA report coverage are unverified. Inspect Civil Insights separately and investigate Odyssey case-document search independently. Handle sensitive personal information conservatively.
 
 ## 8. Recorded Instruments and Land Records — 10 Planning Points
 
