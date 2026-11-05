@@ -192,9 +192,9 @@ Data: campaign contribution/expenditure reports filed by county candidates, offi
 
 Access: medium for search enumeration and PDF acquisition/extraction.
 
-State: **interface inspected**; current/legacy sources identified. No connector. The clerk warns that absence from the website does not establish that a required report was not filed.
+State: **bounded EasyVote filing acquisition verified** through the [supervised public-browser workflow](easyvote-finance.md). One source-delivered COH PDF was acquired without login, validated as eight pages (UD declaration plus seven declared report pages), and visually bound to its filer, July 15 report and January–June 2026 period. Earlier anonymous-bootstrap HTTP 500 was a historical service failure; normal browser access now works. No standalone API client, all-filer census, amendment/history completeness or structured transaction extraction is claimed. Legacy original-document acquisition remains unimplemented; two sampled published PDF links returned 404 in separate work.
 
-Remaining: collect both systems, preserve filer/report/filing-period identity and amendments, and separate source PDF evidence from extracted transactions. Do not mistake security/registration instructions for submitting filings as proof that public reading requires registration.
+Remaining: separately extend bounded modern/legacy coverage, preserve filer/report/filing-period identity and amendments, and keep source PDF evidence distinct from extracted transactions. Website absence never proves non-filing. Registration instructions for submitting filings are not evidence public viewing requires an account.
 
 Personal financial disclosures are a separate record class: the county describes in-office public viewing with a name/address/representation log. Treat that route as hard/staff-mediated, not as another ordinary campaign-finance endpoint.
 
