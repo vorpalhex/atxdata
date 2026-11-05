@@ -55,6 +55,10 @@ For a bounded delinquency snapshot, use [the standalone supervised curl procedur
 
 For TCAD, a separate appraisal district, follow [bounded public exports](references/tcad-exports.md). On 2026-11-04, explicit expanded authorization permitted one complete 557228168-byte certified appraisal ZIP: all 21 members passed streamed integrity checks; the first 25 Property rows matched the retained bulk layout, with positive valuation amounts and string year/supplement identity. The earlier small waterfront CSV and layout ZIP remain separate evidence. Supplemental/JSON bodies and complete historical/data-quality coverage remain unverified. This is a supervised skill, not an unattended collector. It enforces checkpoint/attempt-aware no-request boundaries, rejects header symlinks, and documents ten-second pacing plus longer server cooldowns; reuse the verified archive offline, never repeat its GET.
 
+## Odyssey Case Records — Observed Search Challenge
+
+The [Odyssey investigation](references/odyssey.md) followed the Clerk's official portal link to Smart Search, which displayed reCAPTCHA. No challenge interaction or query was attempted; no cases/documents acquired. Keep the card blocked pending a permitted human-assisted visit; do not transfer the operator's success on the separate recording portal to Odyssey or claim universal login/payment requirements.
+
 ## Solicitation Metadata Search
 
 Follow [supervised solicitation search](references/solicitations.md): the anonymous county interface reproduced one five-field solicitation row in two fresh browser sessions, with displayed count/pagination reconciled and county detail verified. The sampled published BidNet full-solicitation link reached SSO login; stop there without registration or bypass. No original attachments or complete history are claimed.
