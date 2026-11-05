@@ -55,6 +55,10 @@ For a bounded delinquency snapshot, use [the standalone supervised curl procedur
 
 For TCAD, a separate appraisal district, follow [bounded public exports](references/tcad-exports.md). On 2026-11-04, explicit expanded authorization permitted one complete 557228168-byte certified appraisal ZIP: all 21 members passed streamed integrity checks; the first 25 Property rows matched the retained bulk layout, with positive valuation amounts and string year/supplement identity. The earlier small waterfront CSV and layout ZIP remain separate evidence. Supplemental/JSON bodies and complete historical/data-quality coverage remain unverified. This is a supervised skill, not an unattended collector. It enforces checkpoint/attempt-aware no-request boundaries, rejects header symlinks, and documents ten-second pacing plus longer server cooldowns; reuse the verified archive offline, never repeat its GET.
 
+## Solicitation Metadata Search
+
+Follow [supervised solicitation search](references/solicitations.md): the anonymous county interface reproduced one five-field solicitation row in two fresh browser sessions, with displayed count/pagination reconciled and county detail verified. The sampled published BidNet full-solicitation link reached SSO login; stop there without registration or bypass. No original attachments or complete history are claimed.
+
 ## Vendor Payment Fiscal-Year Export
 
 Use the [supervised Financial Transparency browser workflow](references/financial-transparency.md), then the [offline Bun/SQLite importer](../../programs/financial-transparency-consume/README.md). The fragile live API client was replaced by local CSV import/verify/status, not a repaired downloader. One FY2027 file yielded 19,458 accepted rows and one explicit width quarantine; duplicate import added no rows and SQLite verification preserved partial status. One payment's two lines reconcile across twelve displayed fields. No source repair, full-year/history completeness or payment-filtered export is claimed.
@@ -108,7 +112,7 @@ These are subjective weights for useful county-government monitoring, not measur
 | Commissioners Court decisions and meeting records | 15% | CivicClerk PDF/event collection implemented; broader coverage incomplete |
 | Budgets and budget policy | 10% | Verified manual access workflow + two FY 2027 PDFs; no automated client |
 | Actual spending and financial transparency | 15% | Supervised FY2027 CSV acquired and offline SQLite import verified; one quarantined source record and historical coverage limits |
-| Procurement and contracts | 10% | Verified bounded contract-metadata browser workflow; solicitations, original files and bulk history unimplemented |
+| Procurement and contracts | 10% | Verified bounded contract and solicitation metadata workflows; vendor login, original files and bulk history remain limited |
 | GIS and infrastructure geography | 10% | Verified bounded TNR manual access procedure; no automated GIS client |
 | Property taxes and appraisal data | 10% | Tax Office delinquency and TCAD one-certified-snapshot access verified; history/all-row validation not implemented |
 | Courts and justice data | 10% | Verified Criminal Insights browser selection and one official OCA fallback report; full export, Civil Insights and Odyssey unimplemented |
