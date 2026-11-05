@@ -159,9 +159,9 @@ Data: recording indexes and redacted document images, with record-type/date cove
 
 Access: medium–hard/provisional for dependable automation. The clerk says online unofficial copies printed by the user are free. Clerk-supplied email/paper and certified copies, and some historical searches, have fees; these are distinct services.
 
-State: **interface inspected / provisional acquisition**. Earlier browser reconnaissance observed a Cloudflare block on the officially linked TCCSearch surface; this is an environment-specific observation, not proof every client is blocked. No connector or dependable bulk route has been verified.
+State: **operator-confirmed live browser workflow; agent acquisition pending**. The operator successfully searched/viewed through their normal Brave session. A separate fresh managed-Chrome session hit an explicit Cloudflare block; that environment-specific denial does not negate operator access. Use the [supervised live-browser skill](recording-search.md), normal widget interactions and an authorized attachment to the working tab when available. No reconstructed POST client or bulk feed is implemented.
 
-Remaining: revalidate official vendor links, permitted anonymous search/download behavior, date coverage, and whether bulk access exists. Do not bypass a challenge or purchase copies without authorization.
+Remaining: verify live automation attachment without restarting or copying the operator's profile/cookies, then tie one selected instrument to a complete free image/copy set with page/content/hash checks. No agent-retained original image acquisition or complete date/history coverage is claimed. Paid/certified copies, registration and challenge bypass require separate authority.
 
 ## 9. Elections — 5 Planning Points
 

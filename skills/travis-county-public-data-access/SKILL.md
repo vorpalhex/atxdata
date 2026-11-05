@@ -55,6 +55,10 @@ For a bounded delinquency snapshot, use [the standalone supervised curl procedur
 
 For TCAD, a separate appraisal district, follow [bounded public exports](references/tcad-exports.md). On 2026-11-04, explicit expanded authorization permitted one complete 557228168-byte certified appraisal ZIP: all 21 members passed streamed integrity checks; the first 25 Property rows matched the retained bulk layout, with positive valuation amounts and string year/supplement identity. The earlier small waterfront CSV and layout ZIP remain separate evidence. Supplemental/JSON bodies and complete historical/data-quality coverage remain unverified. This is a supervised skill, not an unattended collector. It enforces checkpoint/attempt-aware no-request boundaries, rejects header symlinks, and documents ten-second pacing plus longer server cooldowns; reuse the verified archive offline, never repeat its GET.
 
+## Recording and Land Records: Live Browser
+
+Follow [supervised live recording search](references/recording-search.md) in the operator-authorized working browser. The operator confirmed the manual Brave workflow succeeds; a separate fresh managed-Chrome session was explicitly blocked by Cloudflare. Prefer normal live controls and, when available, authorized agent-browser attachment to the existing TCCSearch tab, not reconstructed POSTs or cookie copying. Agent-controlled live instrument/image acquisition and saved-file page/hash verification remain pending; operator success is not an agent-retained download receipt.
+
 ## Contract Metadata Workflow
 
 Use [supervised Contract Search access](references/contracts.md) with agent-browser for a bounded known-contract observation. Normal browser-managed assets/SignalR are not subject to API-client single-flight rules; searches and downloads remain deliberate and polite. One seven-field result was reproduced across fresh sessions, with UI-count reconciliation. Original contract documents, bulk enumeration and broader history remain unverified; the sampled row exposes no attachment/detail controls.
