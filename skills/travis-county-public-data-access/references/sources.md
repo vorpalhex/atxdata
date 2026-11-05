@@ -90,9 +90,9 @@ Data: solicitation numbers/titles/statuses/publication and closing dates; contra
 
 Access: medium; interactive search applications, not established bulk feeds.
 
-State: **interface inspected**. No connector; repeatable query enumeration, pagination, and document retrieval are unverified.
+State: **bounded contract metadata access verified** through normal agent-browser interaction; see [supervised Contract Search procedure](contracts.md). Two independent browser sessions reproduced one seven-field contract row and reconciled `1-1 of 1` with disabled pagination. Normal browser-managed concurrency is allowed; no standalone API client is implemented. The sampled row has no detail/attachment controls, and no original contract document was acquired. Solicitation acquisition remains unimplemented.
 
-Remaining: discover application requests, bound searches, verify all result pages and available attachments, and preserve stable contract/solicitation identities for later links to meetings and payments.
+Remaining: separately verify other bounded filters, multi-page enumeration and any actually exposed public attachments; preserve source identities for later links to meetings/payments. Do not infer complete procurement coverage or universal document absence from the single sample.
 
 ## 5. GIS and Infrastructure Geography — 10 Planning Points
 

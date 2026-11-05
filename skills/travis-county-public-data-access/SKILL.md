@@ -55,6 +55,10 @@ For a bounded delinquency snapshot, use [the standalone supervised curl procedur
 
 For TCAD, a separate appraisal district, follow [bounded public exports](references/tcad-exports.md). On 2026-11-04, explicit expanded authorization permitted one complete 557228168-byte certified appraisal ZIP: all 21 members passed streamed integrity checks; the first 25 Property rows matched the retained bulk layout, with positive valuation amounts and string year/supplement identity. The earlier small waterfront CSV and layout ZIP remain separate evidence. Supplemental/JSON bodies and complete historical/data-quality coverage remain unverified. This is a supervised skill, not an unattended collector. It enforces checkpoint/attempt-aware no-request boundaries, rejects header symlinks, and documents ten-second pacing plus longer server cooldowns; reuse the verified archive offline, never repeat its GET.
 
+## Contract Metadata Workflow
+
+Use [supervised Contract Search access](references/contracts.md) with agent-browser for a bounded known-contract observation. Normal browser-managed assets/SignalR are not subject to API-client single-flight rules; searches and downloads remain deliberate and polite. One seven-field result was reproduced across fresh sessions, with UI-count reconciliation. Original contract documents, bulk enumeration and broader history remain unverified; the sampled row exposes no attachment/detail controls.
+
 ## Election Publication Workflow
 
 For bounded official VoteTravis result/reconciliation PDFs, follow [election document acquisition](references/election-documents.md). On 2026-11-04, the official page and its historical section were inspected and two June 11, 2022 local runoff PDFs were acquired, parsed and visually verified. This manual procedure preserves official versus unofficial labels, jurisdiction, report/attestation identity, unknown publication dates and hashes. Other elections, the selected precinct PDF, complete revision history and structured Clarity extraction remain unverified here; no election client is added.
@@ -84,7 +88,7 @@ These are subjective weights for useful county-government monitoring, not measur
 | Commissioners Court decisions and meeting records | 15% | CivicClerk PDF/event collection implemented; broader coverage incomplete |
 | Budgets and budget policy | 10% | Verified manual access workflow + two FY 2027 PDFs; no automated client |
 | Actual spending and financial transparency | 15% | Not implemented |
-| Procurement and contracts | 10% | Not implemented |
+| Procurement and contracts | 10% | Verified bounded contract-metadata browser workflow; solicitations, original files and bulk history unimplemented |
 | GIS and infrastructure geography | 10% | Verified bounded TNR manual access procedure; no automated GIS client |
 | Property taxes and appraisal data | 10% | Tax Office delinquency and TCAD one-certified-snapshot access verified; history/all-row validation not implemented |
 | Courts and justice data | 10% | Not implemented |
