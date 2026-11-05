@@ -57,7 +57,7 @@ For TCAD, a separate appraisal district, follow [bounded public exports](referen
 
 ## Vendor Payment Fiscal-Year Export
 
-Use the [supervised Financial Transparency browser workflow](references/financial-transparency.md), not the unfinished API client. One FY2027 publisher CSV was acquired and one payment's two lines reconciled across twelve displayed data fields. The file has 19,459 parsed records, including one malformed 14-field record under a 13-field header; preserve it unchanged and do not claim clean ingestion, complete-year coverage or a payment-filtered export. The standalone collector remains unaccepted.
+Use the [supervised Financial Transparency browser workflow](references/financial-transparency.md), then the [offline Bun/SQLite importer](../../programs/financial-transparency-consume/README.md). The fragile live API client was replaced by local CSV import/verify/status, not a repaired downloader. One FY2027 file yielded 19,458 accepted rows and one explicit width quarantine; duplicate import added no rows and SQLite verification preserved partial status. One payment's two lines reconcile across twelve displayed fields. No source repair, full-year/history completeness or payment-filtered export is claimed.
 
 ## Criminal Insights and Official Monthly Reports
 
@@ -107,7 +107,7 @@ These are subjective weights for useful county-government monitoring, not measur
 | --- | ---: | --- |
 | Commissioners Court decisions and meeting records | 15% | CivicClerk PDF/event collection implemented; broader coverage incomplete |
 | Budgets and budget policy | 10% | Verified manual access workflow + two FY 2027 PDFs; no automated client |
-| Actual spending and financial transparency | 15% | Supervised FY2027 vendor-payment CSV acquired; source anomaly, client defects and historical completeness unresolved |
+| Actual spending and financial transparency | 15% | Supervised FY2027 CSV acquired and offline SQLite import verified; one quarantined source record and historical coverage limits |
 | Procurement and contracts | 10% | Verified bounded contract-metadata browser workflow; solicitations, original files and bulk history unimplemented |
 | GIS and infrastructure geography | 10% | Verified bounded TNR manual access procedure; no automated GIS client |
 | Property taxes and appraisal data | 10% | Tax Office delinquency and TCAD one-certified-snapshot access verified; history/all-row validation not implemented |
