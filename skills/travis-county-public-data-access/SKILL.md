@@ -55,6 +55,10 @@ For a bounded delinquency snapshot, use [the standalone supervised curl procedur
 
 For TCAD, a separate appraisal district, follow [bounded public exports](references/tcad-exports.md). On 2026-11-04, explicit expanded authorization permitted one complete 557228168-byte certified appraisal ZIP: all 21 members passed streamed integrity checks; the first 25 Property rows matched the retained bulk layout, with positive valuation amounts and string year/supplement identity. The earlier small waterfront CSV and layout ZIP remain separate evidence. Supplemental/JSON bodies and complete historical/data-quality coverage remain unverified. This is a supervised skill, not an unattended collector. It enforces checkpoint/attempt-aware no-request boundaries, rejects header symlinks, and documents ten-second pacing plus longer server cooldowns; reuse the verified archive offline, never repeat its GET.
 
+## Legacy Campaign Finance — WILL NOT IMPLEMENT
+
+The [legacy search exists, but all attempted original-document links returned 404](references/legacy-finance.md), including ten samples spread across 1997–2021. Implementation is intentionally declined; do not resume without explicit operator authorization. Modern EasyVote is separate.
+
 ## EasyVote Public Filings
 
 Follow [supervised modern campaign-finance acquisition](references/easyvote-finance.md) with agent-browser. Normal anonymous public UI navigation recovered from the earlier bootstrap failure and delivered one real eight-page COH filing PDF; browser-delivered bytes, hash, scanned-cover identity/period and page reconciliation were verified. No login or invented reader identity was used. Filer census, amendments, full history and structured transactions remain unverified; legacy finance is separate.
@@ -102,7 +106,7 @@ These are subjective weights for useful county-government monitoring, not measur
 | Courts and justice data | 10% | Not implemented |
 | Recorded instruments and land records | 10% | Not implemented |
 | Elections | 5% | Verified bounded VoteTravis publications, Clarity structured snapshot and electoral-geography access; no automated election client |
-| Campaign finance | 5% | Verified bounded EasyVote original filing workflow; legacy, amendments and broader coverage unimplemented |
+| Campaign finance | 5% | Verified bounded EasyVote original filing workflow; legacy WILL NOT IMPLEMENT; modern amendments and broader coverage unimplemented |
 
 Initial discussion assigned roughly 10 points of the 15-point meeting bucket to the working downloader: approximately 10% implemented and 90% remaining in this model. This is a planning placeholder, not proof that a tenth of county records has been acquired. Other departmental and request-only holdings have no measured denominator. Do not silently convert these guesses into factual progress statistics.
 
