@@ -67,6 +67,10 @@ Follow [supervised solicitation search](references/solicitations.md): the anonym
 
 Use the [supervised Financial Transparency browser workflow](references/financial-transparency.md), then the [offline Bun/SQLite importer](../../programs/financial-transparency-consume/README.md). The fragile live API client was replaced by local CSV import/verify/status, not a repaired downloader. One FY2027 file yielded 19,458 accepted rows and one explicit width quarantine; duplicate import added no rows and SQLite verification preserved partial status. One payment's two lines reconcile across twelve displayed fields. No source repair, full-year/history completeness or payment-filtered export is claimed.
 
+## Civil Insights and Official Monthly Report
+
+Follow [supervised Civil Insights and OCA access](references/civil-insights.md). Calendar 2025 / JAN / CIVIL showed 923 Cases Added. One separately published ten-page OCA Travis District Court Activity Detail report for January 2025 was acquired; its civil-section added totals reconcile narrowly with that view. The original bundle includes other court sections, not separately queried or reconciled. Full Civil Insights export/history and case-file access remain unverified; no client or model/API bypass was added.
+
 ## Criminal Insights and Official Monthly Reports
 
 Follow [supervised dashboard use and the official OCA report fallback](references/criminal-insights.md). Normal browser selection was verified for Travis, January 2025, County division; one original two-page OCA misdemeanor activity report was acquired and reconciled narrowly against visible Added Type percentages. This is a separate official reporting source, not a successful Qlik export. Qlik CSV export remains denied; full dataset/history and district/felony reports are unverified. No standalone collector is added.
@@ -119,7 +123,7 @@ These are subjective weights for useful county-government monitoring, not measur
 | Procurement and contracts | 10% | Verified bounded contract and solicitation metadata workflows; vendor login, original files and bulk history remain limited |
 | GIS and infrastructure geography | 10% | Verified bounded TNR manual access procedure; no automated GIS client |
 | Property taxes and appraisal data | 10% | Tax Office delinquency and TCAD one-certified-snapshot access verified; history/all-row validation not implemented |
-| Courts and justice data | 10% | Verified Criminal Insights browser selection and one official OCA fallback report; full export, Civil Insights and Odyssey unimplemented |
+| Courts and justice data | 10% | Criminal/Civil supervised views and bounded OCA report originals verified; full exports/history unverified, Odyssey blocked at observed CAPTCHA |
 | Recorded instruments and land records | 10% | Not implemented |
 | Elections | 5% | Verified bounded VoteTravis publications, Clarity structured snapshot and electoral-geography access; no automated election client |
 | Campaign finance | 5% | Verified bounded EasyVote original filing workflow; legacy WILL NOT IMPLEMENT; modern amendments and broader coverage unimplemented |
