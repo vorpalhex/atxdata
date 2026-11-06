@@ -29,6 +29,7 @@ LLM contributions are acceptable, but will generally be heavily scrutinized. We 
 
 - [legistar-consume](programs/legistar-consume/README.md): Bun CLI for downloading public Austin Legistar meeting documents and recording metadata in SQLite.
 - [civicclerk-consume](programs/civicclerk-consume/README.md): Serial, rate-limit-aware Bun client for Travis County CivicClerk meeting metadata and PDFs.
+- [financial-transparency-consume](programs/financial-transparency-consume/README.md): Offline Bun/SQLite importer for browser-downloaded fiscal-year payment CSVs; preserves originals, quarantines invalid rows and verifies snapshot reuse. Acquisition remains a separate supervised browser workflow.
 
 Each program currently retains its own dependencies, configuration, and commands.
 
@@ -56,6 +57,18 @@ bun run src/cli.ts
 ```
 
 ## Skills
+
+### travis-county-public-data-access
+
+The [county access skill](skills/travis-county-public-data-access/SKILL.md) inventories official sources and distinguishes available records, implemented collectors and actual sample acquisitions. Its [budget workflow](skills/travis-county-public-data-access/references/budgets.md) supports bounded manual fiscal-year inventories and direct PDF downloads, with serial pacing, private provenance, checksums and file-level restart. Two FY 2027 PDFs were verified; other years/types and automated collection remain incomplete. Keep original records and runtime evidence outside the checkout.
+
+For County Code reference chapters, use the standalone [County Code workflow](skills/travis-county-public-data-access/references/county-code.md). Current-reference Chapters 2 and 464 were fetched, parsed and checksum-verified; the linked archive selector was inspected, but historical chapter retrieval and complete coverage remain unverified. The online copy is not the official paper record. No automated County Code client is added.
+
+For official election publication PDFs, use the standalone [VoteTravis procedure](skills/travis-county-public-data-access/references/election-documents.md). Two June 11, 2022 runoff publications were acquired and visually verified; broader history, precinct exports and structured Clarity extraction are not implemented by this workflow.
+
+For electoral geography, use the standalone [Voter Registration Maps workflow](skills/travis-county-public-data-access/references/voter-maps.md). One small published Election Precincts shapefile ZIP was acquired and verified: 308 unique precincts, original geometry/coordinate system, district fields and publication metadata. This is bounded manual bulk-file access, not individual voter-roll collection, an automated client, current election results or a complete map archive. Raw files and signed download URLs remain private.
+
+For structured results, the separate [Clarity procedure](skills/travis-county-public-data-access/references/clarity-results.md) follows the actual catalog/frontend to one December 2025 election XML export with contest/precinct identities and version/reporting metadata. XML/JSON totals reconcile. Audit-versus-XML population, cutoff and version equivalence is unestablished; no election-error inference is supported. The audit reports zero selected electronic-versus-hand tally discrepancies. Source date labels and final/reporting flags are retained without inferring certification. This is bounded supervised access, not complete history or an automated collector.
 
 ### exhaustive
 

@@ -59,21 +59,22 @@ export class PoliteHttpClient {
     const timeout = setTimeout(() => controller.abort(new DOMException("Request timed out", "TimeoutError")), this.options.timeoutMs ?? 180_000);
     let response: Response | undefined;
     try {
-      response = await this.deps.fetch(url, { signal: controller.signal, headers: { Accept: "*/*", "User-Agent": this.options.userAgent ?? "atxdata-civicclerk/0.1" } });
+      response = await this.deps.fetch(url, { redirect: "manual", signal: controller.signal, headers: { Accept: "*/*", "User-Agent": this.options.userAgent ?? "atxdata-civicclerk/0.1" } });
       this.notBefore = Math.max(this.notBefore, this.deps.now() + serverDelay(response, this.deps.now()));
       if (!response.ok) throw new HttpError(response.status);
       return await consume(response);
     } finally {
       clearTimeout(timeout);
       await response?.body?.cancel().catch(() => {});
-      this.notBefore = Math.max(this.notBefore, this.deps.now() + (this.options.minIntervalMs ?? 1000));
+      this.notBefore = Math.max(this.notBefore, this.deps.now() + (this.options.minIntervalMs ?? 2000));
     }
   }
   private async retry<T>(url: string, consume: (response: Response) => Promise<T>): Promise<T> {
     for (let attempt = 0; ; attempt++) {
       try { return await this.transfer(url, consume); }
       catch (error) {
-        if (attempt >= (this.options.maxRetries ?? 3) || !transient(error)) throw error;
+        if (attempt >= (this.options.maxRetries ?? 0) || !transient(error)) throw error;
+        console.warn(`HTTP retry ${attempt + 1}`);
         this.notBefore = Math.max(this.notBefore, this.deps.now() + Math.min(30_000, 500 * 2 ** attempt + this.deps.random() * 250));
       }
     }

@@ -1,4 +1,5 @@
 import { Database } from "bun:sqlite";
+import { createHash } from "node:crypto";
 import type { CivicEvent, PublishedFile } from "../types";
 
 export type DocumentEntry = PublishedFile & { filename: string; sourceUrl: string };
@@ -6,6 +7,15 @@ export type StoredDocument = { filename: string; sourceUrl: string; byteSize: nu
 type DocumentRow = { filename: string; source_url: string; byte_size: number | null; sha256: string | null; download_status: StoredDocument["downloadStatus"] };
 
 const SCHEMA = `
+  CREATE TABLE IF NOT EXISTS document_versions (
+    tenant TEXT NOT NULL, event_id INTEGER NOT NULL, file_type INTEGER NOT NULL, file_id INTEGER NOT NULL,
+    sha256 TEXT NOT NULL, byte_size INTEGER NOT NULL, source_url TEXT NOT NULL, filename TEXT NOT NULL, downloaded_at TEXT NOT NULL,
+    PRIMARY KEY(tenant,event_id,file_type,file_id,sha256)
+  );
+  CREATE TABLE IF NOT EXISTS event_snapshots (
+    tenant TEXT NOT NULL, event_id INTEGER NOT NULL, sha256 TEXT NOT NULL,
+    observed_at TEXT NOT NULL, metadata TEXT NOT NULL, PRIMARY KEY(tenant,event_id,sha256)
+  );
   CREATE TABLE IF NOT EXISTS meetings (
     tenant TEXT NOT NULL, event_id INTEGER NOT NULL, event_name TEXT NOT NULL,
     meeting_date TEXT NOT NULL, last_seen_at TEXT NOT NULL,
@@ -36,6 +46,8 @@ export class CivicDatabase {
       this.db.run("PRAGMA journal_mode = WAL");
       this.db.run("PRAGMA foreign_keys = ON");
       this.db.exec(SCHEMA);
+      this.db.run(`INSERT OR IGNORE INTO document_versions SELECT tenant,event_id,file_type,file_id,sha256,byte_size,source_url,filename,downloaded_at
+        FROM documents WHERE sha256 IS NOT NULL AND byte_size IS NOT NULL AND downloaded_at IS NOT NULL`);
       this.db.transaction(() => {
         this.db.run("CREATE TABLE IF NOT EXISTS archive_settings (id INTEGER PRIMARY KEY CHECK(id=1), tenant TEXT NOT NULL)");
         const other = this.db.query("SELECT tenant FROM meetings WHERE tenant<>? LIMIT 1").get(this.tenant);
@@ -47,6 +59,15 @@ export class CivicDatabase {
     } catch (error) { this.db.close(); throw error; }
   }
   close(): void { this.db.close(); }
+  snapshot(event: CivicEvent): void {
+    const metadata = JSON.stringify(event), hash = createHash("sha256").update(metadata).digest("hex");
+    this.db.query("INSERT INTO event_snapshots VALUES (?,?,?,?,?) ON CONFLICT(tenant,event_id,sha256) DO UPDATE SET observed_at=excluded.observed_at").run(this.tenant, event.id, hash, new Date().toISOString(), metadata);
+  }
+  cachedEvent(id: number): CivicEvent {
+    const row = this.db.query<{ metadata: string }, [string, number]>("SELECT metadata FROM event_snapshots WHERE tenant=? AND event_id=? ORDER BY observed_at DESC, rowid DESC LIMIT 1").get(this.tenant, id);
+    if (!row) throw new Error("offline event missing");
+    return JSON.parse(row.metadata);
+  }
   upsertMeeting(event: CivicEvent): void {
     this.db.query(`INSERT INTO meetings VALUES (?, ?, ?, ?, ?)
       ON CONFLICT(tenant,event_id) DO UPDATE SET event_name=excluded.event_name,
@@ -70,9 +91,15 @@ export class CivicDatabase {
     return row ? { filename: row.filename, sourceUrl: row.source_url, byteSize: row.byte_size, sha256: row.sha256, downloadStatus: row.download_status } : undefined;
   }
   downloaded(eventId: number, file: PublishedFile, data: { byteSize: number; sha256: string }): void {
-    this.db.query(`UPDATE documents SET download_status='downloaded',byte_size=?,sha256=?,error=NULL,downloaded_at=?
-      WHERE tenant=? AND event_id=? AND file_type=? AND file_id=?`)
-      .run(data.byteSize, data.sha256, new Date().toISOString(), this.tenant, eventId, file.fileType, file.fileId);
+    this.db.transaction(() => {
+      const now = new Date().toISOString();
+      this.db.query(`INSERT OR IGNORE INTO document_versions SELECT tenant,event_id,file_type,file_id,?,?,source_url,filename,?
+        FROM documents WHERE tenant=? AND event_id=? AND file_type=? AND file_id=?`)
+        .run(data.sha256, data.byteSize, now, this.tenant, eventId, file.fileType, file.fileId);
+      this.db.query(`UPDATE documents SET download_status='downloaded',byte_size=?,sha256=?,error=NULL,downloaded_at=?
+        WHERE tenant=? AND event_id=? AND file_type=? AND file_id=?`)
+        .run(data.byteSize, data.sha256, now, this.tenant, eventId, file.fileType, file.fileId);
+    }).immediate();
   }
   failed(eventId: number, file: PublishedFile, error: string): void {
     this.db.query(`UPDATE documents SET download_status='failed',error=? WHERE tenant=? AND event_id=? AND file_type=? AND file_id=?`)

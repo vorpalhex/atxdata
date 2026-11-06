@@ -1,0 +1,89 @@
+# Civil Insights — supervised aggregate observation
+
+The initial dashboard-only findings below are preserved as provenance; the follow-up section verifies one separate OCA original and supersedes that initial acquisition blocker.
+
+## Supported scope and source identity
+
+The [Civil Insights Dataset](https://courtsdata.traviscountytx.gov/CivilInsights/Dataset) anonymously renders a public Qlik dashboard in a normal local browser. The [Welcome page](https://courtsdata.traviscountytx.gov/CivilInsights/) identifies it as District Civil Court Activity Statistics submitted monthly by the Travis County District Clerk to the Texas Office of Court Administration (OCA). It is not a statewide county selector, criminal dashboard, individual-case search or case-document archive. The [county open-data directory](https://www.traviscountytx.gov/open-data-portal) is the official discovery starting point.
+
+Verified on November 5, 2026: one calendar-year 2025 / JAN / CIVIL observation, with Cases Added selected, showed one 2025 bar labeled 923. This is a rendered aggregate observation, NOT acquisition of an original export or a complete structured dataset. No collector was added. Access is medium (interactive JavaScript dashboard); no login, payment or challenge appeared during this observation.
+
+## Prerequisite: install agent-browser and load its instructions
+
+The shared [browser setup guide](browser-setup.md) also covers private configuration, an isolated-session smoke test, troubleshooting and human-browser alternatives. agent-browser is optional automation, not a condition of public access.
+
+[agent-browser](https://agent-browser.dev/) is an external browser-automation CLI, not a dependency installed by this repository. Follow its [installation guide](https://agent-browser.dev/installation). Through the terminal tool, choose ONE installation method:
+
+```sh
+# macOS with Homebrew
+brew install agent-browser
+# Alternatively, with npm (do not run both installation methods)
+# npm install -g agent-browser
+
+# Download the managed Chrome browser on first setup
+agent-browser install
+```
+
+On Linux, consult the upstream guide for browser system dependencies (`agent-browser install --with-deps` may require elevated package-manager access). Do not reinstall or upgrade an existing working installation merely to follow this procedure.
+
+The actual usage skill is bundled with the CLI. Load its installed-version instructions through the terminal tool before browser operation:
+
+```sh
+agent-browser --version
+agent-browser skills get core
+# Additional command details when needed
+agent-browser skills get core --ref commands
+```
+
+An optional [agent discovery skill](https://agent-browser.dev/skills) can be installed in supported agent environments with `npx skills add vercel-labs/agent-browser`. That discovery stub is not required to run this workflow; the CLI-served core instructions above are sufficient. A reference to the general agent-browser skill elsewhere in this document does not assume that a private Hermes skill is already installed or shipped in this repository.
+
+## Exercised browser workflow
+
+Use the installed CLI and its version-matched core instructions loaded above. The observed version was 0.41.2. Start a unique named local session using `agent-browser session id --scope worktree --prefix tc-civil-insights-final`; pass the literal returned session and an explicit reviewed private `--config` on every browser command. Use a fresh private download directory outside the checkout, no restored state, copied operator profile/cookies or paid provider. The verification used a headed owned browser. Normal browser assets, Qlik connections and concurrency are permitted; this is not an API collector.
+
+1. `open https://courtsdata.traviscountytx.gov/CivilInsights/Dataset`, then `snapshot -i`. Retain raw CLI output privately and print only allowlisted control labels/counts. Wait for year, Court Section and Month controls, not network-idle.
+2. Select 2025, CIVIL and JAN in their visible listboxes, confirming each with the current `Confirm selection` ref. Explicitly click CALENDAR YEAR. Unlike Criminal Insights, this page exposed Court Section (CIVIL, CPS, FAMILY, IV-D), not County and Division selectors. Travis and district identity come from the publisher's Introduction, not a fabricated county selection.
+3. In this run, role-based row lookup and a `:has-text` selector both returned Element not found despite rows being present in the rendered DOM. The verified fallback was ordinary mouse move/down/up at each row's current DOM bounding rectangle, followed by `snapshot -i` and `click @CURRENT_CONFIRM_REF`. Do not reuse screen coordinates across layouts. Do not mutate Qlik state through hidden model APIs.
+4. Verify selected rows through visible DOM: `[role=row][aria-selected=true]` yielded exactly 2025, CIVIL, JAN. Also require each listbox's visible text to say there is one selected value and the Calendar Year button to be active. A first capture immediately after confirmation was stale: it still said Month had no selection and showed 24,258. It is NOT the bounded result. Wait for `document.body.innerText.includes('Month\nThere is one selected value.')`, then reread the chart and controls and retain a screenshot. Never treat click success alone as settled results.
+5. The settled Cases Added chart showed a single 2025 bar, 923, and legend New Cases Filed / Cases Reactivated / All Other Cases Added. The Adding Type chart showed New Cases Filed 95.4% and All Other Cases Added 2.5%; Cases Reactivated was named without a numeric label. Do not infer an exact category count from rounded percentages. The underlying Qlik measure expression and row schema were not exposed or queried; the supported measure is the publisher-labeled aggregate only.
+6. The observed Disposed Type chart warned: “The data set contains negative or zero values that cannot be shown in this chart.” Truncated labels and unlabeled slices are not a complete table. Preserve these limitations and the adjustment-control state: the button read Remove Adjustments and was not toggled. No clearance-rate interpretation was tested.
+7. A normal right-click inspection over the Cases Added chart exposed no usable export/download/table control in the interactive snapshot. No native export was attempted or denied in this civil run, and no original file was acquired. This bounded observation does not prove that every chart or browser lacks an export. Do not invent endpoints or attempt alternate routes after any actual export denial.
+8. Open the published Welcome link in another owned tab. Expand Introduction, Cases Added, Docket Adjustments and Exceptions through current refs. The exercised Introduction confirms district/Travis identity. Cases Added means New Cases Filed plus other cases reaching the docket, including Cases Reactivated and All Other Cases Added. Docket adjustments concern previously uncounted additions/dispositions; the publisher says they always affect pending caseload and can be included in clearance rate by the adjustment button. The Exceptions panel says Age of Cases Disposed visualizations are unavailable for CPS and IV-D. These definitions are not proof of every year's complete submissions.
+9. Close only the owned session with `agent-browser --session SESSION --config PRIVATE_CONFIG close`. Keep screenshots and original captures private. No personal case rows, access fields, hidden ASP.NET state, opaque URLs or cookies belong in the reference.
+
+## Evidence and limits
+
+Private retained evidence includes initial/selection snapshots, selected-row allowlists, stale and settled DOM observations, the settled screenshot and expanded publisher definitions. The screenshot was visually inspected: 2025, CIVIL and JAN were green; Calendar Year was active; Cases Added showed 923. This is one observation with UI-count reconciliation (one bar), not a reconciliation against original records. Publicly selectable calendar years were 2019–2026 in the initial DOM; neither full coverage within those years nor availability outside them was verified. No stable case key, pagination, suppression threshold, record count, full schema, download-size limit or amended-history protocol was established.
+
+Original file bytes/hash, PDF signature/page identity and file-recovery tests are N/A because no original was exposed/acquired in the exercised route. Hashing retained captures establishes offline byte integrity only, not remote freshness, source-original integrity or repeatability across independent live sessions. An interrupted browser observation restarts deliberately in a fresh session and rechecks selections; no byte-range resume, automated retries, persisted checkpoint/SQLite recovery or unattended idempotent acquisition is implemented. Stop on challenge, cooldown or denied export; do not loop or bypass it.
+
+[OCA's official Court Activity Database page](https://www.txcourts.gov/media/judicial-data-and-reports) and its [public report builder](https://card.txcourts.gov/ReportSelection.aspx) are separate sources, not Civil Insights exports. The neighboring [Criminal Insights reference](criminal-insights.md) verified an OCA misdemeanor report, NOT a civil report. No OCA civil report was generated here and no dashboard/report reconciliation is claimed. A separately authorized bounded district-civil monthly report would need its actual offered report type, county, period, all pages, original bytes and overlapping measure independently verified before comparison.
+
+## Historical provenance and acceptance gates
+
+Earlier reconnaissance reached HTML/report interfaces only and did not verify a complete export. The old browser-concurrency limitation is superseded by permission for normal browser operation and by this successful bounded observation. Criminal Insights' historical export denial remains evidence about that separate surface; it is not a civil denial. No historical failure is retroactively credited as acquisition.
+
+- Initial implementation: PASS for the narrow supervised aggregate-observation skill; original-file/dataset acquisition remains BLOCK.
+- E2E: PASS for anonymous live selection and the one settled 923 aggregate; BLOCK for the original card's document/record export completeness requirement. A dashboard wrapper alone was not counted as acquisition.
+- ub-mode: applied smallest-deliverable/scope discipline. TDD, CRAP, dryer, mutation, Bun/SQLite/typecheck are N/A (documentation only), not passing measurements.
+- Sanitize: reference-only privacy review; raw evidence excluded. No whole-repository or Git-history clearance is implied.
+- Fresh independent quality review: BLOCK/pending chief-owned review; implementation-agent inspection is not that gate.
+- Docs/skill: this reference supplies exercised steps, definition, state, warnings and limits. Shared skill/source-inventory integration and owner acceptance remain pending with the chief; this worker does not claim them completed.
+
+## Follow-up: one official OCA original acquired
+
+The follow-up on November 5, 2026 supersedes the initial original-acquisition blocker above for ONE separate-source report only. Original OCA acquisition was already authorized; the initial suggestion that new operator approval was needed was mistaken. No Civil Insights export is thereby enabled.
+
+Starting from OCA's official page, follow its actual current Run Reports link to ReportSelection.aspx. In a fresh owned named agent-browser 0.41.2 session with private config/download directory, select District Court Data Reports, then District Court Activity Detail, then the actual Continue control. This is not County-Level Courts / Misdemeanor Activity. The offered District Court Activity Detail report bundles criminal, civil, family and juvenile sections; there was no civil-only criteria control on this report. One county/month report was generated once, not separate cross-table queries. Retain the unchanged original bundle; restrict this comparison to its CIVIL CASES section, pages 4–5.
+
+Set From Year and To Year to 2025 before choosing January in both month controls. Select County Travis, leave Court All, and choose Export to Acrobat. After each selection run `wait --load load` and wait for its actual select control to return. Read back ALL seven selected values before Run Report: 2025, January, 2025, January, Travis, All, Export to Acrobat. The Separate Monthly Report checkbox was unchecked; the range nevertheless contains exactly one month. Initial 2010 only offers September–December, so do not select January before changing years. Use current snapshot refs: an attempted `#btnContinue` lookup did not advance the page; the actual current Continue ref did. Never infer a successful action from an ignored selector failure.
+
+Click Run Report once through the actual link ref. It rendered an inline application/pdf document, not a saved download. From that already-loaded report document only, the cache-only original extraction described in the neighboring Criminal Insights reference succeeded: fetch location.href with cache only-if-cached and mode same-origin; require HTTP 200, application/pdf, nonzero bytes and a maximum local extraction size of 12,582,912; strictly decode the private base64 receipt, check exact decoded length and %PDF- signature, save exclusively with mode 0600. No network fallback, opaque endpoint replay, second report generation, print-to-PDF or native download retry was used. This is a POST-UI local extraction bound, NOT an enforced pretransfer download ceiling. Stop on cache miss or failure instead of changing fetch policy.
+
+Original: 111,832 bytes, PDF 1.7, 10 pages. SHA-256 `391747602e17efba6477b1f0aa16bd2a3277ca3e9b42094ed3bad2d37d11d02c`. pdfinfo, qpdf --check and pdftotext -layout exited 0. Every physical page's extracted header identified District Courts, County Travis, January 1–31, 2025, and every footer matched its sequential Page N of 10. The report states 100.0 Percent Reporting Rate and 1 report received of 1 possible; this is publisher-reported completeness for this report, not independent proof of complete case coverage. Run date: November 5, 2026, 2:11:39 PM, distinct from the reporting month. All ten pages were rendered; page 5 was visually inspected to corroborate the civil totals/header/footer. An optional contact-sheet step failed because PIL was unavailable; no all-page visual review is claimed. All-page identity/numbering validation used extracted text.
+
+Page 5 CIVIL CASES totals are New Cases Filed 881, Cases Reactivated 19, All Other Cases Added 23. Their sum is 923; rounded shares are 95.4%, 2.1%, 2.5%. Thus the publisher-labeled Added components match the dashboard's January 2025 CIVIL total 923 and its visible 95.4% New / 2.5% Other labels. Reactivated had no visible dashboard percentage to compare. This is narrow aggregate agreement for the same county, district court level, calendar month and named measure, not proof of identical source snapshots, model expressions, amendment versions or every chart. The two surfaces were observed on the same day but their underlying revision equivalence is unknown. No discrepancy/error allegation follows.
+
+An immediate offline SHA-256 reread of the original succeeded with zero additional source requests. This verifies byte reuse, not source freshness. No restart/byte-range recovery, corruption-injection tests, unattended retries or persistent client was added. The owned follow-up browser closed successfully.
+
+Updated gates: initial supervised workflow PASS, now including one separate official original; bounded OCA original e2e PASS (identity, all physical-page headers/numbering, signature, hash, parser checks and narrow measure reconciliation). Civil Insights structured export/full history remain BLOCK/unverified. Code quality tools remain N/A. Reference-only sanitizer PASS after follow-up. Independent fresh review and shared skill/source integration remain chief-owned PENDING, not self-approved. Initial no-original statements describe the first observation only and are superseded by this section, not erased historical evidence.

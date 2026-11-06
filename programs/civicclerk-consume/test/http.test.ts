@@ -18,7 +18,7 @@ test("transient HTTP failures back off exponentially with jitter and cancel disc
 test("Retry-After governs retries and subsequent requests after successful responses", async () => {
   let time = 0, calls = 0;
   const starts: number[] = [], waits: number[] = [];
-  const http = new PoliteHttpClient({ minIntervalMs: 0 }, {
+  const http = new PoliteHttpClient({ minIntervalMs: 0, maxRetries: 3 }, {
     now: () => time, random: () => 0,
     sleep: async ms => { waits.push(ms); time += ms; },
     fetch: async () => { starts.push(time); calls++; return Response.json({ call: calls }, { status: calls === 1 ? 429 : 200, headers: { "Retry-After": calls === 1 ? "2" : calls === 2 ? "3" : "0" } }); },
@@ -103,12 +103,12 @@ test("server cooldowns remain uncapped and sleep in timer-safe chunks", async ()
   expect(waits).toEqual([2_147_483_647, delay - 2_147_483_647]);
 });
 
-test("default pacing leaves a full second after a completed request", async () => {
+test("default pacing leaves two seconds after a completed request", async () => {
   let time = 0;
   const starts: number[] = [];
   const http = new PoliteHttpClient({}, { now: () => time, sleep: async ms => { time += ms; }, fetch: async () => { starts.push(time); return Response.json({}); } });
   await http.getJson("https://example.test/a"); await http.getJson("https://example.test/b");
-  expect(starts).toEqual([0, 1000]);
+  expect(starts).toEqual([0, 2000]);
 });
 
 test("timeout covers a stalled response body, not just headers", async () => {
@@ -213,7 +213,7 @@ for (const status of [400, 401, 403, 404]) {
 
 test("failed body consumption can retry the whole transfer", async () => {
   let calls = 0, time = 0;
-  const http = new PoliteHttpClient({ minIntervalMs: 0 }, { now: () => time, sleep: async ms => { time += ms; }, fetch: async () => new Response("body") });
+  const http = new PoliteHttpClient({ minIntervalMs: 0, maxRetries: 1 }, { now: () => time, sleep: async ms => { time += ms; }, fetch: async () => new Response("body") });
   expect(await http.request("https://example.test", async response => {
     if (++calls === 1) throw new TypeError("broken body");
     return response.text();
@@ -243,4 +243,17 @@ test("concurrent callers are serialized through complete body consumption", asyn
   const consume = async (response: Response) => { await Bun.sleep(5); const body = await response.text(); active--; return body; };
   expect(await Promise.all([http.request("https://example.test/a", consume), http.request("https://example.test/b", consume)])).toEqual(["document", "document"]);
   expect(peak).toBe(1);
+});
+
+test("redirects are manual and default retries are disabled", async () => {
+  let calls = 0;
+  const http = new PoliteHttpClient({ minIntervalMs: 0 }, { fetch: async (_url, init) => {
+    calls++; expect(init.redirect).toBe("manual"); return new Response(null, { status: 302 });
+  } });
+  await expect(http.getJson("https://example.test")).rejects.toThrow("HTTP 302");
+  expect(calls).toBe(1);
+  let failures = 0;
+  const failing = new PoliteHttpClient({ minIntervalMs: 0 }, { fetch: async () => { failures++; throw new TypeError("network"); } });
+  await expect(failing.getJson("https://example.test")).rejects.toThrow("network");
+  expect(failures).toBe(1);
 });
