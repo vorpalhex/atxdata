@@ -55,6 +55,8 @@ For a bounded delinquency snapshot, use [the standalone supervised curl procedur
 
 ## TCAD Appraisal Export Access
 
+`programs/tcad-consume/` now provides an offline-only Bun/SQLite importer for the retained certified archive and layout. Its explicit `2026-certified-supp0-property-first25` selection inventories the archive and imports exactly 25 Property rows, preserving 493 positional fields and literal year/supplement strings. On 2026-11-06, 11 retained-input tests, typecheck, duplicate reuse and independent review passed. It has no HTTP or sync adapter; never redownload the retained original. Full-roll semantic quality, other snapshots and Tax Office joins remain unsupported. The expensive full-member integrity command is explicit and was not rerun over the 18 GB expansion during implementation. See the program README for commands, pinned inputs and recovery limits.
+
 For TCAD, a separate appraisal district, follow [bounded public exports](references/tcad-exports.md). On 2026-11-04, explicit expanded authorization permitted one complete 557228168-byte certified appraisal ZIP: all 21 members passed streamed integrity checks; the first 25 Property rows matched the retained bulk layout, with positive valuation amounts and string year/supplement identity. The earlier small waterfront CSV and layout ZIP remain separate evidence. Supplemental/JSON bodies and complete historical/data-quality coverage remain unverified. This is a supervised skill, not an unattended collector. It enforces checkpoint/attempt-aware no-request boundaries, rejects header symlinks, and documents ten-second pacing plus longer server cooldowns; reuse the verified archive offline, never repeat its GET.
 
 ## Odyssey Case Records — Observed Search Challenge
@@ -126,7 +128,7 @@ These are subjective weights for useful county-government monitoring, not measur
 | Actual spending and financial transparency | 15% | Supervised FY2027 CSV acquired and offline SQLite import verified; one quarantined source record and historical coverage limits |
 | Procurement and contracts | 10% | Verified bounded contract and solicitation metadata workflows; vendor login, original files and bulk history remain limited |
 | GIS and infrastructure geography | 10% | Shared bounded ArcGIS client for named TNR layer and precinct ZIP; current live TNR catalog search incomplete |
-| Property taxes and appraisal data | 10% | Tax Office delinquency and TCAD one-certified-snapshot access verified; history/all-row validation not implemented |
+| Property taxes and appraisal data | 10% | TCAD offline first-25-row importer and prior bulk-access evidence; Tax Office collector still under review; history/all-row validation unimplemented |
 | Courts and justice data | 10% | Criminal/Civil supervised views and bounded OCA report originals verified; full exports/history unverified, Odyssey blocked at observed CAPTCHA |
 | Recorded instruments and land records | 10% | Not implemented |
 | Elections | 5% | Bounded Clarity client for election 125662 and shared ArcGIS precinct-ZIP strategy; VoteTravis publications remain manual; complete history unverified |

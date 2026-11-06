@@ -32,6 +32,7 @@ LLM contributions are acceptable, but will generally be heavily scrutinized. We 
 - [financial-transparency-consume](programs/financial-transparency-consume/README.md): Offline Bun/SQLite importer for browser-downloaded fiscal-year payment CSVs; preserves originals, quarantines invalid rows and verifies snapshot reuse. Acquisition remains a separate supervised browser workflow.
 - [clarity-consume](programs/clarity-consume/README.md): Bounded headless Bun/SQLite catalog and versioned JSON/XML result collector for explicitly selected Travis election `125662`, with reconciliation and offline provenance verification. Other elections and complete history are not supported; live revalidation used curl and retained originals were exercised through the client offline.
 - [arcgis-consume](programs/arcgis-consume/README.md): Shared bounded Bun/SQLite adapter for the named TNR Commissioner Precinct layer and Voter Election Precinct published ZIP. Preserves native geometry, byte versions and source provenance with offline verification; current live TNR catalog search and broad layer/history coverage remain incomplete.
+- [tcad-consume](programs/tcad-consume/README.md): Offline-only Bun/SQLite importer for the retained certified appraisal archive/layout and exactly the first 25 Property rows. Preserves positional fields and original string identities, with duplicate reuse and offline verification. No downloader, broader roll import or Tax Office crosswalk is implemented.
 
 Each program currently retains its own dependencies, configuration, and commands.
 

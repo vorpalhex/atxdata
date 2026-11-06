@@ -133,6 +133,8 @@ State: **verified access procedure + full small delinquency file acquired** on 2
 
 Remaining: full current/prior rolls, historical snapshots, Excel/ZIP compatibility, rates/exemptions acquisition, cross-snapshot identifier reconciliation and TCAD integration. The delinquency layout still contains 2012 explanatory text; observed last-roll years were 2006–2025, not a guarantee of complete year coverage. Delinquent/current balances are not appraisal values. TCAD is a separate appraisal district, not a Travis County department. Raw owner/account/address records and response headers remain private, outside source.
 
+TCAD implementation update (2026-11-06): `programs/tcad-consume/` is an offline-only Bun/SQLite importer for pinned retained archive/layout inputs, with explicit `2026-certified-supp0-property-first25` selection. Eleven retained-input tests, typecheck, duplicate reuse, semantic SQLite verification and fresh independent review passed. It preserves 493 positional fields, repeated filler fields, owner/member/ordinal relationships and original string identities across 25 rows. This is not remote collection, full-roll semantics or an account crosswalk. No new source requests or repeat full 18 GB member-integrity pass were made; the separate expensive integrity command has bounded small-member tests. Source originals and runtime state remain private.
+
 ## 7. Courts and Justice — 10 Planning Points
 
 Primary sources:
