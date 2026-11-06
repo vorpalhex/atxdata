@@ -101,7 +101,9 @@ For bounded official VoteTravis result/reconciliation PDFs, follow [election doc
 
 For public discussion threads distinct from adopted Court actions, follow [message-board access](references/court-message-board.md). On 2026-11-04 a bounded anonymous curl observation verified one topic's two public posts against its category's one-reply count and single-page controls, with stable topic/post IDs and private authorship/timestamp provenance. The selected topic had no attachments; attachment retrieval, multi-page enumeration and full forum/history coverage remain unverified. This is a supervised manual access procedure, not a new client or complete archive.
 
-## Voter Registration Maps Access Workflow
+## Shared ArcGIS Collector and Voter Registration Maps
+
+`programs/arcgis-consume/` is a shared bounded Bun/SQLite collector for the named TNR Commissioner Precinct feature-query and Voter Election Precinct published-ZIP strategies. It supports rules/discovery, collect/sync, status and zero-HTTP verification. On 2026-11-06, 40 tests/typecheck and independent fix recheck passed; retained originals reconcile four native-coordinate polygons and 308 precinct records. Current reader ownership was exercised through repeated localhost replay of original bytes, including actual crash-budget and history-corruption tests. Current live TNR catalog search remains incomplete; no additional public requests were made after its sample budget was exhausted. Use one trusted private archive/writer, preserve conservative interrupted-byte reservations, and follow the program README's limits. No person-level voter/owner/address-point acquisition, arbitrary layer harvesting, all-history or complete county archive is supported.
 
 For one published non-personal electoral geographic layer, follow [Voter Registration Maps acquisition](references/voter-maps.md). Verified directly against this hub on 2026-11-04, this manual workflow discovers the voter hub's own catalog and downloads one small published Election Precincts shapefile ZIP. Its 308 unique precinct records, complete original geometry, native PRJ, district identity, schema and publication metadata were retained privately and validated; a size-limit failure/full-transfer recovery and offline checksum rerun were exercised. It is not a voter-roll collector, automated client or complete electoral archive. Other linked services/maps remain discovery-only; use the procedure's private pyshp environment and explicit serial transfer/cooldown gates.
 
@@ -123,11 +125,11 @@ These are subjective weights for useful county-government monitoring, not measur
 | Budgets and budget policy | 10% | Verified manual access workflow + two FY 2027 PDFs; no automated client |
 | Actual spending and financial transparency | 15% | Supervised FY2027 CSV acquired and offline SQLite import verified; one quarantined source record and historical coverage limits |
 | Procurement and contracts | 10% | Verified bounded contract and solicitation metadata workflows; vendor login, original files and bulk history remain limited |
-| GIS and infrastructure geography | 10% | Verified bounded TNR manual access procedure; no automated GIS client |
+| GIS and infrastructure geography | 10% | Shared bounded ArcGIS client for named TNR layer and precinct ZIP; current live TNR catalog search incomplete |
 | Property taxes and appraisal data | 10% | Tax Office delinquency and TCAD one-certified-snapshot access verified; history/all-row validation not implemented |
 | Courts and justice data | 10% | Criminal/Civil supervised views and bounded OCA report originals verified; full exports/history unverified, Odyssey blocked at observed CAPTCHA |
 | Recorded instruments and land records | 10% | Not implemented |
-| Elections | 5% | Bounded Clarity Bun/SQLite collector for election 125662; VoteTravis publications and electoral geography remain separate manual workflows; complete history unverified |
+| Elections | 5% | Bounded Clarity client for election 125662 and shared ArcGIS precinct-ZIP strategy; VoteTravis publications remain manual; complete history unverified |
 | Campaign finance | 5% | Verified bounded EasyVote original filing workflow; legacy WILL NOT IMPLEMENT; modern amendments and broader coverage unimplemented |
 
 Initial discussion assigned roughly 10 points of the 15-point meeting bucket to the working downloader: approximately 10% implemented and 90% remaining in this model. This is a planning placeholder, not proof that a tenth of county records has been acquired. Other departmental and request-only holdings have no measured denominator. Do not silently convert these guesses into factual progress statistics.
