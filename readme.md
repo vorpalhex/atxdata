@@ -30,6 +30,7 @@ LLM contributions are acceptable, but will generally be heavily scrutinized. We 
 - [legistar-consume](programs/legistar-consume/README.md): Bun CLI for downloading public Austin Legistar meeting documents and recording metadata in SQLite.
 - [civicclerk-consume](programs/civicclerk-consume/README.md): Serial, rate-limit-aware Bun client for Travis County CivicClerk meeting metadata and PDFs.
 - [financial-transparency-consume](programs/financial-transparency-consume/README.md): Offline Bun/SQLite importer for browser-downloaded fiscal-year payment CSVs; preserves originals, quarantines invalid rows and verifies snapshot reuse. Acquisition remains a separate supervised browser workflow.
+- [clarity-consume](programs/clarity-consume/README.md): Bounded headless Bun/SQLite catalog and versioned JSON/XML result collector for explicitly selected Travis election `125662`, with reconciliation and offline provenance verification. Other elections and complete history are not supported; live revalidation used curl and retained originals were exercised through the client offline.
 
 Each program currently retains its own dependencies, configuration, and commands.
 
@@ -68,7 +69,7 @@ For official election publication PDFs, use the standalone [VoteTravis procedure
 
 For electoral geography, use the standalone [Voter Registration Maps workflow](skills/travis-county-public-data-access/references/voter-maps.md). One small published Election Precincts shapefile ZIP was acquired and verified: 308 unique precincts, original geometry/coordinate system, district fields and publication metadata. This is bounded manual bulk-file access, not individual voter-roll collection, an automated client, current election results or a complete map archive. Raw files and signed download URLs remain private.
 
-For structured results, the separate [Clarity procedure](skills/travis-county-public-data-access/references/clarity-results.md) follows the actual catalog/frontend to one December 2025 election XML export with contest/precinct identities and version/reporting metadata. XML/JSON totals reconcile. Audit-versus-XML population, cutoff and version equivalence is unestablished; no election-error inference is supported. The audit reports zero selected electronic-versus-hand tally discrepancies. Source date labels and final/reporting flags are retained without inferring certification. This is bounded supervised access, not complete history or an automated collector.
+For structured results, the separate [Clarity procedure](skills/travis-county-public-data-access/references/clarity-results.md) follows the actual catalog/frontend to one December 2025 election XML export with contest/precinct identities and version/reporting metadata. XML/JSON totals reconcile. Audit-versus-XML population, cutoff and version equivalence is unestablished; no election-error inference is supported. The audit reports zero selected electronic-versus-hand tally discrepancies. Source date labels and final/reporting flags are retained without inferring certification. The manual procedure is supplemented by [clarity-consume](programs/clarity-consume/README.md), a bounded headless client for the one supported election with SQLite provenance, reconciliation and offline verification. Complete history, other elections and certification remain unsupported.
 
 ### exhaustive
 
