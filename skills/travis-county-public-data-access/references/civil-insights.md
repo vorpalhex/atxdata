@@ -8,9 +8,36 @@ The [Civil Insights Dataset](https://courtsdata.traviscountytx.gov/CivilInsights
 
 Verified on November 5, 2026: one calendar-year 2025 / JAN / CIVIL observation, with Cases Added selected, showed one 2025 bar labeled 923. This is a rendered aggregate observation, NOT acquisition of an original export or a complete structured dataset. No collector was added. Access is medium (interactive JavaScript dashboard); no login, payment or challenge appeared during this observation.
 
+## Prerequisite: install agent-browser and load its instructions
+
+[agent-browser](https://agent-browser.dev/) is an external browser-automation CLI, not a dependency installed by this repository. Follow its [installation guide](https://agent-browser.dev/installation). Through the terminal tool, choose ONE installation method:
+
+```sh
+# macOS with Homebrew
+brew install agent-browser
+# Alternatively, with npm (do not run both installation methods)
+# npm install -g agent-browser
+
+# Download the managed Chrome browser on first setup
+agent-browser install
+```
+
+On Linux, consult the upstream guide for browser system dependencies (`agent-browser install --with-deps` may require elevated package-manager access). Do not reinstall or upgrade an existing working installation merely to follow this procedure.
+
+The actual usage skill is bundled with the CLI. Load its installed-version instructions through the terminal tool before browser operation:
+
+```sh
+agent-browser --version
+agent-browser skills get core
+# Additional command details when needed
+agent-browser skills get core --ref commands
+```
+
+An optional [agent discovery skill](https://agent-browser.dev/skills) can be installed in supported agent environments with `npx skills add vercel-labs/agent-browser`. That discovery stub is not required to run this workflow; the CLI-served core instructions above are sufficient. A reference to the general agent-browser skill elsewhere in this document does not assume that a private Hermes skill is already installed or shipped in this repository.
+
 ## Exercised browser workflow
 
-Use the agent-browser skill and installed version-matched core instructions. The observed version was 0.41.2. Start a unique named local session using `agent-browser session id --scope worktree --prefix tc-civil-insights-final`; pass the literal returned session and an explicit reviewed private `--config` on every browser command. Use a fresh private download directory outside the checkout, no restored state, copied operator profile/cookies or paid provider. The verification used a headed owned browser. Normal browser assets, Qlik connections and concurrency are permitted; this is not an API collector.
+Use the installed CLI and its version-matched core instructions loaded above. The observed version was 0.41.2. Start a unique named local session using `agent-browser session id --scope worktree --prefix tc-civil-insights-final`; pass the literal returned session and an explicit reviewed private `--config` on every browser command. Use a fresh private download directory outside the checkout, no restored state, copied operator profile/cookies or paid provider. The verification used a headed owned browser. Normal browser assets, Qlik connections and concurrency are permitted; this is not an API collector.
 
 1. `open https://courtsdata.traviscountytx.gov/CivilInsights/Dataset`, then `snapshot -i`. Retain raw CLI output privately and print only allowlisted control labels/counts. Wait for year, Court Section and Month controls, not network-idle.
 2. Select 2025, CIVIL and JAN in their visible listboxes, confirming each with the current `Confirm selection` ref. Explicitly click CALENDAR YEAR. Unlike Criminal Insights, this page exposed Court Section (CIVIL, CPS, FAMILY, IV-D), not County and Division selectors. Travis and district identity come from the publisher's Introduction, not a fabricated county selection.
@@ -58,4 +85,3 @@ Page 5 CIVIL CASES totals are New Cases Filed 881, Cases Reactivated 19, All Oth
 An immediate offline SHA-256 reread of the original succeeded with zero additional source requests. This verifies byte reuse, not source freshness. No restart/byte-range recovery, corruption-injection tests, unattended retries or persistent client was added. The owned follow-up browser closed successfully.
 
 Updated gates: initial supervised workflow PASS, now including one separate official original; bounded OCA original e2e PASS (identity, all physical-page headers/numbering, signature, hash, parser checks and narrow measure reconciliation). Civil Insights structured export/full history remain BLOCK/unverified. Code quality tools remain N/A. Reference-only sanitizer PASS after follow-up. Independent fresh review and shared skill/source integration remain chief-owned PENDING, not self-approved. Initial no-original statements describe the first observation only and are superseded by this section, not erased historical evidence.
-
