@@ -1,5 +1,7 @@
 # Contract Search: Supervised Browser Access
 
+Browser prerequisite: agent-browser is an optional external CLI, not a private skill supplied by this repository. Follow [installation, private-session setup and the smoke test](browser-setup.md) before using its commands. Install with `brew install agent-browser` on macOS or `npm install -g agent-browser`, then run `agent-browser install` and `agent-browser skills get core` through the terminal tool. An ordinary human browser or another approved control tool can perform equivalent UI steps; preserve this procedure's scope and stopping rules.
+
 Intent: acquire a bounded public contract-metadata observation using the normal interface, preserving provenance and original field text. This is not an API client, bulk archive, or original-contract-document downloader.
 
 ## Source and scope

@@ -1,5 +1,7 @@
 # EasyVote: Supervised Public Filing Acquisition
 
+Browser prerequisite: agent-browser is an optional external CLI, not a private skill supplied by this repository. Follow [installation, private-session setup and the smoke test](browser-setup.md) before using its commands. Install with `brew install agent-browser` on macOS or `npm install -g agent-browser`, then run `agent-browser install` and `agent-browser skills get core` through the terminal tool. An ordinary human browser or another approved control tool can perform equivalent UI steps; preserve this procedure's scope and stopping rules.
+
 Intent: collect a bounded modern campaign-finance filing through the ordinary public browser interface, preserving original source-delivered PDF bytes and filing identity. This is not an API client, filing/submission tool, transaction parser or complete finance archive.
 
 ## Official source and state

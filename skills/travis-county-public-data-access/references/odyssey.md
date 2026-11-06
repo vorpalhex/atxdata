@@ -1,5 +1,7 @@
 # Odyssey public case records: observed search challenge
 
+Browser prerequisite: agent-browser is an optional external CLI, not a private skill supplied by this repository. Follow [installation, private-session setup and the smoke test](browser-setup.md) before using its commands. Install with `brew install agent-browser` on macOS or `npm install -g agent-browser`, then run `agent-browser install` and `agent-browser skills get core` through the terminal tool. An ordinary human browser or another approved control tool can perform equivalent UI steps; preserve this procedure's scope and stopping rules.
+
 ## Status and official source
 
 On 2026-11-05, the District Clerk's [Case Information & Records page](https://www.traviscountytx.gov/district-clerk/case-information-records) linked its “Online Court Records Search Portal” to [Travis County Odyssey Portal](https://odysseyweb.traviscountytx.gov/Portal/). The portal rendered anonymously, and its normal **Smart Search** link opened the search form. That form visibly contained an unchecked reCAPTCHA “I'm not a robot” checkbox. Observation stopped there without interacting with the challenge or submitting a query.

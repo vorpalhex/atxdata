@@ -10,6 +10,8 @@ Verified on November 5, 2026: one calendar-year 2025 / JAN / CIVIL observation, 
 
 ## Prerequisite: install agent-browser and load its instructions
 
+The shared [browser setup guide](browser-setup.md) also covers private configuration, an isolated-session smoke test, troubleshooting and human-browser alternatives. agent-browser is optional automation, not a condition of public access.
+
 [agent-browser](https://agent-browser.dev/) is an external browser-automation CLI, not a dependency installed by this repository. Follow its [installation guide](https://agent-browser.dev/installation). Through the terminal tool, choose ONE installation method:
 
 ```sh

@@ -1,5 +1,7 @@
 # Criminal Insights — Supervised Dashboard and Official Report Fallback
 
+Browser prerequisite: agent-browser is an optional external CLI, not a private skill supplied by this repository. Follow [installation, private-session setup and the smoke test](browser-setup.md) before using its commands. Install with `brew install agent-browser` on macOS or `npm install -g agent-browser`, then run `agent-browser install` and `agent-browser skills get core` through the terminal tool. An ordinary human browser or another approved control tool can perform equivalent UI steps; preserve this procedure's scope and stopping rules.
+
 ## Scope and source distinction
 
 [Criminal Insights](https://courtsdata.traviscountytx.gov/CriminalInsights/Dataset) is a public aggregate court-activity dashboard, not individual case files. Its Welcome introduction explains that the district and county clerks submit monthly felony/misdemeanor statistics to the Texas Office of Court Administration (OCA). The dashboard also contains other counties; an unfiltered view is not Travis-only.

@@ -1,5 +1,7 @@
 # Travis County Source Inventory
 
+Browser prerequisite: agent-browser is an optional external CLI, not a private skill supplied by this repository. Follow [installation, private-session setup and the smoke test](browser-setup.md) before using its commands. Install with `brew install agent-browser` on macOS or `npm install -g agent-browser`, then run `agent-browser install` and `agent-browser skills get core` through the terminal tool. An ordinary human browser or another approved control tool can perform equivalent UI steps; preserve this procedure's scope and stopping rules.
+
 Source reconnaissance: 2026-11-01. Repository connector check: 2026-11-02. This is a selective monitoring inventory, not a complete census of county records. Public URLs describe access surfaces, not a verified map of the county's underlying databases. Recheck live systems when using this inventory.
 
 Evidence labels:

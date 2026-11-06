@@ -22,6 +22,8 @@ Locate, assess, and collect public Travis County government data. Use this as a 
 
 ## Prerequisites
 
+Browser prerequisite: agent-browser is an optional external CLI, not a private skill supplied by this repository. Follow [installation, private-session setup and the smoke test](references/browser-setup.md) before using its commands. Install with `brew install agent-browser` on macOS or `npm install -g agent-browser`, then run `agent-browser install` and `agent-browser skills get core` through the terminal tool. An ordinary human browser or another approved control tool can perform equivalent UI steps; preserve this procedure's scope and stopping rules.
+
 Resolve the repository root and inspect `programs/` before asserting which collectors exist. Bun is required for the current CivicClerk client. Use `web_search`, `web_extract`, `terminal`, and, when necessary, browser tools for new reconnaissance; no account or API key is required for the tested CivicClerk endpoints.
 
 Read [the source inventory](references/sources.md) for primary URLs, data types, access evidence, outstanding work, and the unquantified request-only long tail. Source reconnaissance was performed on 2026-11-01; connector paths were checked on 2026-11-02. The [standalone TNR GeoHub procedure](references/tnr-geohub.md) was verified on 2026-11-04: bounded public catalog discovery and one four-polygon layer, with selected attributes, original geometry/schema/SR, and count/object-ID reconciliation. It is manual access, not a full GIS collector or county-wide archive. Revalidate dynamic sources before relying on them.
