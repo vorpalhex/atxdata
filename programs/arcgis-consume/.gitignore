@@ -1,0 +1,8 @@
+node_modules/
+coverage/
+.metrics/
+target/
+*.sqlite*
+*.part
+*.pending
+!bun.lock
