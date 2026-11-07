@@ -51,7 +51,7 @@ For bounded current chapter PDFs and historical-interface discovery, follow [Cou
 
 ## Tax Office Bulk Access
 
-For a bounded delinquency snapshot, use [the standalone supervised curl procedure](references/tax-office-bulk-access.md). On 2026-11-04 it acquired a complete small delinquency CSV and the published layout, validated 7,285 rows and text account IDs, and exercised checksums/full-restart recovery. This is a verified access skill, not an automated collector or complete yearly roll archive. Current/prior rolls, rates/exemptions acquisition and TCAD integration remain separate work; keep taxpayer rows and response headers private.
+`programs/tax-office-consume/` provides bounded headless delinquency CSV/layout collection, offline import, status and zero-HTTP verification. Explicit row limits and one trusted private archive/writer are required. Independent review passed the native-reader repair, PDF layout identity, explicit refresh/recovery and terminal-run provenance; 84 tests and typecheck passed, with repeated exact-original native localhost replay. Earlier authorized public acquisition retained a 7,249-row snapshot using a JavaScript stream envelope; local repair checks are not fresh public acquisition. The [standalone supervised curl procedure](references/tax-office-bulk-access.md) retains the separate earlier 7,285-row sample. Current/prior rolls, rates/exemptions, complete history and TCAD joins remain unsupported; keep taxpayer rows and headers private. Follow the program README's request/byte/cooldown and recovery limits.
 
 ## TCAD Appraisal Export Access
 
@@ -128,7 +128,7 @@ These are subjective weights for useful county-government monitoring, not measur
 | Actual spending and financial transparency | 15% | Supervised FY2027 CSV acquired and offline SQLite import verified; one quarantined source record and historical coverage limits |
 | Procurement and contracts | 10% | Verified bounded contract and solicitation metadata workflows; vendor login, original files and bulk history remain limited |
 | GIS and infrastructure geography | 10% | Shared bounded ArcGIS client for named TNR layer and precinct ZIP; current live TNR catalog search incomplete |
-| Property taxes and appraisal data | 10% | TCAD offline first-25-row importer and prior bulk-access evidence; Tax Office collector still under review; history/all-row validation unimplemented |
+| Property taxes and appraisal data | 10% | Bounded Tax Office delinquency CSV/layout collector and TCAD offline first-25-row importer; broader rolls/history and joins unsupported |
 | Courts and justice data | 10% | Criminal/Civil supervised views and bounded OCA report originals verified; full exports/history unverified, Odyssey blocked at observed CAPTCHA |
 | Recorded instruments and land records | 10% | Not implemented |
 | Elections | 5% | Bounded Clarity client for election 125662 and shared ArcGIS precinct-ZIP strategy; VoteTravis publications remain manual; complete history unverified |
