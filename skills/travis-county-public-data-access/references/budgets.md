@@ -1,5 +1,9 @@
 # Travis County budget acquisition
 
+Implementation update (bounded implementation; independent review pending): `programs/county-documents-consume/` provides one Bun/SQLite acquisition engine with four explicit adapters, bounded discovery/collect/sync, status and zero-HTTP verification. See its README for setup, exact limits, source scope, private headers/originals and fail-closed manual recovery. The earlier manual procedure/evidence below remains historical; it is not a claim of complete archive availability.
+
+Actual bounded collector proof: current-year discovery plus one FY2027 taxpayer-impact original acquired, 127112 bytes, SHA256 `566b43f130ab8395088d566edd6df788a99322a3c385c758b536d4ed4321f5a3`. Body/render identify fiscal2027, tax2026 and proposed-budget wording; these are not publication dates or structured financial interpretation. The initial encoded-robots classifier failure is preserved, with an explicit locally tested resolution and retained-policy reuse, not a source denial. Duplicate/offline verification passes; no large adopted-budget transfer. Source-wide2000-link bound spans the latest discovery pages. Independent review/card acceptance remain pending.
+
 Intent: an agent-operated, bounded fiscal-year inventory and direct-file workflow, not a new client or unattended crawler. LLM-assisted contribution. No account, API key, Bun installation or new persistence service is needed. Acquisition and OCR/text extraction are separate steps.
 
 ## When to use
