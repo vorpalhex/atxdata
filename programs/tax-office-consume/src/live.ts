@@ -138,9 +138,15 @@ function allowance(c:Collector,run:string,kind:Kind,previous:{error:unknown}|und
   throw new Error(`${String(error)}; previous transfer failed: ${String(previous.error)}`,{cause:previous.error});
  }
 }
-function errorReceipt(error:unknown):string{
- if(error instanceof AggregateError)return [error.stack,...error.errors.map(errorReceipt)].join('\nCleanup/primary: ');
- return error instanceof Error?error.stack??String(error):String(error);
+function errorReceipt(error:unknown,seen=new Set<unknown>()):string{
+ if(!(error instanceof Error))return String(error);
+ const identity=`${error.name}: ${error.message}`;
+ if(seen.has(error))return identity;
+ seen.add(error);
+ const details=[identity,error.stack??''];
+ if(error instanceof AggregateError)details.push(...error.errors.map(item=>errorReceipt(item,seen)));
+ if(error.cause!==undefined)details.push(errorReceipt(error.cause,seen));
+ return details.join('\nCleanup/primary: ');
 }
 async function acquire(c:Collector,http:PoliteHttpClient,run:string,kind:Kind,maxRows:number,url:string=ROUTES[kind]){
  let previous:{error:unknown}|undefined;
