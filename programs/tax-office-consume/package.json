@@ -1,0 +1,1 @@
+{"name":"tax-office-consume","type":"module","private":true,"scripts":{"test":"bun test","typecheck":"tsc --noEmit"},"dependencies":{"csv-parse":"6.1.0"},"devDependencies":{"@types/bun":"1.3.13","typescript":"6.0.3"}}
