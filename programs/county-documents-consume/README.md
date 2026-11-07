@@ -1,6 +1,6 @@
 # County document collector
 
-Bun/TypeScript and SQLite-backed, private HTML/PDF acquisition with four explicit source adapters sharing one engine, transport and archive lock. LLM-assisted implementation. Independent review and card acceptance are chief-owned and pending. No deployed web server, scheduler, credentials or JSON-manifest state.
+Bun/TypeScript and SQLite-backed, private HTML/PDF acquisition with four explicit source adapters sharing one engine, transport and archive lock. LLM-assisted implementation. Independent source semantics and runtime integrity rechecks passed; supported scope and operating limits are below. No deployed web server, scheduler, credentials or JSON-manifest state.
 
 ## Setup
 
@@ -98,4 +98,4 @@ The bounded implementation exercise used 6 total source attempts including the i
 
 Retained inventories reproduced 80 occurrences/80 unique current chapter URLs and 988 occurrences/987 unique historical minutes URLs. These are observed link inventories, not all-documents availability or archive completeness. All five selected originals passed offline verification; duplicate imports and local changed-byte fixtures retained correct versions.
 
-Tests exercise compression/length/decompression bounds, exact-source and schema/receipt corruption, aggregate link limits, saved headers, symlinks, writer collision, interruption/reservation/restart and fail-closed checkpoint states. Tests/coverage run with outbound network denied except explicit loopback compression fixtures. Own-function CRAP is strictly below 10 and dryer reports no candidates at 0.8. Scoped encoding mutation testing includes unchanged-worker and known-defect controls; it is not a whole-engine mutation claim. Chief-owned independent review, integration and card closure remain pending; no public raw evidence is shipped.
+Tests exercise compression/length/decompression bounds, exact-source and schema/receipt corruption, aggregate link limits, saved headers, symlinks, writer collision, interruption/reservation/restart and fail-closed checkpoint states. Tests/coverage run with outbound network denied except explicit loopback compression fixtures. Own-function CRAP is strictly below 10 and dryer reports no candidates at 0.8. Scoped encoding mutation testing includes unchanged-worker and known-defect controls; it is not a whole-engine mutation claim. Independent source and runtime rechecks passed; the final suite has 71 passing tests and typecheck passed. No public raw evidence is shipped.

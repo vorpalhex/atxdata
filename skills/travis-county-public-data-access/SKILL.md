@@ -43,11 +43,13 @@ For ingestion, get the operator's approved archive destination and pass it as `-
 
 ## Budget Access Workflow
 
-For bounded fiscal-year budget inventories and direct PDFs, follow [budget acquisition](references/budgets.md). This verified agent-operated workflow uses serial curl requests, explicit cooldown gates, a private version inventory, atomic file promotion and checksum-verified local reruns. It is not an unattended client; no new program or SQLite database is introduced. On 2026-11-04, three official discovery pages and two FY 2027 PDFs were acquired and verified. Other years/types and complete revision history remain uncollected. Use the linked procedure's POSIX/Poppler prerequisites, not the CivicClerk commands above.
+`programs/county-documents-consume/` now supplies a bounded shared Bun/SQLite engine with `budgets`, `county-code`, `meeting-archives` and `election-documents` adapters. Use its README for discover/list/collect/sync/import/verify and explicit source/filter/limit options. It requires one trusted private archive/writer, 24 cumulative attempts/20 MiB conservative accounting, two PDF attempts per source and two-second complete-body spacing. Independent runtime and source rechecks passed after artifact/ledger, scoped PDF identity and persisted cooldown integrity repairs. Seventy-one tests/typecheck passed. Five actual originals verified without HTTP; the earlier schema2 archive was tested only through evidenced private-copy migration. There is no automatic migration, budget reset, recovery or scheduler. Ambiguous identity fails closed; image-only one-page election evidence requires explicit rendered review. Historical manual procedures below remain separate provenance, not claims that no client exists.
+
+For bounded fiscal-year budget inventories and direct PDFs, follow [budget acquisition](references/budgets.md). This verified agent-operated workflow uses serial curl requests, explicit cooldown gates, a private version inventory, atomic file promotion and checksum-verified local reruns. That earlier manual exercise did not introduce a program or SQLite database; use the shared engine above for the newly implemented bounded client. On 2026-11-04, three official discovery pages and two FY 2027 PDFs were acquired and verified. Other years/types and complete revision history remain uncollected. Use the linked procedure's POSIX/Poppler prerequisites, not the CivicClerk commands above.
 
 ## County Code Access Workflow
 
-For bounded current chapter PDFs and historical-interface discovery, follow [County Code acquisition](references/county-code.md). This standalone agent-operated workflow preserves chapter/amendment identity, source URLs and hashes, with serial curl transfers, manual cooldown gates, private provenance and file-level restart. On 2026-11-04, the landing and linked archive selector were inspected and current-reference Chapters 2 and 464 were acquired and parsed. Historical bodies and other chapters remain unverified. The online code is not the official paper record; archive labels do not establish history for every chapter. No new client or SQLite service is introduced; use the linked procedure's POSIX/Poppler prerequisites.
+For bounded current chapter PDFs and historical-interface discovery, follow [County Code acquisition](references/county-code.md). This standalone agent-operated workflow preserves chapter/amendment identity, source URLs and hashes, with serial curl transfers, manual cooldown gates, private provenance and file-level restart. On 2026-11-04, the landing and linked archive selector were inspected and current-reference Chapters 2 and 464 were acquired and parsed. Historical bodies and other chapters remain unverified. The online code is not the official paper record; archive labels do not establish history for every chapter. That earlier manual exercise added no client; the shared engine above now automates the bounded current-chapter path. Historical bodies remain excluded.
 
 ## Tax Office Bulk Access
 
@@ -97,7 +99,7 @@ Use [supervised Contract Search access](references/contracts.md) with agent-brow
 
 ## Election Publication Workflow
 
-For bounded official VoteTravis result/reconciliation PDFs, follow [election document acquisition](references/election-documents.md). On 2026-11-04, the official page and its historical section were inspected and two June 11, 2022 local runoff PDFs were acquired, parsed and visually verified. This manual procedure preserves official versus unofficial labels, jurisdiction, report/attestation identity, unknown publication dates and hashes. Other elections, the selected precinct PDF, complete revision history and structured Clarity extraction remain unverified here; no election client is added.
+For bounded official VoteTravis result/reconciliation PDFs, follow [election document acquisition](references/election-documents.md). On 2026-11-04, the official page and its historical section were inspected and two June 11, 2022 local runoff PDFs were acquired, parsed and visually verified. This manual procedure preserves official versus unofficial labels, jurisdiction, report/attestation identity, unknown publication dates and hashes. Other elections, the selected precinct PDF, complete revision history and structured Clarity extraction remain unverified here. The shared engine above now automates bounded publication discovery/import/collection, with explicit rendered review for image-only identity.
 
 ## Commissioners Court Message Board
 
@@ -115,7 +117,7 @@ For actual vendor catalog discovery and one small structured election snapshot, 
 
 ## Historical Commissioners Court Minutes
 
-For older meetings outside the verified modern sample, follow [historical minutes access](references/meeting-archives.md). On 2026-11-04 the official clerk archive exposed static PDF links in 1996–2010 directories; its “2011 to Present” CivicClerk link returned a redirect to the modern portal. One January 5, 2010 voting-session minutes PDF was acquired, parsed and visually checked, with private source-chain/hash evidence and local restart/no-clobber checks. The PDF contains a conflicting opening-sentence date and qpdf linearization warnings, retained as caveats. This is a supervised bounded access procedure, not a new client, complete historical coverage or proof of modern start-date availability. Raw records and headers remain private; use the standalone procedure's POSIX/curl/Python/Poppler prerequisites.
+For older meetings outside the verified modern sample, follow [historical minutes access](references/meeting-archives.md). On 2026-11-04 the official clerk archive exposed static PDF links in 1996–2010 directories; its “2011 to Present” CivicClerk link returned a redirect to the modern portal. One January 5, 2010 voting-session minutes PDF was acquired, parsed and visually checked, with private source-chain/hash evidence and local restart/no-clobber checks. The PDF contains a conflicting opening-sentence date and qpdf linearization warnings, retained as caveats. That earlier supervised procedure remains separate evidence; the shared engine above now automates bounded historical-minute discovery and collection, not complete coverage or modern start-date availability. Raw records and headers remain private; use the standalone procedure's POSIX/curl/Python/Poppler prerequisites.
 
 ## Planning Coverage Model
 
@@ -123,15 +125,15 @@ These are subjective weights for useful county-government monitoring, not measur
 
 | Source bucket | Planning weight | Repository connector state |
 | --- | ---: | --- |
-| Commissioners Court decisions and meeting records | 15% | CivicClerk PDF/event collection implemented; broader coverage incomplete |
-| Budgets and budget policy | 10% | Verified manual access workflow + two FY 2027 PDFs; no automated client |
+| Commissioners Court decisions and meeting records | 15% | CivicClerk plus bounded historical minutes/current-reference County Code adapters; broader coverage incomplete |
+| Budgets and budget policy | 10% | Bounded shared document adapter; FY2027 taxpayer-impact original verified; broader holdings unverified |
 | Actual spending and financial transparency | 15% | Supervised FY2027 CSV acquired and offline SQLite import verified; one quarantined source record and historical coverage limits |
 | Procurement and contracts | 10% | Verified bounded contract and solicitation metadata workflows; vendor login, original files and bulk history remain limited |
 | GIS and infrastructure geography | 10% | Shared bounded ArcGIS client for named TNR layer and precinct ZIP; current live TNR catalog search incomplete |
 | Property taxes and appraisal data | 10% | Bounded Tax Office delinquency CSV/layout collector and TCAD offline first-25-row importer; broader rolls/history and joins unsupported |
 | Courts and justice data | 10% | Criminal/Civil supervised views and bounded OCA report originals verified; full exports/history unverified, Odyssey blocked at observed CAPTCHA |
 | Recorded instruments and land records | 10% | Not implemented |
-| Elections | 5% | Bounded Clarity client for election 125662 and shared ArcGIS precinct-ZIP strategy; VoteTravis publications remain manual; complete history unverified |
+| Elections | 5% | Bounded Clarity, shared precinct-ZIP and VoteTravis PDF adapters; image-only identity requires rendered review; complete history unverified |
 | Campaign finance | 5% | Verified bounded EasyVote original filing workflow; legacy WILL NOT IMPLEMENT; modern amendments and broader coverage unimplemented |
 
 Initial discussion assigned roughly 10 points of the 15-point meeting bucket to the working downloader: approximately 10% implemented and 90% remaining in this model. This is a planning placeholder, not proof that a tenth of county records has been acquired. Other departmental and request-only holdings have no measured denominator. Do not silently convert these guesses into factual progress statistics.

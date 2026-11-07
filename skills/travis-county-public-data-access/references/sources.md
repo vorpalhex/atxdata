@@ -15,6 +15,8 @@ Evidence labels:
 
 ## 1. Commissioners Court Decisions and Meetings — 15 Planning Points
 
+Implementation update: `programs/county-documents-consume/` now provides bounded current-reference County Code and historical-minutes adapters sharing an HTML/PDF engine. Chapters 2/464 and January 5, 2010 minutes passed actual-original verification; strict chapter/full-date identity rejects prior false bindings. Sparse chapters, source/date conflicts, reference-only legal status and unknown publication dates remain explicit. Historical code bodies and complete minutes coverage remain unsupported. The manual observations below are earlier provenance, not the current absence of a client. See the shared program README for commands and limits.
+
 Primary sources:
 
 - [County Clerk Commissioners Court](https://countyclerk.traviscountytx.gov/departments/commissioners-court): official ownership and link to CivicClerk.
@@ -50,6 +52,8 @@ CivicClerk richer metadata: the one actual event response advertised agenda ID 5
 Remaining: video, richer agenda-item/vote extraction, broader historical meeting availability/identity reconciliation and backfill beyond the one verified minutes sample, other County Code chapter bodies and historical-content verification, broader message-board/attachment collection, and ongoing completeness checks. The initial roadmap credits roughly 10 of this bucket's 15 points, solely as a subjective planning placeholder. County Code independent review remains a separate chief-owned gate.
 
 ## 2. Budgets and Budget Policy — 10 Planning Points
+
+Implementation update: the `budgets` adapter in `programs/county-documents-consume/` supplies bounded discovery, explicit fiscal-year/role selection, versioned PDF collection/import and offline verification. Actual FY2027 taxpayer-impact bytes passed strict fiscal-versus-tax-year identity verification; the earlier large adopted-budget download was not repeated or claimed as a new client acquisition. All four document adapters passed independent runtime/source rechecks and 71 tests/typecheck, including fail-closed artifact/ledger/cooldown corruption checks. One trusted archive/writer, 24 cumulative attempts, 20 MiB conservative accounting, two PDFs/source and manual evidence-led recovery remain required. No unattended schedule, automatic budget renewal or complete holdings claim follows. Historical manual evidence below remains separate.
 
 Primary source: [Planning and Budget current-year documents](https://www.traviscountytx.gov/planning-budget/current-year).
 
@@ -168,6 +172,8 @@ State: **operator-confirmed live browser workflow; agent acquisition pending**. 
 Remaining: verify live automation attachment without restarting or copying the operator's profile/cookies, then tie one selected instrument to a complete free image/copy set with page/content/hash checks. No agent-retained original image acquisition or complete date/history coverage is claimed. Paid/certified copies, registration and challenge bypass require separate authority.
 
 ## 9. Elections — 5 Planning Points
+
+Implementation update: `programs/county-documents-consume/` now includes a bounded `election-documents` publication adapter, separate from Clarity and voter geography. The June 11, 2022 one-page reconciliation original passed explicit image-bound rendered review and zero-HTTP verification; image-only identity is not automatic text/OCR acceptance. Source role/date/official-state and unknown publication dates are retained without inferring contest jurisdiction or certification. The earlier two-PDF manual sample below is separate evidence; no complete election archive or structured-results extraction is claimed by this adapter.
 
 Primary source: [Election Results and Reconciliation Forms](https://votetravis.gov/current-election-information/election-results-and-reconciliation-forms), which links the [Clarity results system](https://results.enr.clarityelections.com/TX/Travis/).
 
