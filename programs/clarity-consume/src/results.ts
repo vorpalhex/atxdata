@@ -17,11 +17,12 @@ function directory(b:Buffer):number {
 }
 function localHeader(b:Buffer,c:number){
   const flags=b.readUInt16LE(c+8),method=b.readUInt16LE(c+10),size=b.readUInt32LE(c+24),packed=b.readUInt32LE(c+20),crc=b.readUInt32LE(c+16);
-  if(flags!==0 || ![0,8].includes(method) || size<1 || size>CAPS.xmlBytes)throw new Error('ZIP flags/size/method');
+  if(![0,0x800].includes(flags) || ![0,8].includes(method) || size<1 || size>CAPS.xmlBytes)throw new Error('ZIP flags/size/method');
   equalFields([[b.readUInt16LE(6),flags],[b.readUInt16LE(8),method],[b.readUInt32LE(14),crc],[b.readUInt32LE(18),packed],[b.readUInt32LE(22),size],[b.readUInt16LE(26),10],[b.readUInt16LE(28),0],[b.subarray(30,40).toString(),'detail.xml'],[40+packed,c]],'ZIP local/directory disagreement');
   return {method,size,crc};
 }
 export function xmlFromZip(b:Buffer):string {
+  if(b.length>CAPS.fileBytes)throw new Error('ZIP raw byte ceiling');
   const c=directory(b),{method,size,crc}=localHeader(b,c),compressed=b.subarray(40,c);
   const xml=method===8?inflateRawSync(compressed,{maxOutputLength:CAPS.xmlBytes}):compressed;
   equalFields([[xml.length,size],[crc32(xml),crc]],'ZIP CRC/length');
@@ -42,22 +43,23 @@ export type ResultRow={contest:string;choice:string;voteType:string;precinct:str
 export type Choice={key:string;name:string;total:number;types:{name:string;total:number;precincts:{name:string;votes:number}[]}[]};
 export type Contest={key:string;name:string;reporting:number;reported:number;choices:Choice[]};
 export type Snapshot={name:string;date:string;region:string;timestamp:string;registered:number;ballots:number;turnout:{name:string;registered:number;ballots:number;reporting:number}[];contests:Contest[];rows:ResultRow[]};
-function parseChoice(ch:any):Choice {
-  return {key:token(ch.key), name:label(ch.text),total:count(ch.totalVotes),types:unique((ch.VoteType??[]).map((vt:any)=>({name:label(vt.name),total:count(vt.votes),precincts:unique((vt.Precinct??[]).map((p:any)=>({name:label(p.name),votes:count(p.votes)})),(p:any)=>p.name)})),(v:any)=>v.name)};
+function parseChoice(ch:any,reserve:()=>void):Choice {
+  return {key:token(ch.key), name:label(ch.text),total:count(ch.totalVotes),types:unique((ch.VoteType??[]).map((vt:any)=>({name:label(vt.name),total:count(vt.votes),precincts:unique((vt.Precinct??[]).map((p:any)=>{reserve();return {name:label(p.name),votes:count(p.votes)};}),(p:any)=>p.name)})),(v:any)=>v.name)};
 }
-function parseContest(c:any):Contest {
-  return {key:token(c.key),name:label(c.text),reporting:count(c.precinctsReporting),reported:count(c.precinctsReported),choices:unique((c.Choice??[]).map(parseChoice),(ch:Choice)=>ch.key)};
+function parseContest(c:any,reserve:()=>void):Contest {
+  return {key:token(c.key),name:label(c.text),reporting:count(c.precinctsReporting),reported:count(c.precinctsReported),choices:unique((c.Choice??[]).map((ch:any)=>parseChoice(ch,reserve)),(ch:Choice)=>ch.key)};
 }
 function xmlRoot(xml:string):any {
   if (Buffer.byteLength(xml)>CAPS.xmlBytes || /<!\s*(DOCTYPE|ENTITY)/i.test(xml) || XMLValidator.validate(xml)!==true) throw new Error('unsafe/invalid XML');
   const x=new XMLParser({ignoreAttributes:false,attributeNamePrefix:'',parseTagValue:false,parseAttributeValue:false,isArray:(name)=>['Contest','Choice','VoteType','Precinct'].includes(name)}).parse(xml).ElectionResult;
-  if(!x) throw new Error('ElectionResult required');return x;
+  if(!x) throw new Error('unsupported XML schema: ElectionResult required; revalidate source adapter');return x;
 }
 function parseTurnout(x:any):Snapshot['turnout']{
   return unique<Snapshot['turnout'][number]>((x.VoterTurnout?.Precincts?.Precinct??[]).map((p:any)=>({name:label(p.name),registered:count(p.totalVoters),ballots:count(p.ballotsCast),reporting:count(p.percentReporting)})),p=>p.name);
 }
 export function parseXml(xml:string):Snapshot {
-  const x=xmlRoot(xml),contests=unique<Contest>((x.Contest??[]).map(parseContest),c=>c.key),turnout=parseTurnout(x);
+  let rowCount=0;const reserve=()=>{if(++rowCount>CAPS.rows)throw new Error('result row ceiling');};
+  const x=xmlRoot(xml),contests=unique<Contest>((x.Contest??[]).map((c:any)=>parseContest(c,reserve)),c=>c.key),turnout=parseTurnout(x);
   const rows:ResultRow[]=contests.flatMap(c=>c.choices.flatMap(ch=>ch.types.flatMap(v=>v.precincts.map(p=>({contest:c.key,choice:ch.key,voteType:v.name,precinct:p.name,votes:p.votes})))));
   if(!rows.length || rows.length>CAPS.rows || !turnout.length || !contests.length) throw new Error('result row ceiling/empty scope');
   return {name:label(x.ElectionName),date:label(x.ElectionDate),region:label(x.Region),timestamp:label(x.Timestamp),registered:count(x.VoterTurnout.totalVoters),ballots:count(x.VoterTurnout.ballotsCast),turnout,contests,rows};
@@ -69,8 +71,8 @@ export function reconcile(x:Snapshot, summary:unknown, details:any, status:any) 
   const mismatches:string[]=[];
   const same=(a:unknown,b:unknown,where:string)=>{if(JSON.stringify(a)!==JSON.stringify(b)) mismatches.push(where);};
   const s=unique(array(summary),c=>token(c.K)), d=unique(array(details.Contests),c=>token(c.K));
-  same(s.map(c=>c.K),x.contests.map(c=>c.key),'summary contest keys/order');
-  same(d.map(c=>c.K),x.contests.map(c=>c.key),'detail contest keys/order');
+  same(s.map(c=>c.K).sort(),x.contests.map(c=>c.key).sort(),'summary contest keys');
+  same(d.map(c=>c.K).sort(),x.contests.map(c=>c.key).sort(),'detail contest keys');
   for(const c of x.contests) reconcileContest(c,s.find(v=>v.K===c.key),d.find(v=>v.K===c.key),same);
   const ps=array(status.P), r=array(status.R), b=array(status.B), st=array(status.S), cv=array(status.C);
   parallel(ps,r,b,st,cv); unique(ps,label);
@@ -80,13 +82,17 @@ export function reconcile(x:Snapshot, summary:unknown, details:any, status:any) 
   same(sum(x.turnout.map(p=>p.ballots)),x.ballots,'ballots total');
   return {mismatches,contests:x.contests.length,choices:x.contests.reduce((n,c)=>n+c.choices.length,0),precincts:x.turnout.length,rows:x.rows.length,registered:x.registered,ballots:x.ballots,votes:sum(x.contests.flatMap(c=>c.choices.map(ch=>ch.total))),certification:'not established'};
 }
+function summaryTotal(value:unknown):number {
+  if(Array.isArray(value)){if(value.length!==1)throw new Error('unsupported summary total schema; expected one count');return count(value[0]);}
+  return count(value);
+}
 function reconcileContest(c:Contest,s:any,d:any,same:(a:unknown,b:unknown,where:string)=>void) {
   if(!s || !d) throw new Error('missing contest');
   const names=array(s.CH), votes=array(s.V), ps=array(d.P), dv=array(d.V), dt=array(d.T);
   parallel(names,votes);parallel(ps,dv,dt);unique(ps,label);
   same(names,c.choices.map(ch=>ch.name),`choice labels/order ${c.key}`);same(s.C,c.name,`contest label ${c.key}`);
   same(names.length,c.choices.length,`choice count ${c.key}`);
-  same(count(s.T),sum(c.choices.map(ch=>ch.total)),`contest total ${c.key}`);
+  same(summaryTotal(s.T),sum(c.choices.map(ch=>ch.total)),`contest total ${c.key}`);
   same(count(s.TP),c.reporting,`reporting ${c.key}`);same(count(s.PR),c.reported,`reported ${c.key}`);
   c.choices.forEach((ch,i)=>{
     same(ch.total,count(votes[i]),`choice total ${c.key}/${ch.key}`);

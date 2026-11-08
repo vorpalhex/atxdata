@@ -1,4 +1,5 @@
 import { test, expect } from 'bun:test';
+import {CAPS} from '../src/source';
 import { crc32 } from 'node:zlib';
 import { xmlFromZip, parseXml, reconcile } from '../src/results';
 export function zip(xml:string, name='detail.xml'): Buffer {
@@ -16,10 +17,38 @@ test('ZIP CRC, member names, decompression and forbidden XML declarations fail c
  expect(xmlFromZip(zip(xml))).toBe(xml);
  expect(()=>xmlFromZip(zip(xml,'../detail.xml'))).toThrow();
  const bad=zip(xml); bad[50]^=1; expect(()=>xmlFromZip(bad)).toThrow();
- expect(()=>xmlFromZip(zip('x'.repeat(100001)))).toThrow();
+ expect(()=>xmlFromZip(zip('x'.repeat(CAPS.xmlBytes+1)))).toThrow();
  expect(()=>xmlFromZip(zip(xml).subarray(0,-1))).toThrow();
  expect(()=>parseXml('<!DOCTYPE x [<!ENTITY a "b">]>'+xml)).toThrow();
  expect(()=>parseXml(xml.replace('votes="2"','votes="-1"'))).toThrow();
+});
+test('ZIP UTF8 filename flag is supported, other flag bits remain forbidden',()=>{
+ const c=40+Buffer.byteLength(xml),b=zip(xml);b.writeUInt16LE(0x800,6);b.writeUInt16LE(0x800,c+8);
+ expect(xmlFromZip(b)).toBe(xml);
+ for(const flag of [1,8,0x801,0x808]){b.writeUInt16LE(flag,6);b.writeUInt16LE(flag,c+8);expect(()=>xmlFromZip(b)).toThrow();}
+});
+test('summary contest total accepts a scalar or one count only, preserving disagreements',()=>{
+ const x=parseXml(xml);
+ expect(reconcile(x,[{...summary[0],T:[2]}],details,status).mismatches).toEqual([]);
+ expect(reconcile(x,[{...summary[0],T:[3]}],details,status).mismatches).toContain('contest total 0004');
+ for(const bad of [[],[2,3],[-1],['1.2']])expect(()=>reconcile(x,[{...summary[0],T:bad}],details,status)).toThrow();
+});
+test('contest key sets reconcile summary and detail permutations without changing raw order',()=>{
+ const x=parseXml(xml.replace('</ElectionResult>',xml.match(/<Contest.*<\/Contest>/)![0].replace('key="0004"','key="0005"')+'</ElectionResult>'));
+ const s=[summary[0],{...summary[0],K:'0005'}],d=[details.Contests[0],{...details.Contests[0],K:'0005'}];
+ for(const [ss,dd] of [[s,d],[[...s].reverse(),d],[s,[...d].reverse()],[[...s].reverse(),[...d].reverse()]]){
+  const before=JSON.stringify({x,ss,dd});
+  expect(reconcile(x,ss,{Contests:dd},status).mismatches).toEqual([]);
+  expect(JSON.stringify({x,ss,dd})).toBe(before);
+ }
+ for(const side of ['summary','detail']){
+  expect(()=>reconcile(x,side==='summary'?s.slice(1):s,{Contests:side==='detail'?d.slice(1):d},status)).toThrow('missing contest');
+  expect(()=>reconcile(x,side==='summary'?[...s,s[0]]:s,{Contests:side==='detail'?[...d,d[0]]:d},status)).toThrow('duplicate source key');
+  const extra=reconcile(x,side==='summary'?[...s,{...s[0],K:'0006'}]:s,{Contests:side==='detail'?[...d,{...d[0],K:'0006'}]:d},status);
+  expect(extra.mismatches).toContain(side+' contest keys');
+ }
+ expect(reconcile(x,s,{Contests:[d[0],{...d[1],V:[[3]]}]},status).mismatches).toContain('detail votes 0005/001/001');
+ expect(reconcile({...x,registered:6},s,{Contests:d},status).mismatches).toEqual(['registered total']);
 });
 test('scoped string identities and vote/turnout sums reconcile, disagreements remain explicit',()=>{
  const result=parseXml(xml);

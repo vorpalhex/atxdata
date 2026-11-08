@@ -1,9 +1,9 @@
 import { Database } from 'bun:sqlite';
 import { resolve,join,sep } from 'node:path';
-import { readFile,open,unlink } from 'node:fs/promises';
+import { readFile,open } from 'node:fs/promises';
 import { archiveLock,statFile,promote } from '../../civicclerk-consume/src/archive';
 import { PoliteHttpClient } from '../../civicclerk-consume/src/http';
-import { CAPS,hash,decode,COUNTY,HOST,OFFICIAL,catalog,token } from './source';
+import { CAPS,hash,decode,COUNTY,HOST,OFFICIAL,catalog,token,isoDate,sourceDate,selectDate } from './source';
 import { parseXml,xmlFromZip,reconcile } from './results';
 
 export type Dependencies={fetch:(url:string,init:RequestInit)=>Promise<Response>;now:()=>number;sleep:(ms:number)=>Promise<void>;random:()=>number};
@@ -111,16 +111,28 @@ export class Collector {
   private async consume(response:Response,target:string,limit:number,id:string):Promise<Buffer>{
     const declared=declaredLength(response.headers,limit);
     if(!response.body) throw new Error('empty body');
-    const handle=await open(target+'.pending','wx',0o600),reader=response.body.getReader();let bytes=0;
+    // Own native response bodies before filesystem awaits (Tax/ArcGIS pattern).
+    const reader=response.body.getReader(),state={ended:false};let handle:Awaited<ReturnType<typeof open>>|undefined,bytes=0,failure:{error:unknown}|undefined;
     try{
-      for(;;){const {done,value}=await reader.read();if(done)break;bytes+=value.length;
-        if(bytes>limit) throw new Error('stream byte ceiling');
-        await handle.writeFile(value);this.db.query('UPDATE files SET bytes=? WHERE id=?').run(bytes,id);
-      }
+      handle=await open(target+'.pending','wx',0o600);
+      bytes=await this.writeChunks(reader,handle,limit,id,state);
       await handle.sync();
-    }finally{await reader.cancel().catch(()=>{});reader.releaseLock();await handle.close();}
+    }catch(error){failure={error};throw error;}
+    finally{
+      const errors=await releaseBody(reader,handle,state.ended);
+      if(errors.length)throw new AggregateError(failure?[failure.error,...errors]:errors,'body cleanup failed',{cause:failure?.error});
+    }
     if(declared!==null && Number(declared)!==bytes) throw new Error('content length mismatch');
     return readFile(target+'.pending');
+  }
+  private async writeChunks(reader:ReadableStreamDefaultReader<Uint8Array>,handle:Awaited<ReturnType<typeof open>>,limit:number,id:string,state:{ended:boolean}){
+    let bytes=0;
+    for(;;){let chunk:Awaited<ReturnType<typeof reader.read>>;
+      try{chunk=await reader.read();}catch(error){state.ended=true;throw error;}
+      const {done,value}=chunk;if(done){state.ended=true;return bytes;}bytes+=value.length;
+      if(bytes>limit)throw new Error('stream byte ceiling');
+      await handle.writeFile(value);this.db.query('UPDATE files SET bytes=? WHERE id=?').run(bytes,id);
+    }
   }
   private async preflight(obs:string,run:string){
     const robots=(body:Buffer,status:number)=>{if(status!==200 && status!==404) throw new Error('robots gate');if(status===200 && /^\s*(Disallow|Crawl-delay|Request-rate)\s*:\s*\S/im.test(body.toString()) && body.toString().trim()!=='User-agent: *\nDisallow: /wp-admin/\nAllow: /wp-admin/admin-ajax.php\n\nSitemap: https://votetravis.gov/wp-sitemap.xml' && body.toString().trim()!=='User-agent: *\nDisallow: /wp-admin/') throw new Error('robots instructions require review');};
@@ -131,36 +143,61 @@ export class Collector {
   private async listing(obs:string,run:string){
     const b=await this.acquire(obs,run,'catalog',COUNTY+'elections.json','application/json',(b,s)=>{if(s!==200)throw new Error('catalog HTTP');catalog(JSON.parse(b.toString()));});
     const entries=catalog(JSON.parse(b.toString()));
-    for(const e of entries)this.db.query('INSERT INTO elections VALUES(?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET label=excluded.label,event_date=excluded.event_date,metadata=excluded.metadata').run(e.EID,'TX/Travis',e.ElectionName,e.Date,JSON.stringify(e));
+    const files=this.db.query<FileRow,[]>("SELECT * FROM files WHERE name='catalog' AND status='downloaded' ORDER BY rowid").all();
+    for(const selection of entries){
+      const e=await this.latestCatalogEntry(selection.EID,files);
+      this.db.query('INSERT INTO elections VALUES(?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET label=excluded.label,event_date=excluded.event_date,metadata=excluded.metadata').run(e.EID,'TX/Travis',e.ElectionName,e.Date,JSON.stringify(e));
+    }
     return entries;
   }
   private async exclusive<T>(work:()=>Promise<T>):Promise<T>{if(this.active)throw new Error('one operation at a time');this.active=true;try{return await work();}finally{this.active=false;}}
   async list(){return this.exclusive(async()=>{const obs=crypto.randomUUID();this.db.query("INSERT INTO observations(id,status,started_at) VALUES(?,'catalog',?)").run(obs,this.stamp());const run=this.run(obs,'list');try{await this.preflight(obs,run);const entries=await this.listing(obs,run);this.finish(run,'succeeded');return entries;}catch(e){this.finish(run,'failed',e);throw e;}});}
-  async collect(election:string,refresh=false){
-    token(election);if(election!=='125662') throw new Error('supported selection is TX/Travis/125662 only; no history backfill');
+  async collect(election:string,refresh=false){token(election);return this.collectSelected(election,undefined,refresh);}
+  async collectDate(date:string,refresh=false){isoDate(date);return this.collectSelected(undefined,date,refresh);}
+  private async retainedCatalog(){
+    const row=this.db.query<FileRow,[]>("SELECT * FROM files WHERE name='catalog' AND status='downloaded' ORDER BY rowid DESC LIMIT 1").get();
+    if(!row)return undefined;
+    if(row.url!==COUNTY+'elections.json')throw new Error('catalog URL identity mismatch');
+    return catalog(JSON.parse((await this.cached(row)).toString()));
+  }
+  private async collectSelected(election:string|undefined,date:string|undefined,refresh:boolean){
     return this.exclusive(async()=>{
-      const existing=this.db.query<Observation,[string]>("SELECT * FROM observations WHERE election=? AND status IN ('complete','disagreement') ORDER BY rowid DESC LIMIT 1").get(election);
-      if(existing && !refresh){await this.verify();return {observation:existing.id,coverage:JSON.parse(existing.coverage!),reused:true};}
-      const obs=refresh?null:this.db.query<Observation,[string]>("SELECT * FROM observations WHERE coalesce(election,(SELECT election FROM selections WHERE observation=observations.id))=? AND status='collecting' ORDER BY rowid DESC LIMIT 1").get(election);
-      const id=obs?.id??crypto.randomUUID();
-      if(!obs)this.db.query("INSERT INTO observations(id,status,started_at) VALUES(?,'collecting',?)").run(id,this.stamp());
-      this.db.query('INSERT OR IGNORE INTO selections VALUES(?,?)').run(id,election);
+      if(date && !refresh){const retained=await this.retainedCatalog();if(retained)election=selectDate(retained,date).EID;}
+      if(!refresh){const reused=await this.reuseSelection(election,date);if(reused)return reused;}
+      const {obs,id}=this.beginSelection(election,refresh);
       const run=this.run(id,'collect');
       try{
-        const {x,coverage}=await this.collectCheckpoint(id,run,election,obs);
+        const {x,coverage}=await this.collectCheckpoint(id,run,election,obs,date);
         this.saveSnapshot(id,x,coverage);
         this.finish(run,'succeeded');return {observation:id,coverage,reused:false};
       }catch(e){this.finish(run,'failed',e);throw e;}
     });
   }
-  private async collectCheckpoint(id:string,run:string,election:string,obs:Observation|null){
+  private async reuseSelection(election:string|undefined,date:string|undefined){
+    const existing=this.db.query<Observation,[string]>("SELECT * FROM observations WHERE election=? AND status IN ('complete','disagreement') ORDER BY rowid DESC LIMIT 1").get(election??'');
+    if(!existing)return undefined;
+    await this.verify();const coverage=JSON.parse(existing.coverage!);
+    if(date && sourceDate(coverage.sourceSettings.settings.electiondetails.electiondate)!==date)throw new Error('cached snapshot date differs; use --refresh');
+    return {observation:existing.id,coverage,reused:true};
+  }
+  private beginSelection(election:string|undefined,refresh:boolean){
+    const obs=refresh?null:this.db.query<Observation,[string]>("SELECT * FROM observations WHERE coalesce(election,(SELECT election FROM selections WHERE observation=observations.id))=? AND status='collecting' ORDER BY rowid DESC LIMIT 1").get(election??'');
+    const id=obs?.id??crypto.randomUUID();
+    if(!obs)this.db.query("INSERT INTO observations(id,status,started_at) VALUES(?,'collecting',?)").run(id,this.stamp());
+    if(election)this.db.query('INSERT OR IGNORE INTO selections VALUES(?,?)').run(id,election);
+    return {obs,id};
+  }
+  private async collectCheckpoint(id:string,run:string,election:string|undefined,obs:Observation|null,date?:string){
     await this.preflight(id,run);
-    const entries=await this.listing(id,run),entry=entries.find(e=>e.EID===election);if(!entry)throw new Error('selection absent from current catalog');
+    const entries=await this.listing(id,run),entry=date?selectDate(entries,date):entries.find(e=>e.EID===election);if(!entry)throw new Error('selection absent from current catalog');
+    if(election && entry.EID!==election)throw new Error('catalog date selection changed; explicit refresh required');
+    election=entry.EID;
+    this.db.query('INSERT OR IGNORE INTO selections VALUES(?,?)').run(id,election);
     this.db.query('UPDATE observations SET election=? WHERE id=?').run(election,id);
     const before=await this.version(id,run,'version-before',election);
     if(obs?.version && obs.version!==before)throw new Error('checkpoint version changed; explicit refresh required');
     this.db.query('UPDATE observations SET version=? WHERE id=?').run(before,id);
-    return this.snapshot(id,run,election,before,entry.ElectionName);
+    return this.snapshot(id,run,election,before,entry);
   }
   private saveSnapshot(id:string,x:ReturnType<typeof parseXml>,coverage:ReturnType<typeof coverageFor>){
     this.db.transaction(()=>{
@@ -171,7 +208,7 @@ export class Collector {
   }
   private async json(obs:string,run:string,name:string,url:string){return JSON.parse((await this.acquire(obs,run,name,url,'application/json',b=>{JSON.parse(b.toString());})).toString());}
   private async version(obs:string,run:string,name:string,election:string){return (await this.acquire(obs,run,name,COUNTY+election+'/current_ver.txt','text/plain',b=>{token(b.toString());},true)).toString();}
-  private async snapshot(id:string,run:string,election:string,before:string,name:string){
+  private async snapshot(id:string,run:string,election:string,before:string,entry:ReturnType<typeof catalog>[number]){
     const prefix=COUNTY+election+'/'+before+'/';
     const config=await this.json(id,run,'config',prefix+'json/config.json');
     validateConfig(config);
@@ -182,30 +219,30 @@ export class Collector {
     const after=await this.version(id,run,'version-after',election);
     this.db.query('UPDATE observations SET after_version=? WHERE id=?').run(after,id);
     const x=parseXml(xmlFromZip(zip));
-    validateXmlIdentity(x,name,settings);
+    validateXmlIdentity(x,entry,settings);
     return {x,coverage:coverageFor(x,summary,details,status,settings,before,after)};
   }
   async status(){return {observations:(this.db.query('SELECT count(*) n FROM observations').get() as {n:number}).n,files:(this.db.query("SELECT count(*) n FROM files WHERE status='downloaded'").get() as {n:number}).n,notBefore:this.cooldown(),runs:this.db.query('SELECT * FROM runs ORDER BY rowid DESC LIMIT 20').all(),coverage:this.db.query('SELECT id,election,version,after_version,status,coverage FROM observations ORDER BY rowid DESC LIMIT 20').all()};}
   async verify(){
     if((this.db.query('PRAGMA integrity_check').get() as {integrity_check:string}).integrity_check!=='ok' || this.db.query('PRAGMA foreign_key_check').all().length)throw new Error('SQLite integrity/foreign key failure');
-    const files=this.db.query<FileRow,[]>("SELECT * FROM files WHERE status='downloaded'").all();
+    const files=this.db.query<FileRow,[]>("SELECT * FROM files WHERE status='downloaded' ORDER BY rowid").all();
     for(const f of files)await this.cached(f);
     const observations=this.db.query<Observation,[]>("SELECT * FROM observations WHERE coverage IS NOT NULL OR status IN ('complete','disagreement')").all();
     for(const obs of observations)await this.verifyObservation(obs,files);
     return {httpRequests:0,files:files.length,observations:observations.length,integrity:'ok'};
   }
   private async verifyObservation(obs:Observation,files:FileRow[]){
-      if(obs.election!=='125662')throw new Error('unsupported observation election');
+      token(obs.election);
       const routes=observationRoutes(obs.election,token(obs.version));
       const get=(name:string)=>this.observationFile(obs,files,routes,name);
       const json=async(name:string)=>JSON.parse((await get(name)).toString());
       const entries=catalog(await json('catalog')),entry=entries.find(e=>e.EID===obs.election);
       if(!entry)throw new Error('selection absent from retained catalog');
-      this.verifySource(obs,entry);
+      await this.verifySource(obs,files);
       validateConfig(await json('config'));
       const settings=await json('settings');validateSettings(settings,obs.election);
       const x=parseXml(xmlFromZip(await get('export'))),before=token((await get('version-before')).toString()),after=token((await get('version-after')).toString());
-      validateXmlIdentity(x,entry.ElectionName,settings);
+      validateXmlIdentity(x,entry,settings);
       for(const name of ['clarity-robots','official-robots','official-page'])await get(name);
       const result=coverageFor(x,await json('summary'),await json('details'),await json('status'),settings,before,after);
       if(obs.version!==before || obs.after_version!==after || JSON.stringify(result)!==obs.coverage || obs.status!==(result.mismatches.length?'disagreement':'complete'))throw new Error('coverage/identity mismatch');
@@ -220,12 +257,22 @@ export class Collector {
       }
       return this.cached(matches.at(-1)!);
   }
-  private verifySource(obs:Observation,entry:ReturnType<typeof catalog>[number]){
+  private async latestCatalogEntry(election:string,files:FileRow[]){
+      // The index follows its latest retained catalog; snapshot identity uses its own catalog.
+      let entry:ReturnType<typeof catalog>[number]|undefined;
+      for(const f of [...files].reverse().filter(f=>f.name==='catalog')){
+        if(f.url!==COUNTY+'elections.json')throw new Error('catalog URL identity mismatch');
+        entry=catalog(JSON.parse((await this.cached(f)).toString())).find(e=>e.EID===election);if(entry)break;
+      }
+      if(!entry)throw new Error('selection absent from retained catalogs');return entry;
+  }
+  private async verifySource(obs:Observation,files:FileRow[]){
+      const entry=await this.latestCatalogEntry(obs.election,files);
       const source=this.db.query('SELECT * FROM sources WHERE id=?').get('TX/Travis');
       if(JSON.stringify(source)!==JSON.stringify({id:'TX/Travis',url:COUNTY,label:'Travis',state_id:'9',county_id:'1239'}))throw new Error('source identity mismatch');
       const election=this.db.query<any,[string]>('SELECT * FROM elections WHERE id=?').get(obs.election);
       const selection=this.db.query<any,[string]>('SELECT election FROM selections WHERE observation=?').get(obs.id);
-      if(election?.source!=='TX/Travis' || election.label!==entry.ElectionName || election.event_date!==entry.Date || JSON.stringify(JSON.parse(election.metadata))!==JSON.stringify(entry) || selection?.election!==obs.election)throw new Error('catalog/selection identity mismatch');
+      if(![election?.source==='TX/Travis',election?.label===entry.ElectionName,election?.event_date===entry.Date,JSON.stringify(JSON.parse(election?.metadata??'null'))===JSON.stringify(entry),selection?.election===obs.election].every(Boolean))throw new Error('catalog/selection identity mismatch');
   }
   private verifyRows(id:string,expected:ReturnType<typeof parseXml>['rows']){
       const rows=this.db.query('SELECT contest,choice,vote_type AS voteType,precinct,votes FROM result_rows WHERE observation=? ORDER BY contest,choice,vote_type,precinct').all(id);
@@ -233,15 +280,16 @@ export class Collector {
   }
 }
 function validateConfig(config:any){
-  if(![config?.lang==='en',config?.isPublished===true,config?.versionTemplate===345435].every(Boolean))throw new Error('template/config changed; revalidate source adapter');
+  if(![config?.lang==='en',config?.isPublished===true,Number.isSafeInteger(config?.versionTemplate),config?.versionTemplate>0].every(Boolean))throw new Error('unsupported published English config schema; revalidate source adapter');
+  if(config.languages!==undefined && (typeof config.languages!=='string' || !config.languages.split(',').some((v:string)=>v.startsWith('en|'))))throw new Error('English capability missing; revalidate source adapter');
 }
 function validateSettings(settings:any,election:string){
   const ed=settings?.settings?.electiondetails;
   if(![ed?.electionid===election,ed?.entityid==='1239',ed?.chkgeneratexml===true].every(Boolean))throw new Error('election identity/XML not advertised');
 }
-function validateXmlIdentity(x:ReturnType<typeof parseXml>,name:string,settings:any){
+function validateXmlIdentity(x:ReturnType<typeof parseXml>,entry:ReturnType<typeof catalog>[number],settings:any){
   const ed=settings.settings.electiondetails;
-  if(![x.region==='Travis',x.name===name,x.name===ed.internalname,x.date===ed.electiondate].every(Boolean))throw new Error('XML/catalog/settings identity mismatch');
+  if(![x.region==='Travis',x.name===entry.ElectionName,x.name===ed.internalname,sourceDate(x.date)===sourceDate(ed.electiondate),sourceDate(x.date)===sourceDate(entry.Date)].every(Boolean))throw new Error('XML/catalog/settings identity mismatch');
 }
 function observationRoutes(election:string,version:string):Record<string,{url:string;mime:string}>{
   const prefix=COUNTY+election+'/'+version+'/';
@@ -260,6 +308,13 @@ function observationRoutes(election:string,version:string):Record<string,{url:st
     export:{url:prefix+'reports/detailxml.zip',mime:'application/zip'},
   };
 }
+async function releaseBody(reader:ReadableStreamDefaultReader<Uint8Array>,handle:{close:()=>Promise<void>}|undefined,ended:boolean){
+  const errors:unknown[]=[];
+  try{if(!ended)await reader.cancel();}catch(error){errors.push(error);}
+  finally{try{reader.releaseLock();}catch(error){errors.push(error);}
+    finally{try{await handle?.close();}catch(error){errors.push(error);}}}
+  return errors;
+}
 function archivedFilename(path:string){if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.body$/.test(path))throw new Error('unsafe archived filename');}
 function declaredLength(headers:Headers,limit:number):string|null {
   const value=headers.get('content-length');if(value===null)return null;
@@ -276,7 +331,9 @@ function requireHttp(status:number,name:string,type:string|null,mime:string){
   if(type?.split(';')[0]?.trim()!==mime)throw new Error('unexpected MIME');
 }
 function coverageFor(x:ReturnType<typeof parseXml>,summary:unknown,details:unknown,status:unknown,settings:unknown,before:string,after:string){
-  const coverage={...reconcile(x,summary,details,status),versionBefore:before,versionAfter:after,stable:before===after,scope:'one selected election/version; not historical completeness',xmlTimestamp:x.timestamp,sourceSettings:settings};
+  let reconciled:ReturnType<typeof reconcile>;
+  try{reconciled=reconcile(x,summary,details,status);}catch(error){throw new Error(`unsupported result schema; revalidate source adapter: ${String(error)}`);}
+  const coverage={...reconciled,versionBefore:before,versionAfter:after,stable:before===after,scope:'one selected election/version; not historical completeness',xmlTimestamp:x.timestamp,sourceSettings:settings};
   if(before!==after)coverage.mismatches.push('version changed during observation');return coverage;
 }
 function retryAfterDelay(h:Headers,base:number):number {

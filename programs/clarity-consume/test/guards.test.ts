@@ -32,7 +32,7 @@ test('malformed content is not retried, failed pending bytes are retained, check
  }finally{await rm(root,{recursive:true,force:true});}
 });
 test('symlinked archives, source checkout output and unsupported elections fail before HTTP',async()=>{
- await archive(async(c,root,deps)=>{await expect(c.collect('../125662')).rejects.toThrow();await expect(c.collect('127492')).rejects.toThrow();expect(deps.calls).toEqual([]);await symlink(root,join(root,'alias'));await expect(Collector.open(join(root,'alias'),deps)).rejects.toThrow();});
+ await archive(async(c,root,deps)=>{await expect(c.collect('../125662')).rejects.toThrow();await expect(c.collect('127492/..')).rejects.toThrow();expect(deps.calls).toEqual([]);await symlink(root,join(root,'alias'));await expect(Collector.open(join(root,'alias'),deps)).rejects.toThrow();});
  await expect(Collector.open(resolveSource())).rejects.toThrow();
 });
 function resolveSource(){return new URL('..',import.meta.url).pathname.replace(/\/$/,'');}

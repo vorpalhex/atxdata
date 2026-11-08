@@ -12,7 +12,7 @@ test('headless CLI validates explicit scope and status/verify never access HTTP'
   await expect(main(['status','--archive',root,'--refresh'])).rejects.toThrow();
   await expect(main(['bad','--archive',root])).rejects.toThrow();
   expect((await run('collect','--archive',root)).code).toBe(1);
-  expect((await run('collect','--archive',root,'--election','127492')).code).toBe(1);
+  expect((await run('collect','--archive',root,'--election','127492/..')).code).toBe(1);
   const status=await run('status','--archive',root);expect(status.code).toBe(0);expect(JSON.parse(status.out).observations).toBe(0);
   const verify=await run('verify','--archive',root);expect(verify.code).toBe(0);expect(JSON.parse(verify.out).httpRequests).toBe(0);
   expect((await run('status','--archive',root,'--unknown','1')).code).toBe(1);

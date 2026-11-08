@@ -31,7 +31,7 @@ test('offline identity rejects independent one-field provenance mistakes with ze
   for(const [bad,restore] of changes){c.db.run('PRAGMA foreign_keys=OFF');c.db.run(bad);await expect(c.verify()).rejects.toThrow();c.db.run(restore);c.db.run('PRAGMA foreign_keys=ON');await c.verify();}
   for(const name of ['config','catalog','settings']){
    const row=c.db.query<any,[string]>('SELECT * FROM files WHERE name=?').get(name)!;const path=join(root,row.path),bytes=await readFile(path),value=JSON.parse(bytes.toString());
-   if(name==='config')value.versionTemplate=1;
+   if(name==='config')value.versionTemplate={unsupported:true};
    if(name==='catalog')value[0].CountyId='99';
    if(name==='settings')value.settings.electiondetails.internalname='Other';
    const bad=Buffer.from(JSON.stringify(value));await writeFile(path,bad);c.db.run('UPDATE files SET bytes=?,encoded_hash=?,decoded_hash=? WHERE id=?',[bad.length,hash(bad),hash(bad),row.id]);
