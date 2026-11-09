@@ -1,5 +1,5 @@
 import { test, expect } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { Archive } from "../src/archive";
 import { Adapter } from "../src/adapter";
@@ -68,6 +68,14 @@ test("published strategy follows only validated temporary location; retains stab
     );
   } finally {
     await a.close();
+    if (process.env.ARCGIS_COMPAT_EVIDENCE) {
+      await mkdir(process.env.ARCGIS_COMPAT_EVIDENCE, { recursive: true });
+      await cp(
+        root,
+        join(process.env.ARCGIS_COMPAT_EVIDENCE, "legacy-voter-synthetic"),
+        { recursive: true, errorOnExist: true, force: false },
+      );
+    }
     await rm(root, { recursive: true });
   }
 });

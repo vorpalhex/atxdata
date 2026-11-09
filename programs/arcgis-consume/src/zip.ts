@@ -24,20 +24,108 @@ export const dbfFields = [
 const expected = [".cpg", ".dbf", ".prj", ".shp", ".shp.xml", ".shx"].map(
   (ext) => "Election_Precincts" + ext,
 );
-function dbfRecords(dbf: Buffer) {
+export type ZipOptions = {
+  basename: string;
+  rawBytes: number;
+  expandedBytes: number;
+  maxRecords: number;
+  maxMembers: number;
+};
+export class UnsupportedShapefile extends Error {}
+function shapeFileType(data: Buffer) {
+  ensure(
+    data.length >= 100 &&
+      data.readInt32BE(0) === 9994 &&
+      data.readInt32BE(24) * 2 === data.length &&
+      data.readInt32LE(28) === 1000,
+    "invalid shapefile header",
+  );
+  const type = data.readInt32LE(32);
+  ensure(
+    [0, 1, 3, 5, 8, 11, 13, 15, 18, 21, 23, 25, 28, 31].includes(type),
+    "invalid shapefile type",
+  );
+  return type;
+}
+function shapefileScope(parts: Map<string, Buffer>, basename: string) {
+  ensure(
+    !/[\\/:]/.test(basename) && basename !== "." && basename !== "..",
+    "unsafe advertised basename",
+  );
+  const names = [...parts.keys()].filter((n) => n.endsWith(".shp"));
+  ensure(
+    names.length > 0 && parts.has(basename + ".shp"),
+    "missing advertised shapefile component",
+  );
+  const types = names.map((name) => {
+    const base = name.slice(0, -4);
+    for (const ext of [".shp", ".shx", ".dbf", ".prj"])
+      ensure(parts.has(base + ext), "missing advertised shapefile component");
+    const type = shapeFileType(parts.get(name)!);
+    ensure(
+      shapeFileType(parts.get(base + ".shx")!) === type,
+      "SHP/SHX type mismatch",
+    );
+    basicDbfHeader(parts.get(base + ".dbf")!);
+    ensure(
+      parts
+        .get(base + ".prj")!
+        .toString()
+        .trim().length > 0,
+      "empty required projection",
+    );
+    return type;
+  });
+  if (names.length !== 1 || types[0] !== 5)
+    throw new UnsupportedShapefile(
+      "ZIP container/CRC checked; nonpolygon, Z/M or multiple shapefile groups not interpreted",
+    );
+}
+function basicDbfHeader(dbf: Buffer) {
   ensure(dbf.length >= 33, "truncated DBF");
-  const count = integer(dbf.readUInt32LE(4), 1, 1000),
+  const count = integer(dbf.readUInt32LE(4), 0, Number.MAX_SAFE_INTEGER),
     head = dbf.readUInt16LE(8),
     size = dbf.readUInt16LE(10);
   ensure(
-    head === 32 + 32 * dbfFields.length + 1 &&
+    head >= 33 &&
+      (head - 33) % 32 === 0 &&
       dbf[head - 1] === 13 &&
+      size > 0 &&
+      Number.isSafeInteger(head + size * count) &&
       dbf.length >= head + size * count &&
       dbf.length <= head + size * count + 1,
     "DBF length/schema mismatch",
   );
+  return { count, head, size };
+}
+function dbfHeader(dbf: Buffer, options?: ZipOptions) {
+  const header = basicDbfHeader(dbf);
+  integer(header.count, 1, options?.maxRecords ?? 1000);
+  ensure(
+    options !== undefined || header.head === 32 + 32 * dbfFields.length + 1,
+    "DBF length/schema mismatch",
+  );
+  return header;
+}
+function dbfSchema(dbf: Buffer, head: number, options?: ZipOptions) {
   let offset = 1;
-  const schema = dbfFields.map((name, i) => {
+  const names = options
+    ? Array.from(
+        { length: (head - 33) / 32 },
+        (_, i) =>
+          dbf
+            .subarray(32 + i * 32, 43 + i * 32)
+            .toString("ascii")
+            .split("\0")[0],
+      )
+    : dbfFields;
+  ensure(
+    names.length > 0 &&
+      new Set(names).size === names.length &&
+      names.every((n) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(n)),
+    "invalid DBF fields",
+  );
+  const schema = names.map((name, i) => {
     const start = 32 + i * 32,
       field = dbf
         .subarray(start, start + 11)
@@ -46,14 +134,22 @@ function dbfRecords(dbf: Buffer) {
       type = String.fromCharCode(dbf[start + 11]),
       length = dbf[start + 16];
     ensure(
-      field === name && ["C", "N", "D", "F"].includes(type) && length > 0,
+      field === name &&
+        ["C", "N", "D", "F", "L", "I", "B", "Y", "T"].includes(type) &&
+        length > 0,
       "DBF field schema changed",
     );
     const result = { name, type, length, offset };
     offset += length;
     return result;
   });
-  ensure(offset === size, "DBF record length mismatch");
+  return { schema, size: offset };
+}
+function dbfRecords(dbf: Buffer, options?: ZipOptions) {
+  const { count, head, size } = dbfHeader(dbf, options);
+  const parsed = dbfSchema(dbf, head, options),
+    schema = parsed.schema;
+  ensure(parsed.size === size, "DBF record length mismatch");
   const ids: string[] = [];
   for (let i = 0; i < count; i++) {
     const start = head + i * size;
@@ -65,8 +161,11 @@ function dbfRecords(dbf: Buffer) {
       )
       .toString("ascii")
       .trim();
-    ensure(/^\d+$/.test(id), "invalid precinct identity");
-    ids.push(id);
+    ensure(
+      options !== undefined || /^\d+$/.test(id),
+      "invalid precinct identity",
+    );
+    ids.push(options ? String(i + 1) : id);
   }
   ensure(new Set(ids).size === count, "duplicate precinct identities");
   return { count, ids, schema };
@@ -152,28 +251,47 @@ function shapeRecords(shp: Buffer, shx: Buffer, count: number) {
   ensure(next === shp.length, "unindexed SHP content");
   return { rings, vertices, extent };
 }
-function validateEntries(entries: Entry[]) {
+function safeMemberName(name: string) {
+  return (
+    name.length <= 255 &&
+    !name.startsWith("/") &&
+    !name.includes("\\") &&
+    name
+      .split("/")
+      .every((p) => p !== ".." && p !== "." && p !== "" && !p.includes(":"))
+  );
+}
+function validateMember(entry: Entry, options?: ZipOptions) {
   ensure(
-    entries.length === 6 && new Set(entries.map((e) => e.filename)).size === 6,
+    (options
+      ? safeMemberName(entry.filename)
+      : expected.includes(entry.filename)) &&
+      !entry.directory &&
+      !entry.encrypted &&
+      ((entry.externalFileAttributes >>> 16) & 0xf000) !== 0xa000,
+    "unsafe ZIP member",
+  );
+}
+function validateEntries(entries: Entry[], options?: ZipOptions) {
+  ensure(
+    (options
+      ? entries.length >= 3 && entries.length <= options.maxMembers
+      : entries.length === 6) &&
+      new Set(entries.map((e) => e.filename)).size === entries.length,
     "ZIP member count/duplicates",
   );
   let expanded = 0;
   for (const entry of entries) {
-    ensure(
-      expected.includes(entry.filename) &&
-        !entry.directory &&
-        !entry.encrypted &&
-        ((entry.externalFileAttributes >>> 16) & 0xf000) !== 0xa000,
-      "unsafe ZIP member",
-    );
+    validateMember(entry, options);
     expanded += entry.uncompressedSize;
     ensure(
-      Number.isSafeInteger(expanded) && expanded <= 2_000_000,
+      Number.isSafeInteger(expanded) &&
+        expanded <= (options?.expandedBytes ?? 2_000_000),
       "ZIP expansion ceiling",
     );
   }
 }
-async function decodeEntries(entries: Entry[]) {
+async function decodeEntries(entries: Entry[], options?: ZipOptions) {
   const parts = new Map<string, Buffer>();
   for (const entry of entries) {
     ensure(!entry.directory, "ZIP entry cannot be read");
@@ -183,7 +301,8 @@ async function decodeEntries(entries: Entry[]) {
       write(chunk) {
         size += chunk.byteLength;
         ensure(
-          size <= entry.uncompressedSize && size <= 2_000_000,
+          size <= entry.uncompressedSize &&
+            size <= (options?.expandedBytes ?? 2_000_000),
           "ZIP actual expansion ceiling",
         );
         chunks.push(Buffer.from(chunk));
@@ -195,10 +314,34 @@ async function decodeEntries(entries: Entry[]) {
   }
   return parts;
 }
-export async function validateZip(raw: Uint8Array, expectedBytes: number) {
+function validateProjection(
+  parts: Map<string, Buffer>,
+  basename: string,
+  options?: ZipOptions,
+) {
+  const part = (ext: string) => parts.get(basename + ext)!;
+  const prj = part(".prj").toString();
+  ensure(
+    options
+      ? /(?:GEOGCS|PROJCS|GEODCRS|PROJCRS)\s*\[/.test(prj)
+      : prj.includes("NAD_1983_StatePlane_Texas_Central_FIPS_4203_Feet") &&
+          prj.includes('UNIT["Foot_US",0.3048006096012192]'),
+    "unexpected native PRJ",
+  );
+  ensure(
+    (options && !parts.has(basename + ".cpg")) ||
+      /^(UTF-8|65001|1252)$/i.test(part(".cpg").toString().trim()),
+    "unsupported DBF encoding",
+  );
+}
+export async function validateZip(
+  raw: Uint8Array,
+  expectedBytes: number,
+  options?: ZipOptions,
+) {
   ensure(
     raw.length === expectedBytes &&
-      raw.length <= 1_000_000 &&
+      raw.length <= (options?.rawBytes ?? 1_000_000) &&
       Buffer.from(raw.subarray(0, 4)).equals(Buffer.from([80, 75, 3, 4])),
     "ZIP size/signature mismatch",
   );
@@ -208,20 +351,13 @@ export async function validateZip(raw: Uint8Array, expectedBytes: number) {
   });
   try {
     const entries = await reader.getEntries();
-    validateEntries(entries);
-    const parts = await decodeEntries(entries);
-    const part = (ext: string) => parts.get("Election_Precincts" + ext)!;
-    const prj = part(".prj").toString();
-    ensure(
-      prj.includes("NAD_1983_StatePlane_Texas_Central_FIPS_4203_Feet") &&
-        prj.includes('UNIT["Foot_US",0.3048006096012192]'),
-      "unexpected native PRJ",
-    );
-    ensure(
-      /^(UTF-8|65001)$/i.test(part(".cpg").toString().trim()),
-      "unsupported DBF encoding",
-    );
-    const dbf = dbfRecords(part(".dbf")),
+    validateEntries(entries, options);
+    const parts = await decodeEntries(entries, options);
+    const basename = options?.basename ?? "Election_Precincts";
+    if (options) shapefileScope(parts, basename);
+    const part = (ext: string) => parts.get(basename + ext)!;
+    validateProjection(parts, basename, options);
+    const dbf = dbfRecords(part(".dbf"), options),
       shapes = shapeRecords(part(".shp"), part(".shx"), dbf.count);
     return {
       records: dbf.count,

@@ -1,5 +1,27 @@
 import { Database } from "bun:sqlite";
+import { existsSync, statSync, readdirSync } from "node:fs";
+import { basename, dirname } from "node:path";
 import { ensure } from "./check";
+import { validateRunOptions } from "./policy";
+function validTimestamp(value: unknown): asserts value is number {
+  ensure(
+    typeof value === "number" && Number.isSafeInteger(value) && value >= 0,
+    "invalid cooldown timestamp",
+  );
+}
+function freshDatabase(path: string) {
+  if (path === ":memory:") return true;
+  if (existsSync(path) && statSync(path).size !== 0) return false;
+  // Financial preallocates an empty mode0600 file. Retained bodies/sidecars
+  // distinguish damage from initialization and must never be reset.
+  ensure(
+    readdirSync(dirname(path)).every(
+      (name) => name === basename(path) || name === ".civicclerk.lock",
+    ),
+    "missing cooldown database with prior archive evidence",
+  );
+  return true;
+}
 export type Observation = {
   run: string;
   label: string;
@@ -14,20 +36,54 @@ export type Observation = {
 export class Store {
   readonly db: Database;
   constructor(path: string) {
+    const fresh = freshDatabase(path);
     this.db = new Database(path, { strict: true });
-    this.db.exec(`PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;
+    try {
+      // A missing singleton in an existing database is damage, not initialization.
+      if (!fresh) this.notBefore();
+      this.db.exec(`PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;
+   CREATE TABLE IF NOT EXISTS acquisition_options(run TEXT PRIMARY KEY, options TEXT NOT NULL);
    CREATE TABLE IF NOT EXISTS sources(id TEXT PRIMARY KEY,label TEXT NOT NULL,original_url TEXT NOT NULL);
    CREATE TABLE IF NOT EXISTS runs(id TEXT PRIMARY KEY,source TEXT REFERENCES sources(id),command TEXT NOT NULL,status TEXT NOT NULL,started TEXT NOT NULL,finished TEXT,error TEXT,summary TEXT);
    CREATE TABLE IF NOT EXISTS attempts(id TEXT PRIMARY KEY,run TEXT NOT NULL REFERENCES runs(id),label TEXT NOT NULL,url TEXT NOT NULL,started TEXT NOT NULL,finished TEXT,status INTEGER,headers TEXT,bytes INTEGER NOT NULL DEFAULT 0,error TEXT);
    CREATE TABLE IF NOT EXISTS cooldown(id INTEGER PRIMARY KEY CHECK(id=1),not_before REAL NOT NULL);
-   INSERT OR IGNORE INTO cooldown VALUES(1,0);
+
    CREATE TABLE IF NOT EXISTS observations(run TEXT NOT NULL REFERENCES runs(id),label TEXT NOT NULL,url TEXT NOT NULL,sha256 TEXT NOT NULL,bytes INTEGER NOT NULL,path TEXT NOT NULL,status TEXT NOT NULL CHECK(status IN ('pending','ready')),kind TEXT NOT NULL,retrieved TEXT NOT NULL,PRIMARY KEY(run,label));
    CREATE TABLE IF NOT EXISTS versions(source TEXT NOT NULL REFERENCES sources(id),label TEXT NOT NULL,sha256 TEXT NOT NULL,bytes INTEGER NOT NULL,path TEXT NOT NULL,first_retrieved TEXT NOT NULL,publication_date TEXT,PRIMARY KEY(source,label,sha256));`);
+      if (fresh) this.db.exec("INSERT INTO cooldown VALUES(1,0)");
+      this.notBefore();
+    } catch (error) {
+      this.db.close();
+      throw error;
+    }
+  }
+  preflight() {
+    ensure(
+      this.notBefore() < Number.MAX_SAFE_INTEGER,
+      "uninterpretable cooldown: manual review required",
+    );
+  }
+  options(run: string): Record<string, any> | undefined {
+    this.preflight();
+    const row = this.db
+      .query<{ options: string }, [string]>(
+        "SELECT options FROM acquisition_options WHERE run=?",
+      )
+      .get(run);
+    return row ? validateRunOptions(JSON.parse(row.options)) : undefined;
+  }
+  saveOptions(run: string, options: unknown) {
+    this.preflight();
+    validateRunOptions(options);
+    this.db
+      .query("INSERT INTO acquisition_options VALUES(?,?)")
+      .run(run, JSON.stringify(options));
   }
   close() {
     this.db.close();
   }
   source(id: string, label: string, url: string) {
+    this.preflight();
     this.db
       .query(
         "INSERT INTO sources VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET label=excluded.label,original_url=excluded.original_url",
@@ -35,6 +91,7 @@ export class Store {
       .run(id, label, url);
   }
   start(source: string, command: string) {
+    this.preflight();
     const id = crypto.randomUUID();
     this.db
       .query(
@@ -44,6 +101,7 @@ export class Store {
     return id;
   }
   resume(id: string, source: string, command: string) {
+    this.preflight();
     const row = this.db
       .query<{ source: string; command: string; status: string }, [string]>(
         "SELECT source,command,status FROM runs WHERE id=?",
@@ -63,6 +121,7 @@ export class Store {
     return id;
   }
   latestCollection(source: string) {
+    this.preflight();
     return this.db
       .query<{ id: string; summary: string }, [string]>(
         "SELECT id,summary FROM runs WHERE source=? AND command IN ('collect','sync') AND status='succeeded' ORDER BY rowid DESC LIMIT 1",
@@ -70,6 +129,7 @@ export class Store {
       .get(source);
   }
   finish(id: string, status: string, error?: string, summary?: unknown) {
+    this.preflight();
     this.db
       .query("UPDATE runs SET status=?,finished=?,error=?,summary=? WHERE id=?")
       .run(
@@ -81,6 +141,7 @@ export class Store {
       );
   }
   attempt(run: string, label: string, url: string, allowance: number) {
+    this.preflight();
     ensure(
       Number.isSafeInteger(allowance) && allowance > 0,
       "invalid byte reservation",
@@ -101,6 +162,8 @@ export class Store {
     headers: Record<string, string>,
     until: number,
   ) {
+    this.notBefore();
+    validTimestamp(until);
     this.db
       .transaction(() => {
         this.db
@@ -118,6 +181,8 @@ export class Store {
     until: number,
     error?: string,
   ) {
+    this.notBefore();
+    validTimestamp(until);
     this.db
       .transaction(() => {
         this.db
@@ -137,16 +202,25 @@ export class Store {
       .immediate();
   }
   defer(until: number) {
-    this.db
-      .query("UPDATE cooldown SET not_before=MAX(not_before,?) WHERE id=1")
-      .run(until);
+    validTimestamp(until);
+    const existing = this.notBefore();
+    if (until > existing)
+      this.db.query("UPDATE cooldown SET not_before=? WHERE id=1").run(until);
   }
   notBefore() {
-    return this.db
-      .query<{ not_before: number }, []>(
-        "SELECT not_before FROM cooldown WHERE id=1",
-      )
-      .get()!.not_before;
+    let rows: { id: number; not_before: unknown }[];
+    try {
+      rows = this.db
+        .query<{ id: number; not_before: unknown }, []>(
+          "SELECT id,not_before FROM cooldown",
+        )
+        .all();
+    } catch {
+      throw new Error("missing required cooldown policy");
+    }
+    ensure(rows.length === 1 && rows[0].id === 1, "invalid cooldown singleton");
+    validTimestamp(rows[0].not_before);
+    return rows[0].not_before;
   }
   budget(run: string) {
     ensure(
@@ -164,6 +238,7 @@ export class Store {
       .get(run)!;
   }
   checkpoint(row: Observation) {
+    this.preflight();
     this.db
       .query("INSERT INTO observations VALUES(?,?,?,?,?,?,?,?,?)")
       .run(
@@ -179,6 +254,7 @@ export class Store {
       );
   }
   ready(row: Observation) {
+    this.preflight();
     this.db
       .transaction(() => {
         this.db
@@ -224,6 +300,7 @@ export class Store {
       .all();
   }
   verifyHistory() {
+    this.preflight();
     const missing = this.db
       .query(
         `SELECT 1 FROM observations o JOIN runs r ON r.id=o.run

@@ -1,94 +1,116 @@
 # arcgis-consume
 
-A bounded, read-only ArcGIS library and headless Bun/TypeScript CLI. One adapter has two configurations:
+Read-only Bun/SQLite acquisition from the TNR and Voter Maps hub catalogs. `tnr` and `voter` are convenience presets, not the item allowlist. The shipped CLI accepts catalog-backed `--item`, explicit `--layer`, an optional matching `--service`, selected metadata fields, and configurable finite operation budgets.
 
-| Source | Supported acquisition |
-| --- | --- |
-| `tnr` | Named Travis County Commissioner Precinct polygon layer; authoritative before/after counts and IDs, ordered pages of two, five selected attributes and native geometry |
-| `voter` | Already-published Election Precincts item ZIP; six original components, reconciled SHP/SHX/DBF identities and polygon geometry |
+## Supported scope
 
-`discover` reads only one current hub catalog page. It does not acquire the features behind catalog results. In particular, catalog inclusion does not authorize collecting address points, owners, surveys, forms or individual voters. No editing, authentication, export job, generalized URL input, scheduler, server or unbounded backfill is supported.
+- Discovery follows all returned catalog continuations within the selected page/request/byte budgets. The current hub configuration supplies the group predicates; all item types in those groups are enumerated. It is not an organization-wide search. Repeated identities, changing totals, incorrect positions and incomplete terminal pages fail rather than silently truncate.
+- Public Feature Service / Map Service items can use HTTPS county `gis.traviscountytx.gov/.../rest/services/.../FeatureServer` or `MapServer`, or the catalog/item-matching vendor route `services1.arcgis.com/<tenant>/arcgis/rest/services/.../FeatureServer` or `MapServer`. Tenant/path permission comes from exact agreement between the configured hub catalog and selected public item metadata, not a fixed two-item/tenant allowlist. Vendor requests have their own authority-specific robots/crawl-delay gate. Advertised numeric layer suffixes are parsed separately from the service root; explicit `--layer` must equal that suffix (if present), appear in service metadata and match both layer metadata IDs. Original advertised source identity is retained. `--service` asserts the matching root or advertised endpoint, including on cached reuse; it never permits arbitrary URL acquisition. Other authorities (including unproven taxmaps routes), credentials, ports, query strings and non-service routes are rejected. No `/0` guessing or layer substitution for an explicitly supplied item.
+- Feature schemas come from the layer metadata. By default every advertised attribute is requested; `--fields` selects a complete explicit projection including the layer's OID. Numeric, string, date, GUID and related supported ArcGIS scalar types are checked. Unknown attribute types fail explicitly. Original attributes, field definitions, native spatial reference, units, extents, capabilities and metadata remain in unchanged response bodies.
+- Native XY point, multipoint, polyline, polygon and envelope geometry are supported, including legitimately null shapes. Coordinates are finite and inside the advertised extent with a 0.01-native-unit allowance; rings must close. Z/M, meshes, rasters, nonspatial tables, attachments and export jobs are not implemented. No reprojection or invented geometry occurs. Page CRS identities must match metadata; service-only tolerance metadata need not be repeated in page responses.
+- Ordered pagination is used only when the layer advertises pagination and ordering. Page size is capped by `maxRecordCount`. Otherwise the complete authoritative ID set is queried in bounded batches, independent of response order. Truncated/missing/duplicate batches fail. A service that cannot supply complete count/ID evidence is unsupported rather than silently sampled.
+- Published item downloads use the selected item's actual advertised name, size, identity and timestamps. Direct bodies and manually validated `www.arcgis.com/itemdata/.../<advertised-name>` redirects are supported. Signed access URLs remain private provenance, never permanent source identities.
+- Shapefile interpretation supports one flat, matching-basename polygon SHP/SHX/DBF/PRJ group, optional encoding/metadata files and additional safe members. It validates all member CRCs, bounded declared/actual expansion, dynamic DBF fields/record lengths/counts, sequential SHP/SHX identities and polygon geometry. Records are identified by their native record ordinals, not an assumed unique Precinct column. Original DBF/PRJ/CPG and other components remain inside the unchanged ZIP; native PRJ text is retained, not transformed. Complete nonpolygon, Z/M or multiple-shapefile groups can be retained raw with `semanticStatus: unsupported`, `records: null`: only the ZIP container/CRC, component presence and basic SHP/SHX headers are checked, not their geometry, DBF records or CRS semantics. Invalid containers, unsafe members, CRC failures, missing components and invalid/mismatched headers still fail; corrupt supported polygon semantics are not downgraded to unsupported. Unsupported encodings and incompatible interpreted schemas fail explicitly. This is not a general shapefile/WKT topology parser.
+- Other advertised file formats may be retained with `semanticStatus: opaque-unsupported`, `records: null`; this is byte acquisition, not validated geometry. Missing/unsafe filenames or incompatible metadata fail. HTML challenge bodies are not accepted as data. Web maps/apps are not traversed to acquire referenced personal datasets.
 
-## Readiness
+Catalog inclusion is not authorization to collect address points, owners, forms or individual voters. Review the subject, fields, current usage terms and operational permission before collecting. There is no authentication, cookie import, challenge bypass, arbitrary URL scraping, editing, scheduler, service or historical backfill.
 
-The named TNR and published ZIP strategies were exercised against their public sources by the prior implementation, and both retained collections pass current-code zero-HTTP verification. Fresh independent recheck passed for the documented bounded source strategies after the reader-ownership, crash-budget and history-verification fixes. This is not approval for broader layer/history harvesting or parallel source archives, and no new public requests were made after the sample budget was exhausted. The prior live TNR discovery failed with an intermittent native stream `TypeError: undefined is not a function`; its failed run and raw evidence remain unchanged and its source budget is exhausted. Current reader-ownership cleanup was checked using repeated subprocess replays of the exact retained site-data body over localhost, not new public acquisition. A later single, separately capped diagnostic had acquired that body but was not a completed catalog search. TNR catalog search remains unvalidated live. Voter discovery previously completed with 16 catalog items. Do not treat the older reference's TNR catalog count as this implementation's live result.
+## Install and use
 
-## Install and commands
-
-Run from this directory in the repository; sibling CivicClerk/Legistar modules are required. Bun 1.3.14 was used. Project dependencies are pinned in `bun.lock`.
+Run in this directory; the sibling CivicClerk and Legistar modules are required. Dependencies are pinned in `bun.lock`; Bun 1.3.14 was exercised.
 
 ```sh
-bun install --frozen-lockfile
+bun install --frozen-lockfile --offline
 bun src/cli.ts list
+: "${ARCHIVE:?Choose one absolute private archive outside every checkout}"
 
-# ARCHIVE must be an absolute, private directory outside the checkout,
-# without symlinks in any path component. The caller chooses its location.
-: "${ARCHIVE:?Choose a private archive outside source}"
+# Preset rules include both selected-item terms and hub catalogTerms.
+# rules also returns advertised service layers, without feature queries.
 bun src/cli.ts rules --source tnr --archive "$ARCHIVE"
 
-# Review current robots and the item's disclaimer/description in rules output.
-# TERMS_SHA256 is the exact hash of that reviewed usage metadata, not a token.
-: "${TERMS_SHA256:?Copy the reviewed rules output hash}"
-bun src/cli.ts discover --source tnr --archive "$ARCHIVE" --terms-sha256 "$TERMS_SHA256"
-bun src/cli.ts collect --source tnr --archive "$ARCHIVE" --terms-sha256 "$TERMS_SHA256"
+# Use catalogTerms.sha256, not the selected-item terms hash, for discovery.
+: "${CATALOG_TERMS_SHA256:?Review catalogTerms from rules}"
+bun src/cli.ts discover --source tnr --archive "$ARCHIVE" \
+  --terms-sha256 "$CATALOG_TERMS_SHA256" --max-pages 1000
+
+# Pick an actual catalog ID. Review its terms and advertised layer IDs.
+: "${ITEM_ID:?Choose an ID returned by discover}"
+bun src/cli.ts rules --source tnr --item "$ITEM_ID" --archive "$ARCHIVE"
+: "${LAYER_ID:?Choose an advertised layer ID}"
+: "${TERMS_SHA256:?Review the selected item's terms.sha256}"
+bun src/cli.ts collect --source tnr --item "$ITEM_ID" --layer "$LAYER_ID" \
+  --archive "$ARCHIVE" --terms-sha256 "$TERMS_SHA256" \
+  --page-size 1000 --max-records 1000000 --max-requests 1000 \
+  --max-bytes 268435456
+
+# Optional: --fields OBJECTID,NAME (use actual names and include actual OID)
+# Optional: --service 'https://gis.traviscountytx.gov/.../FeatureServer'
+# Its value must match BOTH the selected catalog item and item metadata.
+
+# Select a published file from either catalog; no --layer is needed.
+# Voter preset omits --item and selects Election Precincts as a convenience.
+bun src/cli.ts rules --source voter --archive "$ARCHIVE"
+# Review that item's own terms hash before the next command.
+bun src/cli.ts collect --source voter --archive "$ARCHIVE" \
+  --terms-sha256 "$TERMS_SHA256" --raw-bytes 134217728 \
+  --expanded-bytes 536870912 --max-records 1000000
+
 bun src/cli.ts status --archive "$ARCHIVE"
 bun src/cli.ts verify --archive "$ARCHIVE"
 ```
 
-Use `--source voter` with its separately reviewed terms hash for the published-file strategy. An approved terms hash can be supplied to an unattended invocation: robots are rechecked per new run, and changed item usage metadata stops rather than silently accepting new conditions. A disclaimer's acceptance is not a legal-boundary, currency, surveying or election-validity conclusion.
+If the preset disappears from its hub, `rules` still returns hub `catalogTerms` and explicitly marks `selectedItemUnsupported`. Source-wide discovery does not depend on that demonstration item still being published.
 
-`collect` verifies and reuses the newest successful collection for that source without HTTP. It is not an update check. `sync` explicitly creates a fresh bounded observation, preserving previous byte versions. `rules` and `discover` also create new bounded runs. After a failed/interrupted run, `--resume RUN_ID` reuses that run's verified checkpoints and cumulative budget; it is not a way around the request ceiling. Missing robots files (HTTP 404) are recorded as absent rules, not challenges; other errors stop. A resumed run may re-request an absent robots file because no successful body checkpoint exists for its 404.
+`collect` reuses a verified successful selection without HTTP; it is not a freshness check. Selection identity includes source, item, layer and field projection. `sync` makes a new bounded observation and retains older versions. Existing legacy preset collections also remain reusable through the unchanged bare-preset CLI. Use an explicit `--item` or `sync` to acquire through the general engine rather than reusing an old preset collection.
 
-The library exports `Archive` and `Adapter` from their source modules. `Archive.open` accepts an injected transport/clock for isolated tests; production CLI routes are fixed by the two source configurations.
+After an interrupted run, repeat its command/options with `--resume RUN_ID`. Catalog pages and feature batches already checkpointed are verified and reused, then acquisition continues. Selection, page size and budgets must match the original run. Attempts and received/reserved bytes remain cumulative; server cooldowns persist across runs and processes. Exhausted operation budgets are not reset by resume. Choose adequate finite budgets before starting; an explicitly larger new operation is not permission to erase old history or server policy. No byte-range appends to mutable files, automatic stale-lock stealing or history deletion are supported.
 
-## Bounds and transport
+## Budgets and transport
 
-Every run has ceilings of 25 HTTP attempts including retries/redirects, 5,000,000 bytes per metadata response, 20,000,000 received body bytes total, and a 45-second transfer deadline. TNR collection permits 1–10 rows in pages of two. Discovery permits one page of at most 100 items and requires exact totals, distinct IDs and `nextStart=-1`. The ZIP permits 1,000,000 compressed bytes, exactly six named components, at most 2,000,000 declared and actual expanded bytes, and 1–1000 geographic records. Current observed counts are evidence, not immutable expectations.
+General CLI defaults (all numeric overrides require finite positive safe integers; layer IDs may be zero):
 
-Only one transfer is allowed in flight, including complete successful body consumption. The completion-to-start gap is at least two seconds, or stricter robots crawl-delay. The existing `PoliteHttpClient` handles timeouts and serial full-transfer ownership; the adapter adds persisted pacing, request/byte bounds, an attempt ledger and strict server-header interpretation. Cooldowns on successful responses are honored too: Retry-After seconds/date with server Date, exhausted relative RateLimit reset, exhausted epoch X-RateLimit reset, and structured RateLimit policies. Uninterpretable headers persist a manual-review stop. Server cooldowns are not capped. Transient HTTP/network errors get at most two retries per invocation with exponential delay and jitter; resuming restarts that local retry loop but never resets the cumulative 25-attempt run ceiling. ArcGIS JSON errors inside HTTP 200, schema errors, challenges, permanent statuses and byte limits stop.
+| Option | Default | Meaning |
+| --- | ---: | --- |
+| `--max-requests` | 1000 | All attempts in this operation, including robots and redirects |
+| `--max-bytes` | 268435456 | Combined received/reserved response bytes |
+| `--response-bytes` | 16777216 | Each metadata/count/ID/feature response |
+| `--raw-bytes` | 134217728 | Each published file |
+| `--expanded-bytes` | 536870912 | Combined ZIP declared/actual expansion |
+| `--max-records` | 1000000 | Complete selected feature/file record count, not a prefix |
+| `--max-pages` | 1000 | Catalog pages and feature pages, separately bounded |
+| `--page-size` | 1000 | Requested features per page/batch, capped by server metadata |
+| `--max-members` | 1000 | ZIP members |
 
-Native fetch does not import browser cookies or credentials. Redirects are manual. Only the named published-item entry may yield an HTTPS `www.arcgis.com/itemdata/.../Election_Precincts.zip` redirect. Its signed URL and raw response headers remain private temporary access material, never a source identity. The permanent entry URL is stored separately in `sources.original_url`. There is no arbitrary redirect following or catalog-wide traversal.
+These are configurable operating bounds, not observed source sizes. Responses are streamed to private, no-clobber raw paths. JSON and bounded ZIP semantic validation then use memory; very large explicitly configured ZIPs require corresponding memory. Feature pages are persisted separately rather than accumulated as one feature roll. Whole-layer IDs are bounded by the count/response budgets and retained for completeness reconciliation.
 
-## State, originals and recovery
+New general operations have no hidden retries or automatic redirects. A transfer has a 45-second deadline. At most one complete transfer is in flight; the completion-to-next-start gap is at least 3 seconds or a stricter robots/server delay. Retry-After and supported rate-limit instructions are honored even on HTTP 200; uninterpretable cooldown instructions persist a manual-review stop. Native fetch does not import browser cookies or credentials.
 
-`state.sqlite` stores source identities/labels/original URLs, runs, every attempt, headers, retrieval timestamps, bytes, hashes, durable cooldowns, checkpoint/download status and byte-version history. Before wire activity, each attempt durably charges its full allowed body bytes (the lesser of its response limit and remaining run budget). While `finished` is NULL, `attempts.bytes` is that conservative reservation, not a measured received count; clean completion/failure reconciles it to measured bytes. Process death retains the entire reservation and any abandoned partial/provenance. Legacy unfinished zero-byte attempts have unknown consumption and block further budgeting for manual review; they are not automatically reset. The cumulative byte budget may therefore stop conservatively before measured consumption reaches 20MB. Raw ArcGIS created/modified assertions remain in original item metadata; HTTP Date/Last-Modified remain HTTP provenance. Publication dates are explicitly unknown, not inferred from retrieval, approval text, item modification or feature-editor dates.
+IMPORTANT baseline policy: the operator's `src/rules.ts` change in base 99dd488 comments out robots Disallow rejection. This repair deliberately does not restore or otherwise edit it. Crawl-delay and HTML/challenge checks still run. Do not claim that current code enforces Disallow. The two existing tests expecting Disallow rejection fail in the untouched baseline and remain failures, not weakened tests.
 
-The adapter imports the existing CivicClerk archive lock, symlink guard and no-clobber hard-link promotion, plus the Legistar streaming writer. Shared files were not changed. Originals are written to UUID paths, streamed under a byte ceiling, validated and fsynced, checkpointed as pending, promoted without overwriting, then marked ready. Every changed byte version gets a new original path; existing originals are not rewritten. An interruption after the pending checkpoint is recovered by validating the same hash/size and finishing promotion offline. Uncheckpointed failed `.pending` files are never accepted as complete. The shared writer removes incomplete `.part` output on a failed stream; its attempt/error/received-byte status remains, but failed stream bytes are not a retained original.
+## Persistence, compatibility and verification
 
-The common writer lock is `.civicclerk.lock` because it is deliberately reused, not reimplemented. A second writer fails. A process crash can leave a stale lock. Establish independently that the recorded PID and all transfers have exited; inspect attempts, partials, checkpoints and persisted cooldown before an operator removes that stale lock. There is no automatic lock stealing, partial append or byte-range resume. Do not remove a lock belonging to a live process.
+One trusted archive/writer uses the existing CivicClerk lock/symlink/no-clobber promotion and Legistar streaming writer. No sibling source files changed. `state.sqlite` retains sources/permanent URLs, operations, attempts, private headers/temporary URLs, hashes, timestamps, cooldowns, checkpoints and byte-version history. `acquisition_options` adds immutable general selection/budget records without rewriting older collection summaries or originals. `list` reports general defaults and separately labels `legacyArchiveLimits`; older `status.limits` is the backward-compatible legacy fallback, while each general run's actual policy lives in `acquisition_options`.
 
-`verify` uses no HTTP: SQLite integrity/foreign keys, all retained checkpoint sizes/hashes, bidirectional observation/version-history identity (source, label, hash, size and retained representative path/retrieval/run source), and semantic reconciliation of completed collections are checked. Missing ready history is rejected, not recreated. A failed/incomplete discovery remains explicitly failed even if retained metadata verifies. Verification does not claim archive completeness merely because local files are sound.
+Attempts reserve their full available per-response allowance before network activity. Process death leaves that conservative charge and any partial provenance; clean settlement reconciles measured bytes. Unknown legacy zero-byte unfinished transfers stop for manual review. Pending validated files recover against their original size/hash checkpoint; promotion never overwrites an existing original. Failed stream `.part` output follows the existing writer cleanup contract and is not falsely described as a complete original.
 
-## Geometry and file semantics
+`verify` sends no HTTP. It checks SQLite/FKs, every retained checkpoint and bidirectional byte-version history, then recomputes each successful collection's semantic summary. General collections also verify retained hub/catalog identity and complete catalog pagination, selected service/layer identities, page schemas/native CRS, complete before/after counts/IDs and unchanged before/after item/layer/service metadata. Published item metadata must agree before/after and signed download paths remain distinct from permanent item data URLs. A stable count/ID/version check is not a transactional snapshot guarantee: services that do not expose an edit marker can still change in-place between requests. Source publication date remains unknown rather than inferred from retrieval or item modification dates.
 
-TNR metadata and original response bodies are retained verbatim, including full native SR, units, tolerances, extents, fields and capabilities. Native `wkid=102739`, `latestWkid=2277` is state-plane feet, not longitude/latitude. Rings must be nonempty, closed, XY-only and finite, within the layer extent with a 0.01-unit rounding allowance. Every selected field's name/type/alias is checked against layer metadata. Before/after counts and unique ID sets must agree with exactly one occurrence of every acquired record. Transfer flags and expected page lengths are checked independently of ID reconciliation.
+General feature verification reconstructs exact item/service/layer/count/ID/page request URLs and kinds from persisted selection and metadata (including where, fields, order/offset or ID batch), and reconciles each checkpoint's creating attempt identity. Matching hashes alone do not validate query provenance. Runtime library selections are validated before cache/source writes. Generic Archive/Store budget validation is separate from GIS selection validation, so budget-only raw-file/CSV consumers remain supported. Optional generic `budget.records` is a positive safe-integer ceiling, preserved for existing Financial archives; it is not required for GIS transport budgets and never silently dropped. Invalid persisted budgets fail before cached requests or recovery without deleting attempts, byte reservations or history; legacy runs without options retain their existing defaults.
 
-Catalog/service identities remain distinct, including TNR's mismatching advertised serviceItemId. No inaccessible item identity is guessed or repaired, and `/0` is never appended to catalog URLs. The one supported TNR layer URL is an explicit verified configuration.
+The cooldown singleton is mandatory existing policy, not a default to recreate. Existing databases must contain exactly id1 and a numeric, finite, nonnegative safe-integer timestamp. Cache reads, verification/recovery, spacing and source/run/history/reservation writes preflight this policy. `defer` validates both input and existing state before a monotone update; it cannot normalize damaged state. A missing/zero-byte database initializes only in an otherwise empty archive (plus the owned lock), supporting Financial's private empty-file preallocation without resetting retained-body/sidecar evidence. Deleted policy in an initialized database fails closed. `Number.MAX_SAFE_INTEGER` remains a deliberate durable manual-review stop: new operations/cache/recovery stop, while the already-started response attempt may finish accounting without clearing the stop. Retry jitter is rounded upward to integral milliseconds.
 
-The ZIP is not extracted to server-controlled filesystem paths. Exact names, duplicate/member count, encryption/symlink flags, CRCs, declared/actual expansion limits, native PRJ/CPG, full field names, SHP/SHX indexing, DBF counts, unique Precinct values, finite polygon coordinates and ring closure are validated. All original components remain inside the unchanged ZIP, including private publisher/editor attributes. File and service equal counts do not establish equal identities, geometry or versions. No comparison with voter live-service features is claimed.
+Raw unsupported shapefile acceptance additionally checks basic DBF headers, positive record size and exact declared body lengths, plus nonempty required PRJ, for every discovered group before capability classification. This is structural corruption detection, not decoding unsupported geometry/DBF/CRS semantics.
 
-## Verification evidence
+Optional actual-original regression: set `ARCGIS_ORIGINAL_INPUTS` to a local manifest mapping absolute readonly input files to byte counts/SHA256, then run `bun test test/retained-originals.test.ts`. It reconstructs NEW legacy-format ledgers from the original4-polygon/308-record bytes, with explicitly authored policy/transport fixtures, then exercises native CLI verify/reuse without HTTP. It does not recover old collector state, prove original chronology or establish current remote availability. All generated archives remain in external TMPDIR.
 
-A small public sample on 2026-11-06 produced four TNR polygons, IDs 5/6/7/8 across two pages, and a 308-record/six-component ZIP with 308 rings and 65,699 vertices. TNR count/ID/schema/native-SR checks and published item before/after metadata checks agreed. These are the two named observations, not a county-wide or historical archive.
+The original `Archive` and `Adapter` APIs and legacy semantic validators remain for old archives. New library callers use `selectionOptions` and `executeSelection` from `src/selection.ts`; the CLI uses that same engine. Legacy validators' five-field/two-row/named-ZIP contracts describe old retained observations only, not general CLI restrictions.
 
-Original TNR page hashes (277433 and 323135 bytes):
+## Evidence and limits
 
-- `4d151fb29b4891d07feb284c152dafbb13ad382cc99a443ac7348c430d037897`
-- `a2e9e6186f4746301276e06ad76bd5c63dfc2c05aed68bf6de880869fb0910f9`
+This repair's local fixtures exercise multi-page catalogs and catalog interruption/resume, a nondefault item/layer with 13 complete rows, server page ceilings, unordered ID-batch fallback, multiple native XY geometries, scalar/schema/CRS faults, successful cooldowns, cumulative budgets, service/count/ID drift, missing catalog provenance, old-preset reuse, and a different 1001-record shapefile ZIP larger than 1 MB with seven members. Fixture bytes are synthetic and are not presented as county acquisitions.
 
-Original ZIP: 656459 bytes, SHA-256 `108837b38a9f913740577b5ab0784c40022df20ea0e00930b56ba0b9bb145c41`.
+A separately bounded live metadata-only exercise completed TNR catalog discovery and obtained the preset item's advertised service and layer metadata: 8 attempts, 166868 response bytes, minimum recorded completion-to-next-start gap 3.001 seconds. One response was the retained GIS robots 404; all others were 200. No feature queries, person-level records, files or export jobs were requested. Current TNR layer metadata advertised 10 attributes, native State Plane feet (wkid 102739/latestWkid 2277), and maxRecordCount 2000. This proves metadata availability and schema compatibility, not new live feature/file acquisition or historical coverage.
 
-An offline audit verified 28 observation checkpoints and two completed collections, integrity `ok`, no foreign-key errors. Duplicate `collect` invocations reused both run IDs; the attempt count remained 36 before/after and an injected network-denial transport was called zero times. The ledger includes one local pre-network budget rejection; real public responses were 25 for TNR including the separate initial robots probe, and 12 for voter. No further traffic is authorized by that exhausted sample budget.
+Historical evidence, not a fresh acquisition: the previous implementation retained four TNR polygons and a 308-record Election Precinct ZIP. Original page SHA-256 values were `4d151fb29b4891d07feb284c152dafbb13ad382cc99a443ac7348c430d037897` and `a2e9e6186f4746301276e06ad76bd5c63dfc2c05aed68bf6de880869fb0910f9`; ZIP SHA-256 was `108837b38a9f913740577b5ab0784c40022df20ea0e00930b56ba0b9bb145c41`. The old semantic/reuse paths are regression-tested, but locating and replaying those two actual historical archives remains an explicit handoff criterion, not a claimed current pass.
 
-Tests use synthetic local fixtures (never presented as acquired source data), local HTTP/gzip/Brotli/TLS servers, and injected transports/clocks. Set `TMPDIR` to an approved private scratch directory without symlink components before testing; a default macOS path through a symlink is intentionally rejected.
-
-```sh
-bun test --coverage --coverage-reporter=lcov --coverage-reporter=text
-bun run typecheck
-crapper --use-existing-coverage --threshold 10 src
-dryer --threshold 0.8 src
-```
-
-Prior implementation evidence (not a fresh run of the fixes): 31 tests passed, 0 failed; typecheck passed; every measured new-source function had CRAP below 10 (maximum 9). Bun's aggregate coverage includes imported sibling collectors and excludes subprocess CLI coverage; it is not a blanket coverage claim for those existing clients. Dryer reported one score-0.80 SQL lookup-shape candidate (`latestCollection` vs `budget`); newest successful collection selection and run request/byte aggregation are semantically different typed SQL queries, not duplicated policy. No generic wrapper was extracted to game similarity. Prior mutation testing in a private repository-layout mirror killed all 95 sites in `cooldown.ts` and `geometry.ts`, with 0 survivors/uncovered, after an unchanged worker baseline passed. That prior result excludes the changed reader, reservation and history logic and is not a whole-program mutation score. Fresh independent recheck remains chief-owned and outstanding.
-
-Narrow-fix evidence is offline/local only: repeated exact-original 37,549-byte site-data replays completed 200 acquisitions across ten subprocesses without retries, detached errors or status/hash/count disagreement. The crash regression actually exits a child after a 4MB partial, verifies its dead PID before clearing only its owned stale lock, and resumes with the full 5MB reservation still charged. Corruption tests reject missing/mismatched version history without HTTP or silent repair. The fix suite passed 40 tests and typecheck; fresh CRAP remained below 10 (maximum 9), and Dryer found no current candidates at 0.8. Targeted mutation testing executed and killed 20 selected sites across reader lifecycle, verification, output paths and byte reservations/history, with zero survivors/uncovered in that selection, after an unchanged worker baseline passed; this is not all 111 potential sites in those files or whole-program mutation coverage. Source acquisition remains frozen; none of these checks completes the live TNR catalog search.
+Run tests with a private external TMPDIR and an OS outbound-network denial boundary that permits localhost fixtures. Keep coverage/metrics/mutation workers outside every checkout, in a private repository-layout mirror. Frozen offline installation succeeded; all changed files remain local and unstaged. Full-suite/typecheck, scoped mutation/CRAP/dryer receipts and residual classifications accompany the handoff. Independent review and acceptance remain chief-owned.
