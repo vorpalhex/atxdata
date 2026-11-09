@@ -62,6 +62,6 @@ test('distinct transport instances pace from completed body, not response header
   const rows=e.db.query<{started:number;ended:number},[]>('SELECT started,ended FROM attempts ORDER BY rowid').all();
   expect(rows.map(r=>r.started)).toEqual(starts);
   expect(rows.map(r=>r.ended)).toEqual(completions);
-  expect(e.db.query<{not_before:number},[]>('SELECT not_before FROM cooldowns').get()!.not_before).toBe(now+2000);
+  expect(e.db.query<{not_before:number},[]>('SELECT not_before FROM cooldowns').get()!.not_before).toBe(now+3000);
  }finally{await e.close();await rm(root,{recursive:true,force:true});}
 });

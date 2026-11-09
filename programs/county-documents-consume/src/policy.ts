@@ -42,15 +42,19 @@ function disallowed(value:string,path:string):boolean {
  return new RegExp(pattern).test(path);
 }
 /** Conservative union of groups; no cookies, forms or asset crawling. */
+export class RobotsDisallow extends Error {
+ constructor(readonly rule:string,readonly delay:number) {super("robots disallows selected URL");}
+}
 export function robotsPolicy(body:string,path:string):number {
- let delay=2000;
+ let delay=2000,matched:string|null=null;
  for(const line of body.split(/\r?\n/)) {
   const match=/^\s*([^:#]+):\s*([^#]*)/.exec(line);
   if(!match) continue;
   const key=match[1]!.trim().toLowerCase(),value=match[2]!.trim();
   if(key==="crawl-delay") delay=Math.max(delay,policyNumber(value)*1000);
   if(key==="request-rate") throw new Error("robots request-rate requires operator review");
-  if(key==="disallow" && disallowed(value,path)) throw new Error("robots disallows selected URL");
+  if(key==="disallow" && disallowed(value,path)) matched=value;
  }
+ if(matched!==null) throw new RobotsDisallow(matched,delay);
  return delay;
 }
