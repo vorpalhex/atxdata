@@ -31,6 +31,7 @@ export type Dependencies = {
   now: () => number;
   sleep: (ms: number) => Promise<void>;
   random: () => number;
+  clockDomain?: string;
 };
 async function digest(path: string) {
   const hash = createHash("sha256");
@@ -107,14 +108,19 @@ export class Archive {
     this.store.preflight();
     ensure(Number.isSafeInteger(ms) && ms >= 2000, "invalid spacing");
     this.spacingMs = Math.max(this.spacingMs, ms);
-    this.store.defer(this.deps.now() + this.spacingMs);
+    this.store.recordSpacing(this.spacingMs);
   }
   private constructor(
     readonly root: string,
     private release: () => Promise<void>,
     private deps: Dependencies,
   ) {
-    this.store = new Store(join(root, "state.sqlite"));
+    this.store = new Store(join(root, "state.sqlite"), {
+      now: deps.now,
+      domain: deps.clockDomain ?? "unix-epoch-ms",
+      spacingMs: limits.spacingMs,
+    });
+    this.spacingMs = this.store.minimumSpacing();
   }
   static async open(root: string, dependencies: Partial<Dependencies> = {}) {
     const repo = resolve(import.meta.dir, "../../..");
@@ -135,6 +141,9 @@ export class Archive {
         sleep: Bun.sleep,
         random: Math.random,
         ...dependencies,
+        clockDomain:
+          dependencies.clockDomain ??
+          (dependencies.now ? "injected-epoch-ms" : "unix-epoch-ms"),
       });
     } catch (error) {
       await release();
@@ -436,6 +445,7 @@ export class Archive {
       {
         ...this.deps,
         fetch: async (u, init) => {
+          this.store.dispatch(id, this.spacingMs);
           const response = await this.deps.fetch(u, init);
           status = response.status;
           headers = Object.fromEntries(response.headers);

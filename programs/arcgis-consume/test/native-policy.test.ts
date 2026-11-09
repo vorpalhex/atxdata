@@ -5,14 +5,14 @@ import { join, resolve } from "node:path";
 import { item, id } from "./support/selection-fixture";
 import { terms } from "../src/rules";
 
-test("native CLI rejects cooldown-only faults before collect/verify/sync and records no fixture calls or writes", async () => {
+test("native CLI rejects cooldown-only rollback/faults before collect/verify/sync and records no fixture calls or writes", async () => {
   const base = await mkdtemp(join(process.env.TMPDIR!, "native-policy-"));
   const preload = join(base, "fixture.ts"),
     calls = join(base, "calls.txt");
   await writeFile(calls, "");
   await writeFile(
     preload,
-    `import { appendFileSync } from 'node:fs';import { fixture } from ${JSON.stringify(resolve(import.meta.dir, "support/selection-fixture.ts"))};const f=fixture();Date.now=f.deps.now;Bun.sleep=f.deps.sleep;globalThis.fetch=async(u)=>{appendFileSync(${JSON.stringify(calls)},'request\\n');return f.deps.fetch(u);};`,
+    `import { appendFileSync } from 'node:fs';import { fixture } from ${JSON.stringify(resolve(import.meta.dir, "support/selection-fixture.ts"))};const f=fixture();Date.now=f.deps.now;Bun.sleep=f.deps.sleep;globalThis.fetch=async(u)=>{appendFileSync(${JSON.stringify(calls)},'request\\n');const response=await f.deps.fetch(u);response.headers.set('Retry-After','60');return response;};`,
   );
   const cli = resolve(import.meta.dir, "../src/cli.ts"),
     receipts = [];
@@ -28,7 +28,13 @@ test("native CLI rejects cooldown-only faults before collect/verify/sync and rec
     ]);
     return { stdout, stderr, exit };
   };
-  for (const value of ["broken", -1, Number.MAX_SAFE_INTEGER + 1, "deleted"]) {
+  for (const value of [
+    0,
+    "broken",
+    -1,
+    Number.MAX_SAFE_INTEGER + 1,
+    "deleted",
+  ]) {
     const root = join(base, String(receipts.length));
     const args = [
       "collect",
@@ -48,6 +54,10 @@ test("native CLI rejects cooldown-only faults before collect/verify/sync and rec
     const positive = await invoke(args);
     expect(positive.exit).toBe(0);
     expect(JSON.parse(positive.stdout).summary.records).toBe(13);
+    const positiveCalls = await readFile(calls, "utf8");
+    expect((await invoke(["verify", "--archive", root])).exit).toBe(0);
+    expect((await invoke(args)).exit).toBe(0);
+    expect(await readFile(calls, "utf8")).toBe(positiveCalls);
     const db = new Database(join(root, "state.sqlite"));
     if (value === "deleted") db.exec("DELETE FROM cooldown");
     else db.query("UPDATE cooldown SET not_before=?").run(value);
@@ -61,6 +71,7 @@ test("native CLI rejects cooldown-only faults before collect/verify/sync and rec
           "acquisition_options",
           "observations",
           "versions",
+          "timing_events",
         ].map((t) => db.query(`SELECT * FROM ${t}`).all()),
       );
     const before = snapshot(),

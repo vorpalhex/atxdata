@@ -48,7 +48,11 @@ test("collection lookup prefers a newer sync while retaining prior byte versions
   s.close();
 });
 test("SQLite preserves source identities, versions, attempts, cooldown and unfinished run status", () => {
-  const store = new Store(":memory:");
+  // Explicit controlled epoch-ms receipt time makes Retry-After5 =>9000.
+  const store = new Store(":memory:", {
+    now: () => 4000,
+    domain: "injected-epoch-ms",
+  });
   store.source("tnr", "title", "https://example.invalid/original");
   const run = store.start("tnr", "collect");
   const attempt = store.attempt(
