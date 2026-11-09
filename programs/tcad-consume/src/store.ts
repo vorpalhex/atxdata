@@ -1,4 +1,6 @@
 import {Database} from 'bun:sqlite';import {join,dirname,resolve} from 'node:path';import {open} from 'node:fs/promises';import {archiveLock,statFile,promote} from '../../civicclerk-consume/src/archive';import {archivePath} from '../../financial-transparency-consume/src/archive';import {input,sha256} from '../../financial-transparency-consume/src/files';import {ARCHIVE_HASH,LAYOUT_HASH,URLS,SELECTION,selected,readSelection} from './source';
+import {initializeLive,preflightLive} from './live';
+import {initializeMembers,importMember,verifyMembers,type MemberOptions} from './members';
 type Selection=Awaited<ReturnType<typeof readSelection>>;
 type Version={id:string;selection:string;archive_hash:string;layout_hash:string;archive_path:string;layout_path:string;sample_path:string;sample_hash:string;fields:string;members:string;header:Uint8Array;coverage:string;row_count:number;rejected:number;download:string};
 const SOURCES=[{id:'tcad-certified-2026-supp0',url:URLS.archive,label:'2026 Certified Appraisal Export (July)'},{id:'tcad-layout-legacy8.0.33',url:URLS.layout,label:'Export Layouts'}];
@@ -13,7 +15,7 @@ const SCHEMA=`PRAGMA foreign_keys=ON;PRAGMA synchronous=FULL;PRAGMA journal_mode
 export class Store{
  readonly db:Database;private active=false;
  private constructor(readonly root:string,private release:()=>Promise<void>){
-  this.db=new Database(join(root,'state.sqlite'),{strict:true});this.db.exec(SCHEMA);
+  this.db=new Database(join(root,'state.sqlite'),{strict:true});try{preflightLive(this.db);}catch(e){this.db.close();throw e;}this.db.exec(SCHEMA);initializeMembers(this.db);initializeLive(this.db);this.db.query("UPDATE member_versions SET status='interrupted',error='writer ended before completion' WHERE status='importing'").run();
   const existing=this.db.query('SELECT * FROM sources ORDER BY id').all();if(existing.length&&JSON.stringify(existing)!==JSON.stringify(SOURCES)){this.db.close();throw new Error('TCAD source identity');}
   for(const s of SOURCES){this.db.query('INSERT OR IGNORE INTO sources VALUES(?,?,?)').run(s.id,s.url,s.label);this.db.query('INSERT OR IGNORE INTO cooldown VALUES(?,0)').run(s.id);}
   this.db.query("UPDATE runs SET status='interrupted',error='writer ended before checkpoint' WHERE status='running'").run();
@@ -22,10 +24,12 @@ export class Store{
   for(let p=resolve(root);p!==dirname(p);p=dirname(p))if(await statFile(join(p,'.git')))throw new Error('runtime outside checkout required');
   const release=await archiveLock(root);try{archivePath(root);for(const n of ['state.sqlite','state.sqlite-journal','state.sqlite-wal','state.sqlite-shm'])await statFile(join(root,n));return new Store(root,release);}catch(e){await release();throw e;}
  }
+ async importMember(options:MemberOptions){if(this.active)throw new Error('one operation at a time');this.active=true;try{return await importMember(this.db,options);}finally{this.active=false;}}
+ async verifyMembers(){return verifyMembers(this.db);}
  async close(){this.db.close();await this.release();}
  status(){return {versions:(this.db.query('SELECT count(*) n FROM versions').get() as {n:number}).n,rows:(this.db.query('SELECT count(*) n FROM property_rows').get() as {n:number}).n,failed:(this.db.query("SELECT count(*) n FROM runs WHERE status IN ('failed','interrupted')").get() as {n:number}).n,httpRequests:0};}
  async import(archive:string,layout:string,selection:string,rows:number){
-  selected(selection,rows);if(this.active)throw new Error('one operation at a time');this.active=true;
+  preflightLive(this.db);selected(selection,rows);if(this.active)throw new Error('one operation at a time');this.active=true;
   const run=crypto.randomUUID();this.db.query("INSERT INTO runs VALUES(?,NULL,'running',?,NULL,NULL,?,?,0)").run(run,new Date().toISOString(),selection,JSON.stringify({rows:25,compressed:671088640,total:21474836480,member:10737418240}));
   try{
    const x=await readSelection(archive,layout,selection,rows),id=sha256(Buffer.from(ARCHIVE_HASH+':'+LAYOUT_HASH+':'+SELECTION));
@@ -35,8 +39,9 @@ export class Store{
    return {version:id,rows:25,rejected:x.rows.filter(r=>r.reason!==null).length,reused:false,coverage:x.coverage};
   }catch(e){this.finish(run,'failed',null,e);throw e;}finally{this.active=false;}
  }
- finish(run:string,status:string,version:string|null,error:unknown=null){this.db.query('UPDATE runs SET status=?,version=?,finished_at=?,error=? WHERE id=?').run(status,version,new Date().toISOString(),error===null?null:String(error),run);}
+ finish(run:string,status:string,version:string|null,error:unknown=null){preflightLive(this.db);this.db.query('UPDATE runs SET status=?,version=?,finished_at=?,error=? WHERE id=?').run(status,version,new Date().toISOString(),error===null?null:String(error),run);}
  async checkpoint(raw:Buffer){
+  preflightLive(this.db);
   const hash=sha256(raw),prior=this.db.query<{id:string;path:string},[string]>("SELECT id,path FROM downloads WHERE hash=? AND status='checkpointed' ORDER BY rowid DESC LIMIT 1").get(hash);
   if(prior){
    this.filename(prior.path);const final=await statFile(join(this.root,prior.path)),pending=await statFile(join(this.root,prior.path)+'.pending');if(!!final===!!pending)throw new Error('checkpoint requires exactly one artifact; operator recovery');
@@ -79,6 +84,7 @@ export class Store{
 
  }
  async verify(){
+  preflightLive(this.db);
   if((this.db.query('PRAGMA integrity_check').get() as {integrity_check:string}).integrity_check!=='ok'||this.db.query('PRAGMA foreign_key_check').all().length)throw new Error('SQLite integrity');
   if(JSON.stringify(this.db.query('SELECT * FROM sources ORDER BY id').all())!==JSON.stringify(SOURCES))throw new Error('source identity');
   const versions=this.db.query<Version,[]>('SELECT * FROM versions').all();for(const v of versions)await this.verifyVersion(v);return {versions:versions.length,rows:versions.length*25,httpRequests:0};

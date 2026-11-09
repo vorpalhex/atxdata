@@ -1,4 +1,5 @@
 import {Store} from './store';import {SELECTION,ARCHIVE_HASH,selected} from './source';import {withZip,inventory,serialized,integrity,digest,LIMITS} from './archive';
+import {generalCommand,runGeneral} from './general-cli';
 const OPTIONS:Record<string,string[]>={list:[],import:['--archive','--layout','--selection','--rows','--output'],inventory:['--archive','--selection'],integrity:['--archive','--selection','--max-expanded','--max-seconds'],status:['--output'],verify:['--output']};
 function options(command:string,args:string[]){
  const supported=OPTIONS[command];if(!supported)throw new Error('offline commands: list | inventory | import | status | verify | integrity');const values=new Map<string,string>();
@@ -10,11 +11,13 @@ async function inspect(command:string,v:Map<string,string>){
  return withZip(archive,LIMITS.compressed,async zip=>{const members=await inventory(zip);if(command==='inventory')return {members:serialized(members),coverage:'metadata only; CRC/row quality not established',httpRequests:0};return {...await integrity(zip,members,Number(v.get('--max-expanded')),Number(v.get('--max-seconds'))),httpRequests:0};});
 }
 export async function run(args:string[]){
- const [command,...rest]=args;if(!command)throw new Error('offline command required');const v=options(command,rest);
+ const [command,...rest]=args;if(!command)throw new Error('command required');if(generalCommand(command))return runGeneral(command,rest);const v=options(command,rest);
  if(command==='list')return {selection:SELECTION,rows:25,network:false,coverage:'partial first25 Property records'};
  if(['inventory','integrity'].includes(command))return inspect(command,v);
  if(command==='import')selected(v.get('--selection')!,Number(v.get('--rows')));
  const store=await Store.open(v.get('--output')!);
  try{if(command==='status')return store.status();if(command==='verify')return await store.verify();return await store.import(v.get('--archive')!,v.get('--layout')!,v.get('--selection')!,Number(v.get('--rows')));}finally{await store.close();}
 }
-if(import.meta.main)run(process.argv.slice(2)).then(value=>console.log(JSON.stringify(value)),e=>{console.error(String(e));process.exitCode=1;});
+import {writeSync} from 'node:fs';
+async function emit(value:unknown){const data=Buffer.from(JSON.stringify(value)+'\n');let offset=0;const deadline=Date.now()+10000;while(offset<data.length){try{offset+=writeSync(1,data,offset,Math.min(16384,data.length-offset));}catch(e){if((e as NodeJS.ErrnoException).code!=='EAGAIN'||Date.now()>deadline)throw e;await new Promise(r=>setTimeout(r,1));}}}
+if(import.meta.main)run(process.argv.slice(2)).then(emit,e=>{console.error(String(e));process.exitCode=1;});
