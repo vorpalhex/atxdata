@@ -1,11 +1,8 @@
+import { acquisitionHelp, runAcquisitionCli } from "./acquisition-cli";
 import { parseArgs } from "node:util";
 import { importCsv } from "./importer";
 import { verifyArchive } from "./verify";
-import { positiveInteger } from "./model";
-function integer(value: string): number {
-  if (!/^[1-9]\d*$/.test(value)) throw new Error("invalid_integer");
-  return positiveInteger(Number(value));
-}
+import { decimalInteger as integer } from "./model";
 type Values = Partial<
   Record<"file" | "output" | "fiscal-year" | "max-bytes" | "max-rows", string>
 >;
@@ -78,7 +75,8 @@ export function runCli(
 ): number {
   if (args.length === 1 && args[0] === "--help") {
     write(
-      "Offline fiscal-year CSV importer. Browser download is separate.\nimport --file CSV --fiscal-year YEAR --output PRIVATE_ARCHIVE [--max-bytes N] [--max-rows N]\nverify --output PRIVATE_ARCHIVE\nstatus --output PRIVATE_ARCHIVE\nImport exits: 0 clean/reused clean; 2 imported_with_rejections (also reused); 1 failure. Verify/status: 0 locally verified, 1 failure. No financial census completeness claim. seed/collect are unsupported.",
+      "Fiscal-year CSV importer and acquisition companion. Browser download is separate optional input.\nimport --file CSV --fiscal-year YEAR --output PRIVATE_ARCHIVE [--max-bytes N] [--max-rows N]\nverify --output PRIVATE_ARCHIVE\nstatus --output PRIVATE_ARCHIVE\nImport exits: 0 clean/reused clean; 2 imported_with_rejections (also reused); 1 failure. Verify/status: 0 locally verified, 1 failure. Native collect also exits 3 unavailable, 4 unsupported. No financial census completeness claim. seed is unsupported.\n" +
+        acquisitionHelp,
     );
     return 0;
   }
@@ -91,4 +89,14 @@ export function runCli(
     return 1;
   }
 }
-if (import.meta.main) process.exitCode = runCli(process.argv.slice(2));
+if (import.meta.main) {
+  const args = process.argv.slice(2);
+  process.exitCode = [
+    "discover",
+    "collect",
+    "acquire",
+    "verify-source",
+  ].includes(args[0])
+    ? await runAcquisitionCli(args)
+    : runCli(args);
+}
