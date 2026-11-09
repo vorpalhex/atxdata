@@ -22,7 +22,7 @@ let now=10000;const c=await Collector.open(root,{now:()=>now,sleep:async ms=>{no
 c.deps.fetch=(url,init)=>{assert.equal(init.redirect,'manual');assert.equal(init.credentials,'omit');return native(new URL(new URL(url).pathname,server.url).href,init);};
 let summary:unknown;
 try{
- if(failure){await assert.rejects(collect(c,'delinquency',1,true),/HTTP 503/);assert.equal(calls,4);assert.deepEqual(c.status(),{complete:0,failed:1,cooldown:now+2000});}
+ if(failure){await assert.rejects(collect(c,'delinquency',1,true),/HTTP 503/);assert.equal(calls,4);assert.deepEqual(c.status(),{complete:0,failed:1,cooldown:now+3000});}
  else{const result=await collect(c,'delinquency',1,true);assert.equal(result.rows,1);assert.equal(calls,5);assert.deepEqual(await c.verify(),{snapshots:1,rows:1,httpRequests:0});assert.deepEqual(paths,[...content.keys()]);}
  const attempts=c.db.query<any,[]>('SELECT * FROM attempts ORDER BY rowid').all();assert.equal(attempts.length,failure?4:5);
  for(const a of attempts){const expected=content.get(new URL(a.url).pathname)!;const actual=await readFile(join(root,a.path));const expectedBody=failure?csv:expected.body;assert.equal(hash(actual),hash(expectedBody));assert.equal(actual.length,expectedBody.length);assert.equal(a.http_status,failure?503:expected.status);assert.equal(a.status,failure?'failed':'validated');assert.equal(a.bytes,failure?CAPS.robots:actual.length);if(failure)assert.match(a.error,/HTTP 503/);else assert.equal(a.error,null);}

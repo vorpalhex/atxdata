@@ -1,5 +1,8 @@
 #!/usr/bin/env bun
 import { Command } from "commander";
+import { open, readFile } from "node:fs/promises";
+import { LegistarApiClient } from "./legistar/api-client";
+import { createHttpClient } from "./util/http";
 import { loadConfig } from "./config";
 import { backfill, ingestMeeting, listMeetings, retryFailed } from "./jobs/ingest";
 import { AppDatabase } from "./storage/db";
@@ -13,13 +16,40 @@ program
   .version("0.1.0");
 
 program
+  .command("list-meetings-page")
+  .requiredOption("--from <date>", "start date YYYY-MM-DD")
+  .requiredOption("--to <date>", "end date YYYY-MM-DD")
+  .requiredOption("--checkpoint <path>", "new private batch/checkpoint JSON output (never overwritten)")
+  .option("--resume <path>", "previous incomplete batch JSON")
+  .option("--body <name>", "meeting body name")
+  .option("--page-size <count>", "requested collection page size", parsePositiveInteger, 100)
+  .option("--max-pages <count>", "maximum requests this batch including terminal empty page", parsePositiveInteger, 100)
+  .action(async options => {
+    const prior = options.resume ? JSON.parse(await readFile(options.resume, "utf8")) : undefined;
+    if (options.resume !== undefined && (!prior || typeof prior !== "object" || Array.isArray(prior) || prior.complete !== false || !prior.continuation || typeof prior.continuation !== "object" || Array.isArray(prior.continuation))) throw new Error("invalid or completed checkpoint");
+    const config = loadConfig();
+    new LegistarApiClient(config, {} as ReturnType<typeof createHttpClient>).validateListing(options.from,options.to,options.body,{pageSize:options.pageSize,continuation:prior?.continuation});
+    const handle = await open(options.checkpoint, "wx", 0o600);
+    try {
+      const http = createHttpClient(config, {info:()=>{},warn:()=>{},error:()=>{}});
+      const result = await new LegistarApiClient(config,http).listEventsPage(options.from,options.to,options.body,{
+        maxPages:options.maxPages,pageSize:options.pageSize,continuation:prior?.continuation,
+      });
+      const json=JSON.stringify(result);
+      await handle.writeFile(json+"\n"); await handle.sync(); console.log(json);
+    } finally {await handle.close();}
+  });
+
+program
   .command("list-meetings")
   .requiredOption("--from <date>", "start date YYYY-MM-DD")
   .requiredOption("--to <date>", "end date YYYY-MM-DD")
   .option("--body <name>", "meeting body name")
+  .option("--max-pages <count>", "maximum listing requests", parsePositiveInteger)
+  .option("--page-size <count>", "listing page size", parsePositiveInteger)
   .action(async (options) => {
     const ctx = makeContext();
-    const meetings = await listMeetings(ctx, options.from, options.to, options.body);
+    const meetings = await listMeetings(ctx, options.from, options.to, options.body, options);
     for (const meeting of meetings) {
       console.log(
         JSON.stringify({
@@ -60,9 +90,11 @@ program
   .requiredOption("--from <date>", "start date YYYY-MM-DD")
   .requiredOption("--to <date>", "end date YYYY-MM-DD")
   .option("--body <name>", "meeting body name")
+  .option("--max-pages <count>", "maximum listing requests", parsePositiveInteger)
+  .option("--page-size <count>", "listing page size", parsePositiveInteger)
   .action(async (options) => {
     const ctx = makeContext();
-    const summary = await backfill(ctx, options.from, options.to, options.body);
+    const summary = await backfill(ctx, options.from, options.to, options.body, options);
     console.log(JSON.stringify({ event: "run.summary", ...summary }));
     process.exitCode = summary.status === "succeeded" ? 0 : 1;
   });

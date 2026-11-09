@@ -1,8 +1,12 @@
-import {open,readFile} from 'node:fs/promises';import {join} from 'node:path';
+import {open,readFile,stat} from 'node:fs/promises';import {join} from 'node:path';
 import {PoliteHttpClient} from '../../civicclerk-consume/src/http';
 import {promote} from '../../civicclerk-consume/src/archive';
-import {Collector} from './collector';import {CAPS,ROUTES,HOST,parseCsv,validatePdf} from './source';
+import {Collector} from './collector';import {CAPS,ROUTES,HOST,parseCsv,validatePdf,positive,csvRows} from './source';
+import {fileDigest} from './files';
+
+import {parseCatalog} from './catalog';
 type Kind=keyof typeof ROUTES;
+type TransferOptions={maxBytes?:number;maxRequests?:number;maxTotalBytes?:number;rawOnly?:boolean;fileOnly?:boolean};
 function retryDelay(h:Headers,base:number){
  const raw=h.get('retry-after');if(!raw)return 0;
  const ms=/^\d+(?:\.\d+)?$/.test(raw.trim())?Number(raw)*1000:Date.parse(raw)-base;
@@ -36,9 +40,9 @@ export function serverDelay(h:Headers,now:number){
  if(!Number.isSafeInteger(Math.ceil(delay))||delay>Number.MAX_SAFE_INTEGER-now)throw new Error('ambiguous cooldown overflow');return delay;
 }
 
-function defer(c:Collector,until:number){c.db.query('UPDATE cooldown SET not_before=max(not_before,?) WHERE id=1').run(until);}
-async function wait(c:Collector){let until=c.status().cooldown;if(until===Number.MAX_SAFE_INTEGER)throw new Error('ambiguous policy requires operator review');while(until>c.deps.now())await c.deps.sleep(Math.min(2147483647,until-c.deps.now()));}
-function setup(c:Collector){c.db.exec(`CREATE TABLE IF NOT EXISTS attempts(id TEXT PRIMARY KEY,run TEXT NOT NULL REFERENCES runs(id),kind TEXT NOT NULL,url TEXT NOT NULL,path TEXT NOT NULL,status TEXT NOT NULL,bytes INTEGER NOT NULL,http_status INTEGER,headers TEXT,started_at TEXT NOT NULL,finished_at TEXT,error TEXT)`);}
+function defer(c:Collector,until:number){c.cooldown();c.db.query('UPDATE cooldown SET not_before=max(not_before,?) WHERE id=1').run(until);}
+async function wait(c:Collector){let until=c.cooldown();if(until===Number.MAX_SAFE_INTEGER)throw new Error('ambiguous policy requires operator review');while(until>c.deps.now())await c.deps.sleep(Math.min(2147483647,until-c.deps.now()));}
+export function setup(c:Collector){c.db.exec(`CREATE TABLE IF NOT EXISTS attempts(id TEXT PRIMARY KEY,run TEXT NOT NULL REFERENCES runs(id),kind TEXT NOT NULL,url TEXT NOT NULL,path TEXT NOT NULL,status TEXT NOT NULL,bytes INTEGER NOT NULL,http_status INTEGER,headers TEXT,started_at TEXT NOT NULL,finished_at TEXT,error TEXT)`);}
 function declared(response:Response,cap:number){
  const length=response.headers.get('content-length');if(length!==null&&(!/^\d+$/.test(length)||Number(length)>cap))throw new Error('declared byte ceiling');
  if(response.headers.get('content-encoding')&&!/^identity$/i.test(response.headers.get('content-encoding')!))throw new Error('unsupported encoding');return length;
@@ -74,10 +78,10 @@ export async function streamBody(response:Response,path:string,cap:number){
  catch(error){failure={error};throw error;}
  finally{const errors=await releaseBody(reader,handle,state.ended);if(errors.length)throw cleanupFailure(failure,errors);}
 }
-async function consume(c:Collector,response:Response,path:string,cap:number){
+async function consume(c:Collector,response:Response,path:string,cap:number,fileOnly=false){
  const length=declared(response,cap),bytes=await streamBody(response,path,cap);
  if(length!==null&&Number(length)!==bytes)throw new Error('content length mismatch');
- await promote(path);return readFile(path);
+ await promote(path);return fileOnly?Buffer.alloc(0):readFile(path);
 }
 export function robotsRedirect(url:string,headers:Headers){
  const location=headers.get('location');if(!location||url!==ROUTES.robots)throw new Error('robots redirect requires review');
@@ -106,7 +110,7 @@ function validateRobotsLines(text:string){
 }
 function validatePolicy(kind:Kind,body:Buffer,response:Response){
  const text=body.toString();
- if(kind==='discovery'&&(!text.includes('/voterdata/TaxDelqOpenData.csv')||!text.includes('DelinquentFileLayout.php')||/captcha|access denied|sign in/i.test(text)))throw new Error('discovery gate/usage review');
+ if(kind==='discovery'&&(!text.includes('/voterdata/TaxDelqOpenData.csv')||!text.includes('DelinquentFileLayout.php')||/captcha|access denied|sign in/i.test(text))){try{parseCatalog(text);}catch(error){throw new Error('discovery gate/usage review',{cause:error});}}
 }
 
 function validate(kind:Kind,body:Buffer,response:Response,maxRows:number,url:string){
@@ -115,25 +119,31 @@ function validate(kind:Kind,body:Buffer,response:Response,maxRows:number,url:str
  validatePolicy(kind,body,response);
  if(kind==='csv')parseCsv(body,maxRows);if(kind==='layout')validatePdf(body);
 }
-async function transfer(c:Collector,http:PoliteHttpClient,id:string,path:string,kind:Kind,cap:number,maxRows:number,url:string){
+async function transfer(c:Collector,http:PoliteHttpClient,id:string,path:string,kind:Kind,cap:number,maxRows:number,url:string,options:TransferOptions){
  return http.request(url,async response=>{
    const status=response.status;c.db.query("UPDATE attempts SET status='receiving',http_status=?,headers=? WHERE id=?").run(status,JSON.stringify(Object.fromEntries(response.headers)),id);
    try{defer(c,c.deps.now()+serverDelay(response.headers,c.deps.now()));}catch(e){defer(c,Number.MAX_SAFE_INTEGER);throw e;}
-   const raw=await consume(c,response,join(c.root,path),cap);validate(kind,raw,response,maxRows,url);
-   c.db.query("UPDATE attempts SET status='validated',bytes=?,finished_at=? WHERE id=?").run(raw.length,c.stamp(),id);return {raw,headers:response.headers,status};
+   const file=join(c.root,path),raw=await consume(c,response,file,cap,options.fileOnly);
+   if(options.rawOnly){if(status!==200)throw new Error(`HTTP ${status}`);await validateRawDownload(file,url,response.headers);}else if(kind==='csv'&&options.fileOnly){if(status!==200)throw new Error(`HTTP ${status}`);for await(const row of csvRows(file,maxRows,cap)){} }else validate(kind,raw,response,maxRows,url);
+   const bytes=options.fileOnly?(await fileDigest(file,cap)).bytes:raw.length;
+   c.db.query("UPDATE attempts SET status='validated',bytes=?,finished_at=? WHERE id=?").run(bytes,c.stamp(),id);return {raw,file,bytes,headers:response.headers,status};
   });
+}
+async function validateRawDownload(path:string,url:string,headers:Headers){
+ if(!new URL(url).pathname.startsWith('/voterdata/'))return;
+ const file=await open(path,'r');try{const prefix=Buffer.alloc(4096),{bytesRead}=await file.read(prefix,0,prefix.length,0);if(/text\/html/i.test(headers.get('content-type')??'')||/^\s*(?:<!doctype\s+html|<html\b)/i.test(prefix.subarray(0,bytesRead).toString()))throw new Error('raw export HTML wrapper/access gate; receipt retained');}finally{await file.close();}
 }
 export function retryable(status:number|null,e:unknown){
  if(status!==null&&status!==200)return [408,409,425,429].includes(status)||(status>=500&&status<=599);
  const primary=e instanceof AggregateError?e.errors[0]:e;
  return primary instanceof TypeError||(primary instanceof DOMException&&primary.name==='TimeoutError');
 }
-function budget(c:Collector,run:string,kind:Kind){
+function budget(c:Collector,run:string,kind:Kind,options:TransferOptions){
  const used=c.db.query('SELECT count(*) n,coalesce(sum(bytes),0) bytes FROM attempts WHERE run=?').get(run) as {n:number;bytes:number};
- const cap=CAPS[kind];if(used.n>=CAPS.requests||used.bytes+cap>CAPS.total)throw new Error('run attempt/byte ceiling');return cap;
+ const cap=options.maxBytes??CAPS[kind];if(used.n>=(options.maxRequests??CAPS.requests)||used.bytes+cap>(options.maxTotalBytes??CAPS.total))throw new Error('run attempt/byte ceiling');return cap;
 }
-function allowance(c:Collector,run:string,kind:Kind,previous:{error:unknown}|undefined){
- try{return budget(c,run,kind);}catch(error){
+function allowance(c:Collector,run:string,kind:Kind,previous:{error:unknown}|undefined,options:TransferOptions){
+ try{return budget(c,run,kind,options);}catch(error){
   if(!previous)throw error;
   throw new Error(`${String(error)}; previous transfer failed: ${String(previous.error)}`,{cause:previous.error});
  }
@@ -148,38 +158,48 @@ function errorReceipt(error:unknown,seen=new Set<unknown>()):string{
  if(error.cause!==undefined)details.push(errorReceipt(error.cause,seen));
  return details.join('\nCleanup/primary: ');
 }
-async function acquire(c:Collector,http:PoliteHttpClient,run:string,kind:Kind,maxRows:number,url:string=ROUTES[kind]){
+export async function acquire(c:Collector,http:PoliteHttpClient,run:string,kind:Kind,maxRows:number,url:string=ROUTES[kind],options:TransferOptions={}){
  let previous:{error:unknown}|undefined;
  for(let n=0;n<4;n++){
-  const cap=allowance(c,run,kind,previous);await wait(c);
-  const id=crypto.randomUUID(),path=id+'.attempt';
+  const cap=allowance(c,run,kind,previous,options);await wait(c);
+  c.cooldown();const id=crypto.randomUUID(),path=id+'.attempt';
   // Durable conservative reservation: a killed process never forgets bytes.
   c.db.query("INSERT INTO attempts VALUES(?,?,?,?,?,'requesting',?,NULL,NULL,?,NULL,NULL)").run(id,run,kind,url,path,cap,c.stamp());
-  try{return await transfer(c,http,id,path,kind,cap,maxRows,url);}catch(e){
+  try{return await transfer(c,http,id,path,kind,cap,maxRows,url,options);}catch(e){
    previous={error:e};c.db.query("UPDATE attempts SET status='failed',finished_at=?,error=? WHERE id=?").run(c.stamp(),errorReceipt(e),id);
    const {http_status:status}=c.db.query<{http_status:number|null},[string]>('SELECT http_status FROM attempts WHERE id=?').get(id)!;
    if(!retryable(status,e)||n===3)throw e;defer(c,c.deps.now()+Math.max(2000,500*2**n+c.deps.random()*250));
-  }finally{defer(c,c.deps.now()+2000);}
+  }finally{defer(c,c.deps.now()+3000);}
  }
  throw new Error('attempt ceiling');
 }
-function selectionBound(selection:string,maxRows:number){if(selection!=='delinquency'||!Number.isSafeInteger(maxRows)||maxRows<1||maxRows>CAPS.rows)throw new Error('explicit delinquency and row bound required');}
-export async function collect(c:Collector,selection:string,maxRows:number,refresh:boolean){
+function selectionBound(selection:string,maxRows:number){if(selection!=='delinquency'||!Number.isSafeInteger(maxRows)||maxRows<1)throw new Error('explicit delinquency and row bound required');}
+export function transport(c:Collector){
+ const statuses=new WeakMap<Response,number>();
+ const http=new PoliteHttpClient({maxRetries:0,minIntervalMs:3000,timeoutMs:60000,userAgent:'atxdata-tax-office/0.1'},{...c.deps,fetch:async(url,init)=>{
+  const original=await c.deps.fetch(url,{...init,credentials:'omit',referrerPolicy:'no-referrer'});const envelope=new Response(original.body,{status:200,headers:original.headers});statuses.set(envelope,original.status);return envelope;
+ }});
+ const request=http.request.bind(http);http.request=(url,fn)=>request(url,r=>fn(new Response(r.body,{status:statuses.get(r)??200,headers:r.headers})));return http;
+}
+async function semanticCache(c:Collector,maxRows:number,maxBytes:number){
+ const s=c.db.query<{id:string;row_count:number},[]>("SELECT id,row_count FROM snapshots WHERE status='complete' AND source='tax-office/delinquency' AND selection='delinquency' ORDER BY rowid DESC LIMIT 1").get();
+ if(!s)return null;if(s.row_count>maxRows)throw new Error('row ceiling');await c.verify();
+ const csv=c.db.query<{path:string},[string]>("SELECT path FROM artifacts WHERE snapshot=? AND kind='csv' AND status='validated'").get(s.id)!;
+ if((await stat(join(c.root,csv.path))).size>maxBytes)throw new Error('byte ceiling');return {snapshot:s.id,rows:s.row_count,reused:true};
+}
+export async function collect(c:Collector,selection:string,maxRows:number,refresh:boolean,options:{maxBytes?:number;maxRequests?:number;maxTotalBytes?:number}={}){
  return c.exclusive(async()=>{
   selectionBound(selection,maxRows);
-  if(!refresh){const s=c.db.query<{id:string;row_count:number},[]>('SELECT id,row_count FROM snapshots WHERE status=\'complete\' ORDER BY rowid DESC LIMIT 1').get();if(s){if(s.row_count>maxRows)throw new Error('row ceiling');await c.verify();return {snapshot:s.id,rows:s.row_count,reused:true};}}
-  setup(c);const {id,run}=c.start(selection,maxRows,'live',refresh);
-  const statuses=new WeakMap<Response,number>();
-  const http=new PoliteHttpClient({maxRetries:0,minIntervalMs:2000,timeoutMs:60000,userAgent:'atxdata-tax-office/0.1'},{...c.deps,fetch:async(url,init)=>{
-   const original=await c.deps.fetch(url,{...init,credentials:'omit',referrerPolicy:'no-referrer'});const envelope=new Response(original.body,{status:200,headers:original.headers});statuses.set(envelope,original.status);return envelope;
-  }});
-  // An envelope allows retaining real error bodies without changing shared HTTP.
-  const request=http.request.bind(http);http.request=(url,fn)=>request(url,r=>fn(new Response(r.body,{status:statuses.get(r)??200,headers:r.headers})));
+  for(const value of Object.values(options))if(value!==undefined)positive(value,'work budget');
+  if(!refresh){const cached=await semanticCache(c,maxRows,options.maxBytes??CAPS.csv);if(cached)return cached;}
+  setup(c);const {id,run}=c.start(selection,maxRows,'live',refresh,options.maxBytes,options);
+  const http=transport(c),work={maxRequests:options.maxRequests,maxTotalBytes:options.maxTotalBytes};
   try{
-   const robots=await acquire(c,http,run,'robots',maxRows);
-   if(robots.status===302)await acquire(c,http,run,'robots',maxRows,robotsRedirect(ROUTES.robots,robots.headers));
-   await acquire(c,http,run,'discovery',maxRows);
-   for(const kind of ['csv','layout'] as const){const a=await acquire(c,http,run,kind,maxRows);await c.retain(id,run,kind,a.raw,{headers:a.headers,status:a.status});}
+   const robots=await acquire(c,http,run,'robots',maxRows,ROUTES.robots,work);
+   if(robots.status===302)await acquire(c,http,run,'robots',maxRows,robotsRedirect(ROUTES.robots,robots.headers),work);
+   await acquire(c,http,run,'discovery',maxRows,ROUTES.discovery,work);
+   const csv=await acquire(c,http,run,'csv',maxRows,ROUTES.csv,{...work,maxBytes:options.maxBytes,fileOnly:true});await c.retainCsv(id,run,csv.file,options.maxBytes??CAPS.csv,{headers:csv.headers,status:csv.status});
+   const layout=await acquire(c,http,run,'layout',maxRows,ROUTES.layout,work);await c.retain(id,run,'layout',layout.raw,{headers:layout.headers,status:layout.status});
    return await c.checkpoint(id,run,maxRows);
   }catch(e){c.finish(run,'failed',e);throw e;}
  });

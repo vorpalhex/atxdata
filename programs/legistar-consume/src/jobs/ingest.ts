@@ -1,7 +1,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { AppConfig } from "../config";
-import { LegistarApiClient, normalizeItem } from "../legistar/api-client";
+import { LegistarApiClient, normalizeItem, type EventListingOptions } from "../legistar/api-client";
 import { dedupeManifest } from "../ingest/manifest";
 import { downloadManifest } from "../ingest/downloader";
 import { AppDatabase } from "../storage/db";
@@ -23,9 +23,9 @@ export type IngestMeetingOptions = {
   concurrency?: number;
 };
 
-export async function listMeetings(ctx: AppContext, from: string, to: string, body?: string): Promise<NormalizedMeeting[]> {
+export async function listMeetings(ctx: AppContext, from: string, to: string, body?: string, options: EventListingOptions = {}): Promise<NormalizedMeeting[]> {
   const api = new LegistarApiClient(ctx.config, createHttpClient(ctx.config, quietLogger));
-  return await api.listEvents(from, to, body);
+  return await api.listEvents(from, to, body, options);
 }
 
 const quietLogger: Logger = {
@@ -98,9 +98,9 @@ function applyDownloadResult(summary: RunSummary, manifest: DocumentManifestEntr
   summary.status = result.failed.some((failure) => requiredUrls.has(failure.url)) ? "failed" : "succeeded";
 }
 
-export async function backfill(ctx: AppContext, from: string, to: string, body?: string): Promise<RunSummary> {
+export async function backfill(ctx: AppContext, from: string, to: string, body?: string, options: EventListingOptions = {}): Promise<RunSummary> {
   return runJob(ctx, "backfill", ctx.config.documentStorePath, async ({ summary, logger, api }) => {
-    const meetings = await api.listEvents(from, to, body);
+    const meetings = await api.listEvents(from, to, body, options);
     summary.meetingsDiscovered = meetings.length;
     logger.info("backfill.discovered", { from, to, body, meetings: meetings.length });
     for (const meeting of meetings) {

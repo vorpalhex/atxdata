@@ -8,7 +8,11 @@ import { backfill, ingestMeeting, listMeetings, retryFailed } from "../../src/jo
 
 async function fixture(run: (ctx: { config: AppConfig; db: AppDatabase }, origin: string) => Promise<void>, route: (path: string, origin: string) => Response = () => Response.json([])) {
   const root = makeTestDirectory("legistar-jobs-");
-  const server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: (request) => route(new URL(request.url).pathname, new URL(request.url).origin) });
+  const server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: (request) => {
+    const url=new URL(request.url);
+    if (url.pathname.endsWith("/Events") && Number(url.searchParams.get("$skip") ?? 0)>0) return Response.json([]);
+    return route(url.pathname,url.origin);
+  } });
   const origin = `http://127.0.0.1:${server.port}`;
   const config: AppConfig = { legistarClient: "test", apiBase: origin, portalBase: origin,
     databasePath: join(root, "db.sqlite"), documentStorePath: join(root, "documents"), runsPath: join(root, "runs"),
@@ -27,7 +31,7 @@ test("date lookup, listing and metadata persistence use the same normalized fiel
     expect(result.status).toBe("succeeded");
     expect(result.meetingsDiscovered).toBe(1);
     expect(result.meetingsProcessed).toBe(1);
-    expect(ctx.db.db.query("SELECT * FROM meeting_items").get()).toEqual({ event_item_id: 2, event_item_guid: "", event_id: 1, agenda_sequence: 0, minutes_sequence: 0, agenda_number: "", title: "", matter_id: 0, matter_guid: "", matter_file: "", matter_name: "", matter_type: "", matter_status: "" });
+    expect(ctx.db.db.query("SELECT * FROM meeting_items").get()).toEqual({ agenda_note: null, minutes_note: null, event_item_id: 2, event_item_guid: "", event_id: 1, agenda_sequence: 0, minutes_sequence: 0, agenda_number: "", title: "", matter_id: 0, matter_guid: "", matter_file: "", matter_name: "", matter_type: "", matter_status: "" });
   }, (path) => {
     const event = { EventId: 1, EventBodyName: " City Council ", EventDate: "2026-01-01" };
     if (path.endsWith("EventItems")) return Response.json([{ EventItemId: 2, EventItemEventId: 1, EventItemGuid: "", EventItemAgendaSequence: 0, EventItemMinutesSequence: 0, EventItemAgendaNumber: "", EventItemTitle: "", EventItemMatterId: 0, EventItemMatterGuid: "", EventItemMatterFile: "", EventItemMatterName: "", EventItemMatterType: "", EventItemMatterStatus: "" }]);

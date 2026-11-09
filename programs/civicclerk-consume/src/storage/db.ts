@@ -64,8 +64,9 @@ export class CivicDatabase {
     this.db.query("INSERT INTO event_snapshots VALUES (?,?,?,?,?) ON CONFLICT(tenant,event_id,sha256) DO UPDATE SET observed_at=excluded.observed_at").run(this.tenant, event.id, hash, new Date().toISOString(), metadata);
   }
   cachedEvent(id: number): CivicEvent {
-    const row = this.db.query<{ metadata: string }, [string, number]>("SELECT metadata FROM event_snapshots WHERE tenant=? AND event_id=? ORDER BY observed_at DESC, rowid DESC LIMIT 1").get(this.tenant, id);
+    const row = this.db.query<{ metadata: string; sha256: string }, [string, number]>("SELECT metadata,sha256 FROM event_snapshots WHERE tenant=? AND event_id=? ORDER BY observed_at DESC, rowid DESC LIMIT 1").get(this.tenant, id);
     if (!row) throw new Error("offline event missing");
+    if (createHash("sha256").update(row.metadata).digest("hex") !== row.sha256) throw new Error("snapshot metadata checksum mismatch");
     return JSON.parse(row.metadata);
   }
   upsertMeeting(event: CivicEvent): void {

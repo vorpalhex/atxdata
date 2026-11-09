@@ -2,6 +2,8 @@
 
 Bun CLI job system for downloading public Austin Legistar meeting documents to local disk.
 
+Resume integrity: an explicitly supplied resume must be a non-null, non-array JSON object with complete=false and a valid source/query/page-size/offset/ID continuation. Invalid state is rejected before reserving output or creating HTTP transport. Outputs remain exclusive private synced direct writes, not atomic publication.
+
 The app currently uses the unauthenticated Legistar API client key `austintexas`, writes metadata to SQLite, writes documents to a human-readable folder layout, and emits JSON logs suitable for cron.
 
 ## Requirements
@@ -64,6 +66,32 @@ Run checks:
 ```bash
 just verify
 ```
+
+## Collection contract and bounded continuation
+
+The authoritative Events documentation describes “Gets all Events” and a bare JSON array, not a `value`/`@odata.nextLink` envelope.[1] EventItems documentation exposes `AgendaNote`, `MinutesNote` and `Attachments` selectors.[2] A bounded contract check observed two one-record Events responses: `$top=1` ordered by EventId, then the same query with `$skip=1`, returned distinct EventIds 1068 and 1069.[3][4] This proves those query controls for that tiny observation, not a default server cap or a previously demonstrated live truncation defect. No public PDF or broad event history was acquired for this repair.
+
+Event selection still accepts arbitrary date ranges, body names and event IDs. `listEvents(from,to,body?,{maxPages?,pageSize?})` preserves its array return, now fetching serial pages in stable EventId order and returning complete results or an explicit incomplete-range error. Defaults are 100 requests and requested page size 100; both are caller controls, not hard maximums. Returned arrays are date-sorted as before (missing legacy dates retain relative ordering). The shipped `list-meetings` and `backfill` commands accept `--max-pages N --page-size N`. Backfill does not start document acquisition after incomplete discovery.
+
+A short page does NOT imply completion: a server may cap `$top`. The collector advances `$skip` by the actual raw row count, filters bodies only after advancing, and requires a terminal empty array before declaring the range complete. Ignored offsets/repeated IDs, malformed/oversized pages, out-of-range dated events and invalid budgets reject rather than silently truncate. A successful response is still a mutable source observation: deletions/insertions between offset pages can shift the collection, and the API supplies no snapshot/completeness count here. Reconcile/restart the explicit range when source changes matter.
+
+For finite work across processes, use the new page API `listEventsPage(from,to,body?,{maxPages,pageSize,continuation})`, or the shipped CLI:
+
+```sh
+bun run src/cli.ts list-meetings-page --from "$FROM" --to "$TO" --max-pages "$PAGE_BUDGET" --page-size "$PAGE_SIZE" --checkpoint "$PRIVATE_OUTPUT/batch-1.json"
+bun run src/cli.ts list-meetings-page --from "$FROM" --to "$TO" --max-pages "$PAGE_BUDGET" --page-size "$PAGE_SIZE" --resume "$PRIVATE_OUTPUT/batch-1.json" --checkpoint "$PRIVATE_OUTPUT/batch-2.json"
+```
+
+Batch JSON contains `meetings`, `complete`, and only when incomplete a `continuation`; combine meetings from each batch. Checkpoints bind the exact tenant/range/body/page-size and cumulative unique ID history; URLs are reconstructed locally, not accepted from a checkpoint. New checkpoint paths are exclusively created private files, synced and never overwritten. Preserve failed batch outputs and retry from the last valid batch into a different file. Each batch holds only bounded meeting bodies, plus cumulative ID history for duplicate detection. Legacy complete-array callers retain the full selected range in memory. Local authored fixtures cover a server cap smaller than `$top`, explicit incomplete work and native CLI process continuation. These are not claims of live multi-page completeness.
+
+Requested agenda/minutes notes are retained, including empty strings and source markup, in optional normalized `agendaNote`/`minutesNote` fields and additive `meeting_items.agenda_note`/`minutes_note` columns. Existing databases migrate without deleting original rows or changing document/checkpoint identities. Note HTML is data, not rendered or executed. Vote and media ingestion are not implemented; documented fields/endpoints alone do not establish downloadable content.
+
+Sources:
+
+[1] https://webapi.legistar.com/Help/Api/GET-v1-Client-Events
+[2] https://webapi.legistar.com/Help/Api/GET-v1-Client-Events-EventId-EventItems_AgendaNote_MinutesNote_Attachments
+[3] https://webapi.legistar.com/v1/austintexas/events?$top=1&$orderby=EventId%20asc&$select=EventId,EventDate
+[4] https://webapi.legistar.com/v1/austintexas/events?$top=1&$skip=1&$orderby=EventId%20asc&$select=EventId,EventDate
 
 ## Cron
 

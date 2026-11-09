@@ -1,4 +1,8 @@
 import {parse} from 'csv-parse/sync';
+import {parse as streamingParser} from 'csv-parse';
+import {constants} from 'node:fs';
+import {open} from 'node:fs/promises';
+import {pipeline} from 'node:stream/promises';
 export const HOST='https://tax-office.traviscountytx.gov';
 export const ROUTES={robots:HOST+'/robots.txt',discovery:HOST+'/pages/property.php',csv:HOST+'/voterdata/TaxDelqOpenData.csv',layout:HOST+'/pages/DelinquentFileLayout.php'};
 export const CAPS={csv:4*1024**2,layout:2*1024**2,discovery:2*1024**2,robots:2*1024**2,requests:8,rows:50000,total:16*1024**2};
@@ -7,15 +11,16 @@ export function cents(s:string):bigint {
  if(!/^-?\d+(?:\.\d{1,2})?$/.test(s))throw new Error('decimal money');
  const [whole,frac='']=s.replace(/^-/,'').split('.');return (BigInt(whole!)*100n+BigInt(frac.padEnd(2,'0')))*(s.startsWith('-')?-1n:1n);
 }
-export function parseCsv(raw:Buffer,maxRows:number){
- if(!Number.isSafeInteger(maxRows)||maxRows<1||maxRows>CAPS.rows)throw new Error('row ceiling');
- if(raw.length>CAPS.csv)throw new Error('CSV byte ceiling');
+export function positive(value:number,label:string){if(!Number.isSafeInteger(value)||value<1)throw new Error(label+' ceiling');return value;}
+export function parseCsv(raw:Buffer,maxRows:number,maxBytes=CAPS.csv){
+ positive(maxRows,'row');positive(maxBytes,'byte');
+ if(raw.length>maxBytes)throw new Error('CSV byte ceiling');
  const records=parse(new TextDecoder('utf-8',{fatal:true}).decode(raw)) as string[][];
  if(JSON.stringify(records.shift())!==JSON.stringify(HEADER))throw new Error('header mismatch');
  if(!records.length||records.length>maxRows)throw new Error('row ceiling');
  return records.map(parseRow);
 }
-function parseRow(fields:string[],i:number){
+export function parseRow(fields:string[],i:number){
  if(fields.length!==31)throw new Error('row width');
  if(!/^\d{14}$/.test(fields[0]!))throw new Error('account ID');
  validateBalances(fields);validateYears(fields);
@@ -38,6 +43,16 @@ export function validatePdf(raw:Buffer){
  const extracted=Bun.spawnSync(['pdftotext','-layout','-','-'],{stdin:raw,timeout:5000,maxBuffer:128*1024});
  if(extracted.exitCode!==0)throw new Error('layout schema text extraction (pdftotext required)');
  validateLayoutText(extracted.stdout.toString());
+}
+// Streaming CSV keeps memory bounded independently of the full roll size.
+export async function* csvRows(path:string,maxRows:number,maxBytes:number){
+ positive(maxRows,'row');positive(maxBytes,'byte');
+ const handle=await open(path,constants.O_RDONLY|constants.O_NOFOLLOW|constants.O_NONBLOCK);
+ const parser=streamingParser();let bytes=0,ordinal=0,header=false;
+ const decoder=new TextDecoder('utf-8',{fatal:true});
+ const producer=pipeline(async function*(){const buffer=Buffer.alloc(64*1024);for(;;){const {bytesRead}=await handle.read(buffer,0,buffer.length,null);if(!bytesRead)break;bytes+=bytesRead;if(bytes>maxBytes)throw new Error('CSV byte ceiling');yield decoder.decode(buffer.subarray(0,bytesRead),{stream:true});}yield decoder.decode();},parser).catch(error=>{parser.destroy(error);});
+ try{for await(const fields of parser){if(!header){if(JSON.stringify(fields)!==JSON.stringify(HEADER))throw new Error('header mismatch');header=true;continue;}if(++ordinal>maxRows)throw new Error('row ceiling');yield parseRow(fields,ordinal-1);}if(!ordinal)throw new Error('row ceiling');}
+ finally{parser.destroy();try{await producer;}finally{await handle.close();}}
 }
 function compact(text:string){return text.toLowerCase().replace(/[^a-z0-9]/g,'');}
 export function validateLayoutText(text:string){

@@ -1,0 +1,6 @@
+import {test,expect} from 'bun:test';import {Collector} from '../src/collector';import {setup} from '../src/live';import {discover,collectExport} from '../src/export-live';import {temp} from './collector.test';import {join} from 'node:path';import {rm} from 'node:fs/promises';
+for(const fault of ["UPDATE cooldown SET not_before='broken'","UPDATE cooldown SET not_before=-1","UPDATE cooldown SET not_before=1e99","DELETE FROM cooldown"]){test('fail closed cooldown '+fault,async()=>{
+ const root=await temp();let calls=0,sleeps=0;const c=await Collector.open(join(root,'archive'),{fetch:async()=>{calls++;return new Response('');},sleep:async()=>{sleeps++;}});
+ try{setup(c);c.db.exec(fault);const before=JSON.stringify(c.db.query('SELECT * FROM attempts').all());await expect(c.verify()).rejects.toThrow('cooldown');await expect(discover(c)).rejects.toThrow('cooldown');await expect(collectExport(c,'/voterdata/test.csv')).rejects.toThrow('cooldown');expect(calls).toBe(0);expect(sleeps).toBe(0);expect(JSON.stringify(c.db.query('SELECT * FROM attempts').all())).toBe(before);}finally{await c.close();}
+ await expect(Collector.open(join(root,'archive'))).rejects.toThrow('cooldown');await rm(root,{recursive:true,force:true});
+});}

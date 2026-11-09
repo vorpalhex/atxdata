@@ -31,7 +31,7 @@ test("listEvents returns all bodies when no body filter is provided", async () =
     "Public Safety Committee",
     "Housing and Planning Committee",
   ]);
-  expect(decodeURIComponent(http.urls[0]!)).toContain("EventDate lt datetime'2026-08-02'");
+  expect(new URL(http.urls[0]!).searchParams.get("$filter")).toContain("EventDate lt datetime'2026-08-02'");
 });
 
 test("listEvents trims body names before filtering", async () => {
@@ -49,7 +49,8 @@ function fakeHttp(events: ApiEvent[]): HttpClient & { urls: string[] } {
     urls,
     getJson: async <T>(url: string) => {
       urls.push(url);
-      return events as T;
+      const skip = Number(new URL(url).searchParams.get("$skip") ?? 0);
+      return events.slice(skip) as T;
     },
     fetchWithRetry: async () => {
       throw new Error("not implemented");
