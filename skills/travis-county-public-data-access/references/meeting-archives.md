@@ -1,5 +1,9 @@
 # Historical Commissioners Court minutes access
 
+Implementation update (bounded implementation; independent review pending): `programs/county-documents-consume/` provides one Bun/SQLite acquisition engine with four explicit adapters, bounded discovery/collect/sync, status and zero-HTTP verification. See its README for setup, exact limits, source scope, private headers/originals and fail-closed manual recovery. The earlier manual procedure/evidence below remains historical; it is not a claim of complete archive availability.
+
+Collector retained-original proof: closed-accordion replay988 occurrences/987 unique URLs, unchanged January5,2010 original and original headers imported. Exact year/month/label tokens, malformed1.25.1000 and source anomalies are preserved without replacement URLs or invented CivicClerk IDs. Duplicate and selected zero-HTTP verification pass; no fresh minutes HTTP. Title/opening-sentence date conflict and bundled bodies remain; noindex/noarchive/nosnippet instructions stay in private receipts. No boundary/history completeness claim. Independent review/card acceptance remain pending.
+
 ## Scope and prerequisites
 
 A supervised, bounded access procedure, not an unattended client or backfill. LLM-assisted contribution. Use for one selected historical meeting and at most two small documents; this verification acquired one. Require a POSIX shell, curl, Python 3, Poppler (`pdfinfo`, `pdftotext`, optionally `pdftoppm`) and SHA-256 tooling. No account, cookies, API key or new database is needed. Keep original records, headers (which may contain cookies), extraction/render outputs, provenance and logs in operator-approved private storage outside source.

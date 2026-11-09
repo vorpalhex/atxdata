@@ -1,5 +1,11 @@
 # TCAD bounded public exports
 
+## Offline-first wrapper (new implementation)
+
+`programs/tcad-consume/` provides Bun/SQLite `list`, bounded archive `inventory`, selected `import`, `status`, zero-HTTP `verify`, and separately explicit streaming `integrity` commands. It contains NO network adapter and authorizes no new source requests, not even robots. Only the retained hash-pinned certified archive/layout and explicit first25 Property selection are supported. See its README for commands, canonical private output-root policy, checkpoint recovery, test scope and limitations.
+
+Original-byte implementation verification reproduced all493 contiguous layout fields,9922 bytes plus CRLF,25 selected rows/0 rejections and exact year/supplement strings;21-member metadata inventory, duplicate reuse and SQLite/content/source/version/member/run/download offline verification passed. The23 repeated filler names are stored positionally. A synthetic stored-ZIP regression exposed and repaired Bun/legacy-stream EOF ownership; CRC corruption and interrupted sample promotion now fail/recover as documented. Small retained layout-member CRCs were exercised; the prior full21-member/17989848588-byte integrity evidence below was not needlessly repeated. The full-roll integrity engine is a separate explicit operation, never part of routine import/verify. No all-row semantics, unique-property totals, history or Tax Office crosswalk is claimed. Fresh independent review/integration/acceptance remain chief-owned.
+
 Intent: LLM-authored, supervised anonymous acquisition of a TCAD certified appraisal archive with a bounded valuation-row check, plus the earlier small ancillary CSV and published bulk layout. TCAD is a separate appraisal district, not the county Tax Office. This is not an unattended collector or complete historical archive. No program or SQLite service is added. Raw rows, property/account keys, situs addresses, headers/cookies and validation logs belong only in a private operator-approved archive outside source.
 
 ## Discovery and version identity

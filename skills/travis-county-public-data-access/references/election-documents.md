@@ -1,5 +1,9 @@
 # VoteTravis election publications
 
+Implementation update (bounded implementation; independent review pending): `programs/county-documents-consume/` provides one Bun/SQLite acquisition engine with four explicit adapters, bounded discovery/collect/sync, status and zero-HTTP verification. See its README for setup, exact limits, source scope, private headers/originals and fail-closed manual recovery. The earlier manual procedure/evidence below remains historical; it is not a claim of complete archive availability.
+
+Actual bounded collector proof: VoteTravis robots, the canonical same-page discovery and one June11,2022 reconciliation original acquired,24807 bytes,SHA256 `d694dfc8a549dd42c8cbade09a8046d5fc19f3929c53cb1b4686171cb7df2156`. Its extracted text is empty/image-only, not absent source data. The actual one-page render was visually inspected: Travis,2022LocalRunoff,06/11/2022,OfficialTotals,attestation original6.21.22 (review-confirmed2022-06-21). Explicit offline review binds exact original/image hashes and selection, and zero-HTTP verify rerenders/checks the receipt. Administering county is not a contest-jurisdiction assertion; contest jurisdictions/publication date stay unknown. No totals/certification/Clarity interpretation. Independent review/card acceptance remain pending.
+
 Intent: LLM-assisted, agent-operated access procedure for a bounded election/document selection, not a new client or unattended crawler. Results publications, reconciliation and audit/certification forms are distinct from structured Clarity extraction. No voter-level records are in scope.
 
 ## Scope and discovery

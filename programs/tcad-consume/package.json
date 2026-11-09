@@ -1,0 +1,1 @@
+{"name":"tcad-consume","type":"module","private":true,"scripts":{"test":"bun test","typecheck":"tsc --noEmit"},"dependencies":{"yauzl":"3.2.0"},"devDependencies":{"@types/yauzl":"2.10.3","@types/bun":"1.3.13","typescript":"6.0.3"}}

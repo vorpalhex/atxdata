@@ -1,5 +1,9 @@
 # Travis County Code acquisition
 
+Implementation update (bounded implementation; independent review pending): `programs/county-documents-consume/` provides one Bun/SQLite acquisition engine with four explicit adapters, bounded discovery/collect/sync, status and zero-HTTP verification. See its README for setup, exact limits, source scope, private headers/originals and fail-closed manual recovery. The earlier manual procedure/evidence below remains historical; it is not a claim of complete archive availability.
+
+Collector retained-original proof: landing80 occurrences/80 unique current chapter URLs, chapters2/464 parsed/imported with unchanged reference hashes and original headers; duplicate and zero-HTTP selected verification pass. Title/subtitle and sparse chapters retained. Chapter2 body explicitly says amendments added through August16,2022; Chapter464 says it was amended October21,2025, stored as separate scoped date evidence, not blanket effective/publication dates. No fresh chapter requests, historical bodies or Title30 incorporation. Recovery is explicitly fail-closed/manual at retained checkpoints. Independent review/card acceptance remain pending.
+
 Intent: bounded, agent-operated discovery and direct chapter-PDF acquisition for citable policy research. LLM-assisted contribution. This standalone procedure is not an unattended client or a full historical archive. It reuses the repository's manual-budget safety conventions; County Code evidence was acquired independently.
 
 ## Authority and supported scope
