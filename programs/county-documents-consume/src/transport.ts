@@ -60,6 +60,7 @@ export class Transport {
   return task;
  }
  private gate():number {
+  verifyTransportLedger(this.engine);
   const row=readCooldown(this.engine.db);
   if(row.blocked) throw new Error(`transport stopped: ${row.blocked}`);
   return row.not_before;
@@ -74,7 +75,7 @@ export class Transport {
  private start(source:Source,url:string,kind:Kind):Attempt {
   // Recheck after the awaited pacing gate; another instance may have reserved the archive.
   this.gate();
-  const cap=this.budget(source,kind),run=this.engine.start(source,this.operation.receipt(kind,cap,kind==='robots'?undefined:this.acknowledgement),'transport-work-v1:'+crypto.randomUUID()),id=crypto.randomUUID();
+  const cap=this.budget(source,kind),run=this.engine.start(source,this.operation.receipt(kind,cap,kind==='robots'?undefined:this.acknowledgement),'transport-work-v2:'+crypto.randomUUID()),id=crypto.randomUUID();
   this.engine.db.transaction(()=>{
    this.engine.db.run("INSERT INTO attempts(id,run,url,kind,started,reservation) VALUES(?,?,?,?,?,?)",[id,run,url,kind,this.deps.now(),cap]);
    this.engine.db.run("UPDATE cooldowns SET blocked='unfinished attempt requires operator review' WHERE id=1");
@@ -83,9 +84,14 @@ export class Transport {
  }
  private headers(attempt:Attempt,response:Response):number {
   const status=this.statuses.get(response)??response.status;
+  const observed=this.deps.now();
+  const row=this.engine.db.query<{kind:string},[string]>("SELECT kind FROM runs WHERE id=?").get(attempt.run)!;
+  const receipt=JSON.parse(row.kind.slice("transport-work-v1:".length));
+  receipt.headerTiming={clockBasis:"unix-ms",observed};
+  this.engine.db.run("UPDATE runs SET kind=? WHERE id=?",["transport-work-v1:"+JSON.stringify(receipt),attempt.run]);
   this.engine.db.run("UPDATE attempts SET status=?,headers=? WHERE id=?",[status,JSON.stringify([...response.headers]),attempt.id]);
   try {
-   const end=cooldown(response.headers,this.deps.now());
+   const end=cooldown(response.headers,observed);
    this.engine.db.run("UPDATE cooldowns SET not_before=MAX(not_before,?) WHERE id=1",[end]);
   } catch(error) {
    this.engine.db.run("UPDATE cooldowns SET blocked=? WHERE id=1",[String(error)]);

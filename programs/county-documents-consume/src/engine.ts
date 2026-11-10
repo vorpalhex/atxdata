@@ -6,7 +6,9 @@ import {join,resolve} from "node:path";
 import {link,readFile,writeFile,unlink} from "node:fs/promises";
 import {archiveLock,statFile} from "../../civicclerk-consume/src/archive";
 import {discover,select,sources,type Evidence,type Selection,type Source} from "./adapters";
-import {initialize,verifySchema} from "./schema";
+import {initialize,verifySchema,readCooldown} from "./schema";
+import {verifyCooldownObligations} from "./cooldown-integrity";
+import {verifyTransportLedger} from "./transport-integrity";
 import {requireArtifactReceipt} from "./artifact-receipts";
 import {verifyArtifacts,verifyRepresentations} from "./archive-verification";
 import {bodyEvidence,legacyBodyEvidence,inspectPdf,requirePdf,requireTextIdentity,renderIdentity,requireReview,requirePageReview,type PageReview,type RenderedReview} from "./pdf";
@@ -27,7 +29,7 @@ export class Engine {
   this.db=new Database(join(root,"documents.sqlite"),{strict:true});
   try {
    initialize(this.db,existing);
-   verifySchema(this.db);
+   this.policyIntegrity();
    if(this.db.query("SELECT 1 FROM artifact_checkpoints WHERE status='writing' LIMIT 1").get()) throw new Error("unfinished artifact checkpoint: fail-closed manual recovery required");
   }catch(error){this.db.close();throw error;}
  }
@@ -42,13 +44,19 @@ export class Engine {
    return new Engine(root,release,Boolean(existing),maxPdfBytes);
   }catch(error){await release();throw error;}
  }
+ private policyIntegrity():void {
+  verifySchema(this.db);
+  verifyCooldownObligations(this,readCooldown(this.db).not_before);
+ }
  async close():Promise<void> {this.db.close();await this.release();}
  start(source:Source,kind:string,id:string=crypto.randomUUID()):string {
+  this.policyIntegrity();
   this.db.run("INSERT OR IGNORE INTO sources VALUES(?)",[source]);
   this.db.run("INSERT INTO runs VALUES(?,?,?,?,NULL,'running',NULL)",[id,source,kind,new Date().toISOString()]);
   return id;
  }
  finish(run:string,error?:unknown):void {
+  this.policyIntegrity();
   this.db.run("UPDATE runs SET finished=?,status=?,error=? WHERE id=?",[new Date().toISOString(),error?"failed":"complete",error?String(error):null,run]);
  }
  private async run<T>(source:Source,kind:string,action:(run:string)=>Promise<T>):Promise<T> {
@@ -60,8 +68,10 @@ export class Engine {
   if(!/^(html|pdf|candidate|wire|png|txt)$/.test(extension)) throw new Error("unsafe artifact extension");
   const hash=sha(bytes),path=`${hash}.${extension}`,full=join(this.root,path);
   const existing=await statFile(full);
+  this.policyIntegrity();
   if(existing) {
    if(sha(await this.readArtifact(path))!==hash) throw new Error("artifact collision/corruption");
+   this.policyIntegrity();
    return {hash,path};
   }
   await this.promoteArtifact(path,hash,bytes);
@@ -69,10 +79,14 @@ export class Engine {
  }
  private async promoteArtifact(path:string,hash:string,bytes:Uint8Array):Promise<void> {
   const partial=crypto.randomUUID()+".part";
+  this.policyIntegrity();
   this.db.run("INSERT INTO artifact_checkpoints VALUES(?,?,?,'writing',?) ON CONFLICT(path) DO UPDATE SET status='writing',partial=excluded.partial",[path,hash,bytes.length,partial]);
   await writeFile(join(this.root,partial),bytes,{flag:"wx",mode:0o600});
+  this.policyIntegrity();
   await link(join(this.root,partial),join(this.root,path));
+  this.policyIntegrity();
   await unlink(join(this.root,partial));
+  this.policyIntegrity();
   this.db.run("UPDATE artifact_checkpoints SET status='promoted' WHERE path=?",[path]);
  }
  private aggregate(source:Source,url:string,incoming:number):void {
@@ -89,6 +103,7 @@ export class Engine {
   return this.run(source,"discover-import",async run=>{
    const artifact=await this.artifact(Buffer.from(html),"html"),id=crypto.randomUUID();
    this.db.transaction(()=>{
+    this.policyIntegrity();
     this.db.run("INSERT INTO snapshots VALUES(?,?,?,?,?,?,?,?)",[id,source,url,artifact.hash,artifact.path,origin,new Date().toISOString(),run]);
     this.db.run("INSERT INTO snapshot_metadata VALUES(?,?,?,?,?,?)",[id,3,rows.length,headers,headers===null?null:sha(headers),origin==="live-http"?new Date().toISOString():null]);
     for(const evidence of rows) this.db.run("INSERT INTO observations VALUES(?,?,?,?,?,'pending')",[crypto.randomUUID(),id,source,evidence.url,JSON.stringify(evidence)]);
@@ -146,6 +161,7 @@ export class Engine {
  private async commitPdf(row:Listed,bytes:Uint8Array,mime:string,origin:string,validation:string) {
   const artifact=await this.artifact(bytes,"pdf"),receiptHash=sha(validation),observed=new Date().toISOString();
   this.db.transaction(()=>{
+   this.policyIntegrity();
    this.db.run("INSERT INTO versions VALUES(?,?,?,?,?,?,?) ON CONFLICT(source,url,sha) DO UPDATE SET validation=excluded.validation",[row.source,row.url,artifact.hash,bytes.length,artifact.path,mime,validation]);
    this.db.run("INSERT OR IGNORE INTO validation_history VALUES(?,?,?,?,?,?)",[row.source,row.url,artifact.hash,receiptHash,validation,observed]);
    this.db.run("INSERT OR IGNORE INTO history VALUES(?,?,?,?,?,?)",[row.id,row.source,row.url,artifact.hash,origin,observed]);
@@ -161,7 +177,7 @@ export class Engine {
    try {
     const validation=await this.validatePdf(bytes,mime,row,headers);
     return await this.commitPdf(row,bytes,mime,origin,validation);
-   }catch(error){this.db.run("UPDATE observations SET status='failed' WHERE id=?",[id]);throw error;}
+   }catch(error){this.policyIntegrity();this.db.run("UPDATE observations SET status='failed' WHERE id=?",[id]);throw error;}
   });
  }
  async acceptRendered(id:string,bytes:Uint8Array,image:Uint8Array,review:RenderedReview,headers:string|null=null) {
@@ -212,6 +228,7 @@ export class Engine {
  async preflight():Promise<void> {
   await this.archiveIntegrity();
   await verifyRepresentations(this);
+  verifyTransportLedger(this);
  }
  async verify(source:Source,selection:Selection) {
   await this.preflight();

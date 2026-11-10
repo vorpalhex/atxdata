@@ -3,7 +3,8 @@ import {robotsDecision} from './human-policy';
 import type {Engine} from "./engine";
 import {sha} from "./engine";
 import {verifySchema,readCooldown} from "./schema";
-import {reservationReceipt} from './budgets';
+import {reservationReceipt,attemptReceipt} from './budgets';
+import {verifyCooldownObligations} from './cooldown-integrity';
 export type Representation={attempt:string;representation:string;encoding:string;wire_bytes:number|null;decoded_bytes:number;encoded_hash:string|null;decoded_hash:string;wire_path:string|null;decoded_path:string};
 type Attempt={source:Source;id:string;run:string;run_kind:string;kind:string;url:string;status:number|null;error:string|null;bytes:number|null;sha:string|null;reservation:number;ended:number|null;headers:string|null};
 function requireChecks(checks:boolean[],message:string):void {
@@ -29,9 +30,7 @@ function verifyDecision(engine:Engine,a:Attempt,receipt:ReturnType<typeof reserv
 }
 function verifyAttempt(engine:Engine,a:Attempt,blocked:boolean):void {
  const cap=a.reservation;
- requireChecks([['pdf','page','robots'].includes(a.kind),Number.isSafeInteger(cap),cap>0,a.kind==='pdf' || cap===3145728], 'full reservation required');
- const receipt=reservationReceipt(a.run_kind,a.kind,cap);
- requireChecks([!a.run.startsWith('transport-work-') || a.run.startsWith('transport-work-v1:') && receipt!==null], 'versioned run identity downgrade');
+ const receipt=attemptReceipt(a);
  verifyDecision(engine,a,receipt);
  const r=engine.db.query<Representation,[string]>("SELECT * FROM representations WHERE attempt=?").get(a.id);
  if(!r) {
@@ -66,6 +65,7 @@ export function verifyTransportLedger(engine:Engine,pendingClassifier?:string):v
  }
  verifyOperations(attempts);
  verifyRobots(engine);
+ verifyCooldownObligations(engine,gate.not_before);
 }
 function verifyOperations(attempts:Attempt[]):void {
  const operations=new Map<string,{n:number;bytes:number;limits:string}>();

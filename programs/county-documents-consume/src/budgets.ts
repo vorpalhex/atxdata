@@ -34,10 +34,19 @@ function legacyReservation(runKind:string,kind:string,cap:number):null {
 }
 export function reservationReceipt(runKind:string,kind:string,cap:number) {
  if(!runKind.startsWith('transport-work-v1:')) return legacyReservation(runKind,kind,cap);
- const receipt=JSON.parse(runKind.slice('transport-work-v1:'.length)) as {operation:string;kind:string;cap:number;limits:WorkBudget;acknowledgement?:HumanAcknowledgement};
+ const receipt=JSON.parse(runKind.slice('transport-work-v1:'.length)) as {operation:string;kind:string;cap:number;limits:WorkBudget;acknowledgement?:HumanAcknowledgement;headerTiming?:{clockBasis:string;observed:number}};
  if(!receipt.limits || Object.keys(receipt.limits).sort().join(',')!=='maxBytes,maxPages,maxPdfBytes,maxRequests') throw Error('operation limits identity mismatch');
  const limits=workBudget(receipt.limits);
  const checks=[/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(receipt.operation),receipt.kind===kind,receipt.cap===cap,cap<=limits.maxBytes,cap<=(kind==='pdf'?limits.maxPdfBytes:3*1024*1024)];
  if(!checks.every(Boolean)) throw Error('operation reservation receipt mismatch');
+ return receipt;
+}
+/** Shared nonmutating identity gate, used before receipt replay and ledger accounting. */
+export function attemptReceipt(a:{run:string;run_kind:string;kind:string;reservation:number}) {
+ const cap=a.reservation;
+ const checks=[["pdf","page","robots"].includes(a.kind),Number.isSafeInteger(cap),cap>0,a.kind==="pdf" || cap===3145728];
+ if(!checks.every(Boolean)) throw Error("transport integrity/budget: full reservation required");
+ const receipt=reservationReceipt(a.run_kind,a.kind,cap);
+ if(a.run.startsWith("transport-work-") && (!(a.run.startsWith("transport-work-v1:") || a.run.startsWith("transport-work-v2:")) || receipt===null)) throw Error("versioned run identity downgrade");
  return receipt;
 }
