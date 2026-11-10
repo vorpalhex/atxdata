@@ -4,9 +4,12 @@ export type Logger = {
   error: (event: string, data?: Record<string, unknown>) => void;
 };
 
+let nativeWriter: ((line: string) => void) | undefined;
+export function setLogWriter(writer: (line: string) => void): void { nativeWriter = writer; }
+
 export function createLogger(runId?: string): Logger {
   function write(level: "info" | "warn" | "error", event: string, data: Record<string, unknown> = {}) {
-    console.log(
+    (nativeWriter ?? console.log)(
       JSON.stringify({
         ...data,
         ts: new Date().toISOString(),

@@ -3,6 +3,15 @@ import { parseArgs } from "node:util";
 import { readFile, open } from "node:fs/promises";
 import { CivicClerkClient, calendarDate } from "./client";
 import { PoliteHttpClient } from "./http";
+import { version } from "../package.json";
+import { CheckedOutput } from "../../legistar-consume/src/util/output";
+
+function help(command?: string): string {
+  const intro = "civicclerk-consume — list public meeting IDs and archive published PDFs\n";
+  if (command === "list-meetings") return intro + "Usage: civicclerk-consume list-meetings --from YYYY-MM-DD --to YYYY-MM-DD [--max-pages N] [--checkpoint NEW.json [--resume PRIOR.json]]\nInclusive dates; default 20 requests. JSON array, or durable batch JSON with --checkpoint. New checkpoints never overwrite.\nExample: list-meetings --from 2021-01-05 --to 2021-01-05\n";
+  if (command === "ingest-meeting") return intro + "Usage: civicclerk-consume ingest-meeting --event-id ID --output DIRECTORY [--max-bytes N] [--max-documents N] [--file-types 1,2,4,5]\nUse an approved absolute private archive. Defaults: 12 MiB, 100 documents, PDF types 1,2,4,5. JSON result.\nExample: ingest-meeting --event-id 59 --output /approved/private/archive\n";
+  return intro + usage + "\nCommands: list-meetings, ingest-meeting\nUse help COMMAND or COMMAND -h/--help. --version prints the initial package version.\nExample: civicclerk-consume list-meetings --from 2021-01-05 --to 2021-01-05\nOptions accept equals or split values on either side of a command; singleton options cannot repeat. -- ends option parsing. No prompts or stdin input.\n";
+}
 
 const usage = "Usage: list-meetings --from YYYY-MM-DD --to YYYY-MM-DD [--max-pages N] [--checkpoint NEW.json [--resume PRIOR.json]] | ingest-meeting --event-id ID --output DIRECTORY [--max-bytes N] [--max-documents N] [--file-types 1,2,4,5]";
 export function httpSetting(name: string): number | undefined {
@@ -83,11 +92,22 @@ async function listCommand(values: Record<string,string|undefined>, client: CliC
     }
 }
 export async function runCli(args: string[], client?: Pick<CivicClerkClient, "listEvents" | "downloadEvent"> & Partial<Pick<CivicClerkClient, "listEventsPage">>, write: (line: string) => void = console.log): Promise<void> {
-  const { positionals, values, tokens } = parseArgs({ args, tokens:true, allowPositionals: true, strict: true, options: {
+  const { positionals, values: parsed, tokens } = parseArgs({ args, tokens:true, allowPositionals: true, strict: true, options: {
+    help: { type: "boolean", short: "h" }, version: { type: "boolean" },
     from: { type: "string" }, to: { type: "string" }, "event-id": { type: "string" }, output: { type: "string" },
     "max-bytes": { type: "string" }, "max-documents": { type: "string" }, "file-types": { type: "string" },
     "max-pages": { type: "string" }, checkpoint: { type: "string" }, resume: { type: "string" },
   } });
+  const { help: helpRequested, version: versionRequested, ...values } = parsed;
+  const boundary = tokens.find(token => token.kind === "option-terminator")?.index ?? Infinity;
+  if (tokens.some(token => token.kind === "positional" && token.index > boundary)) throw new Error(usage);
+  const helpCommand = tokens.find(token => token.kind === "positional" && token.index < boundary && token.value === "help");
+  if (helpCommand && positionals[0] === "help") {
+    if (positionals.length > 2 || (positionals[1] && !["list-meetings", "ingest-meeting"].includes(positionals[1]))) throw new Error(usage);
+    write(help(positionals[1])); return;
+  }
+  if (helpRequested) { write(help(positionals[0])); return; }
+  if (versionRequested) { write(`civicclerk-consume ${version}`); return; }
   const seen = new Set<string>();
   for (const token of tokens) if (token.kind === "option") { if (seen.has(token.name)) throw new Error(`duplicate option ${token.name}`); seen.add(token.name); }
   if (positionals.length !== 1) throw new Error(usage);
@@ -101,8 +121,9 @@ export async function runCli(args: string[], client?: Pick<CivicClerkClient, "li
   } else throw new Error(usage);
 }
 if (import.meta.main) {
-  runCli(process.argv.slice(2)).catch(error => {
+  const output = new CheckedOutput();
+  runCli(process.argv.slice(2), undefined, output.line).then(() => output.flush()).catch(error => {
     console.error(JSON.stringify({ error: error instanceof Error ? error.message : String(error) }));
-    process.exitCode = 1;
+    process.exit(1);
   });
 }

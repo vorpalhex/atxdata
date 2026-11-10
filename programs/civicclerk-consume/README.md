@@ -78,3 +78,40 @@ On 2026-11-04, one January 5, 2021 Commissioners Court Voting Session (event 59)
 The event response advertised four published PDF identities, `agendaId=59`, `hasAgenda=true`, `hasMedia=true`, on-demand media and a nonempty media-stream field. Packet/transcript were discovered but NOT acquired in this observation. No item/vote collections were present in the event response. Agenda-item/vote APIs and media availability/content remain unverified; flags/paths are not proof of playable video, and no media was requested. The normalizer currently retains only event ID/name/date and published file IDs/types/names. Structured item/vote/video ingestion is not implemented. Legacy archives, County Code and the message board are separate systems; see the county access skill's standalone CivicClerk reference for the supervised acquisition procedure.
 
 Resume integrity: a supplied resume must be a non-null JSON object with complete=false and a valid continuation before a new output is reserved. Numeric $skip must exactly match cumulative raw ID history before every live request as well as resumed requests; stored history URLs also use the continuation query allowlist. Opaque $skiptoken values remain opaque. Singleton CLI flags may not be repeated. Offline metadata reads verify SHA256 of the exact stored JSON before parsing (existing snapshot format is unchanged).
+
+## CLI frontend contract (initial package version 0.1.0)
+
+`bun run src/cli.ts --help`, `-h`, `--version`, `help COMMAND`, and each
+command's `-h`/`--help` are offline: no archive, configuration validation or
+transport initialization. Plain invocation intentionally retains status 1 and the
+stderr `{error}` usage envelope; use `--help` for the introduction. Expected usage
+and runtime failures retain status 1 with that JSON envelope, without a stack.
+
+Options use split or GNU equals values and may surround the command. Operational
+singleton options reject repeats (including numeric options); informational
+help/version flags may repeat. File type entries
+within one value deduplicate. IDs are canonical positive safe integers; work
+limits retain their documented nonnegative compatibility (page budget must be
+positive). `--` ends application option parsing; subsequent operands are not help
+or command selectors. Bun's launcher consumes its own first `--`, so pass another
+when forwarding an application delimiter, e.g. `bun run src/cli.ts list-meetings
+-- -- --help` rejects a protected extra operand rather than displaying help.
+Help-like required values are not informational flags. Unknown options and
+ambiguous split values reject before help; no raw argument scanning is used.
+
+Successful JSON bytes/schemas are unchanged. Native stdout writes are checked,
+including help, listing, page/checkpoint delivery and ingestion results. EBADF,
+ENOSPC and other non-EPIPE failures return status 1 with a safe stdout diagnostic.
+Backpressure has a five-second per-record delivery deadline. EPIPE (an early
+consumer close) is intentionally quiet and does not change the domain status.
+Neither output failure nor EPIPE removes completed acquisition/checkpoint facts;
+JSON stdout is not persistence. Checkpoints remain private, synced and no-clobber.
+No prompts, pager, color, stdin archive stream or new remote-recovery guarantees
+are introduced.
+
+For isolated offline tests, set `TMPDIR` to an existing private directory outside
+all checkouts; `MEETINGS_EVIDENCE` may point to the same directory. Set `DATA_PATH`
+to separate private fixture state for the shared Legistar helper tests. Run `bun
+test` and `bun run typecheck` with locked dependencies and OS networking denied
+except loopback for authored fixtures. No retained source input is needed by
+these suites. Do not run examples against public services without authorization.

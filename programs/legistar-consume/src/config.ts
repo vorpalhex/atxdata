@@ -41,7 +41,8 @@ function paths(overrides: Partial<AppConfig>) {
   };
 }
 
-export function loadConfig(overrides: Partial<AppConfig> = {}): AppConfig {
+/** Resolve and validate without creating runtime state (CLI preflight). */
+export function resolveConfig(overrides: Partial<AppConfig> = {}): AppConfig {
   const config: AppConfig = {
     ...paths(overrides),
     legistarClient: setting(overrides.legistarClient, "LEGISTAR_CLIENT", "austintexas"),
@@ -54,6 +55,11 @@ export function loadConfig(overrides: Partial<AppConfig> = {}): AppConfig {
     backfillMeetingDelayMs: numericSetting("BACKFILL_MEETING_DELAY_MS", overrides.backfillMeetingDelayMs, 3_000, 0, 2_147_483_647),
     maxDownloadRetries: numericSetting("MAX_DOWNLOAD_RETRIES", overrides.maxDownloadRetries, 3, 0),
   };
+  return config;
+}
+
+export function loadConfig(overrides: Partial<AppConfig> = {}): AppConfig {
+  const config = resolveConfig(overrides);
   for (const path of [dirname(config.databasePath), config.documentStorePath, config.runsPath]) {
     mkdirSync(path, { recursive: true });
   }

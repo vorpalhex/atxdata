@@ -1,3 +1,7 @@
+import { parseArgs } from "node:util";
+import { version } from "../package.json";
+import { CheckedOutput } from "../src/util/output";
+
 const firefoxUserAgent =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:125.0) Gecko/20100101 Firefox/125.0";
 
@@ -50,33 +54,52 @@ const checks = [
   },
 ];
 
-async function check(name: string, url: string): Promise<CheckResult> {
+type CheckOptions = { fetcher?: typeof fetch; timeoutMs?: number; maxBytes?: number; signal?: AbortSignal };
+export async function check(name: string, url: string, options: CheckOptions = {}): Promise<CheckResult> {
+  const controller = new AbortController();
+  let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const abort = () => controller.abort(new Error("diagnostic interrupted"));
+  options.signal?.addEventListener("abort", abort, { once: true });
+  if (options.signal?.aborted) abort();
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => { controller.abort(new Error("diagnostic deadline exceeded")); }, options.timeoutMs ?? 10_000);
+    controller.signal.addEventListener("abort", () => reject(controller.signal.reason), { once: true });
+    if (controller.signal.aborted) reject(controller.signal.reason);
+  });
   try {
     const started = performance.now();
-    const response = await fetch(url, {
-      redirect: "follow",
-      headers: {
-        Accept: "application/json,text/html;q=0.9,*/*;q=0.8",
-        "User-Agent": firefoxUserAgent,
-      },
-    });
-    const elapsedMs = Math.round(performance.now() - started);
-    const text = await response.text();
-
-    return {
-      name,
-      url,
-      status: response.status,
-      statusText: `${response.statusText} (${elapsedMs}ms)`,
-      contentType: response.headers.get("content-type"),
-      bodyPreview: text.replace(/\s+/g, " ").trim().slice(0, 220),
+    const work = async (): Promise<CheckResult> => {
+      const response = await (options.fetcher ?? fetch)(url, {
+        redirect: "manual", signal: controller.signal,
+        headers: { Accept: "application/json,text/html;q=0.9,*/*;q=0.8", "User-Agent": firefoxUserAgent },
+      });
+      // A non-cooperative fixture/transport may settle after the deadline.
+      if (controller.signal.aborted) { void response.body?.cancel().catch(() => {}); throw controller.signal.reason; }
+      const elapsedMs = Math.round(performance.now() - started);
+      reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+      let size = 0, text = "";
+      while (reader) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        size += value.byteLength;
+        if (size > (options.maxBytes ?? 65_536)) throw new Error("diagnostic response byte limit exceeded");
+        text += decoder.decode(value, { stream: true });
+      }
+      text += decoder.decode();
+      return { name, url, status: response.status, statusText: `${response.statusText} (${elapsedMs}ms)`, contentType: response.headers.get("content-type"), bodyPreview: text.replace(/\s+/g, " ").trim().slice(0, 220) };
     };
+    return await Promise.race([work(), deadline]);
   } catch (error) {
-    return {
-      name,
-      url,
-      error: error instanceof Error ? error.message : String(error),
-    };
+    const message = error instanceof Error && /^diagnostic (deadline|response byte limit|interrupted)/.test(error.message) ? error.message : "diagnostic request failed";
+    return { name, url, error: message };
+  } finally {
+    clearTimeout(timer);
+    options.signal?.removeEventListener("abort", abort);
+    controller.abort();
+    // Cancel without an unbounded cleanup await (a stalled source may ignore it).
+    if (reader) { const current = reader; void current.cancel().catch(() => {}).finally(() => { try { current.releaseLock(); } catch {} }); }
   }
 }
 
@@ -109,23 +132,52 @@ function classify(results: CheckResult[]): string {
   return "API access is inconclusive. Inspect check output before choosing API or scraping.";
 }
 
-const results = await Promise.all(checks.map((item) => check(item.name, item.url)));
-
-for (const result of results) {
-  console.log(`\n## ${result.name}`);
-  console.log(result.url);
-
-  if (result.error) {
-    console.log(`ERROR: ${result.error}`);
-    continue;
+async function main(args: string[]) {
+  const output = new CheckedOutput();
+  const { values, positionals } = parseArgs({ args, strict: true, allowPositionals: true, options: { help: { type: "boolean", short: "h" }, version: { type: "boolean" } } });
+  if (positionals.length) throw new Error("Unexpected operand; use check-legistar-api --help");
+  if (values.help) {
+    output.line("check-legistar-api — bounded Legistar access diagnostic\nUsage: bun run scripts/check-legistar-api.ts [-h|--help|--version]\nPlain invocation performs nine serial diagnostic checks and prints the report and classification (status 0 even if inconclusive). Each request has a 10-second deadline and 64 KiB body limit; redirects are reported, not followed. SIGINT/SIGTERM return 130/143 after a partial report. Run only with provider access authorization. No credentials or config are needed for help/version.");
+    await output.flush(); return;
   }
+  if (values.version) { output.line(`check-legistar-api ${version}`); await output.flush(); return; }
+  const controller = new AbortController();
+  let interrupted = 0;
+  const interrupt = () => { interrupted = 130; controller.abort(); };
+  const terminate = () => { interrupted = 143; controller.abort(); };
+  process.on("SIGINT", interrupt); process.on("SIGTERM", terminate);
+  const results: CheckResult[] = [];
+  try {
+    for (const item of checks) {
+      if (controller.signal.aborted) break;
+      results.push(await check(item.name, item.url, { signal: controller.signal }));
+    }
 
-  console.log(`status: ${result.status} ${result.statusText}`);
-  console.log(`content-type: ${result.contentType ?? "(none)"}`);
-  console.log(`body: ${result.bodyPreview || "(empty)"}`);
+    for (const result of results) {
+      output.line(`\n## ${result.name}`);
+      output.line(result.url);
+      if (result.error) {
+        output.line(`ERROR: ${result.error}`);
+        continue;
+      }
+      output.line(`status: ${result.status} ${result.statusText}`);
+      output.line(`content-type: ${result.contentType ?? "(none)"}`);
+      output.line(`body: ${result.bodyPreview || "(empty)"}`);
+    }
+    output.line(`\n## Verdict`);
+    output.line(classify(results));
+    await output.flush();
+  } finally {
+    process.off("SIGINT", interrupt); process.off("SIGTERM", terminate);
+    if (interrupted) process.exitCode = interrupted;
+  }
 }
-
-console.log(`\n## Verdict`);
-console.log(classify(results));
-
-export {};
+if (import.meta.main) main(process.argv.slice(2)).then(() => {
+  // All report bytes are observed. Do not let a non-cooperative transport or
+  // cancellation cleanup keep this standalone diagnostic alive indefinitely.
+  process.exit(Number(process.exitCode ?? 0));
+}).catch(error => {
+  const message = error instanceof Error && error.message.startsWith("stdout delivery failed") ? error.message : "diagnostic failed; use --help for usage";
+  console.error(`check-legistar-api: ${message}`);
+  process.exit(1);
+});

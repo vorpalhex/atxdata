@@ -194,3 +194,80 @@ These contact Legistar and may download substantial data. They were not run duri
 - job locking to prevent overlapping cron runs
 - broader live-service verification beyond the two smoke meetings
 
+## CLI frontend compatibility (initial package version 0.1.0)
+
+The five product commands remain `list-meetings`, `list-meetings-page`,
+`ingest-meeting`, `backfill`, and `retry-failed`. Top-level `-h`/`--help`,
+`--version` (`-V`), `help COMMAND`, and every local `-h`/`--help` bypass runtime
+configuration and network initialization. Plain invocation retains help on
+stderr/status 1. Examples: `bun run src/cli.ts help ingest-meeting` and
+`bun run src/cli.ts list-meetings --from=2021-01-05 --to=2021-01-05`.
+
+Commander retains command-local value options: put `--from`, `--date`, etc.
+after their subcommand. Global help/version work before or after commands.
+Required values support equals and split forms. Repeated value options retain
+last-value-wins; numeric values still use the existing positive-safe-integer
+parser (no newly tightened numeric spellings). `--` shields subsequent operands,
+which these commands reject rather than reinterpret as help. Bun consumes its
+own first delimiter: when forwarding an application delimiter, use e.g.
+`bun run src/cli.ts list-meetings -- -- --help`. Help-like required values do not
+trigger informational paths. Parser failures remain stderr text/status 1;
+domain/preflight failures remain the structured stderr `cli.failed` envelope.
+A token-aware boundary guard also reports protected root command/help selectors
+with `cli.failed`, rather than letting Commander execute those operands.
+
+Selection/date preflight now precedes runtime directories/database creation.
+Missing `ingest-meeting` target and invalid date-only input intentionally return
+`cli.failed` on stderr/status 1 without creating a run. This is the narrow
+malformed-usage exception to the former persisted failed `run.summary` on stdout;
+valid job failures retain their summaries, schemas and domain status. The
+unimplemented `retry-failed` rejects before initialization.
+
+Combined `--event-id` and `--date` remain accepted: ID takes precedence and the
+date is ignored (even when not a valid date), with a structured stderr
+`cli.selector-precedence` warning before initialization. No user-provided target
+or date is echoed by that warning. Date-only selectors and listing/backfill
+ranges require valid inclusive calendar dates. The library guards are retained.
+
+Default listing NDJSON, batch JSON, `run.summary`, and cron JSON log stdout
+streams are preserved; logs were not globally moved to stderr. All native stdout
+paths now observe writes, including logger records and summary/checkpoint
+delivery. Non-EPIPE output failures return safe `cli.failed`/status 1; a five-second
+per-record deadline bounds backpressure and queued logger output is bounded.
+Logging failure is reported after the job lifecycle, not thrown into its domain
+work: completed run/acquisition facts and synced checkpoints are not erased or
+relabeled for failed delivery. EPIPE is intentionally quiet and preserves the
+domain status. Commander stderr (including parser errors and no-argument help),
+selector warnings, and terminal `cli.failed` diagnostics use the same checked fd
+writer on stderr. Both sinks are observed and flushed on success and parser-error
+paths. A non-EPIPE stderr delivery failure returns status 1 without recursively
+reporting to the failed sink or emitting an uncaught stack; healthy parser/noarg
+bytes are unchanged.
+The shipped `test/unit/stderr.test.ts` exercises the absolute native entrypoint
+with OS-calibrated read-only descriptors and an observation-only, positively
+calibrated `uncaughtExceptionMonitor` backchannel. No cross-process job lock or
+new interruption recovery is claimed.
+
+The separately documented `bun run scripts/check-legistar-api.ts` (also
+`bun run check:api` / `just check-api`) retains plain-invocation prose, nine target
+checks and the existing verdict classification. `-h`/`--help` and `--version`
+perform zero checks; invalid arguments/operands fail on stderr/status 1 before
+transport. Requests are serial (one in flight), each deadline is 10 seconds
+including body consumption, and each decoded response is capped at 64 KiB before
+its 220-character preview. Redirects are now reported rather than followed: this
+intentional safety limitation bounds requests and prevents hidden target checks.
+Transport/body/size failures are safe diagnostic error records; no successful
+status is inferred from headers alone. Completed diagnostic reports intentionally
+retain status 0 even when the verdict is inconclusive or checks fail. Invocation,
+delivery failures and SIGINT/SIGTERM use 1, 130 and 143 respectively. Signals abort
+the active request, stop further checks and flush the partial report before a
+bounded exit; cleanup is best-effort, not an unbounded wait. This diagnostic is
+not proof of provider access or authorization; tests only use authored fixtures.
+
+For offline verification use existing private directories outside checkouts:
+`TMPDIR=/private/fixture/tmp DATA_PATH=/private/fixture/data bun test` and
+`bun run typecheck`, with locked dependencies and OS public networking denied
+except loopback fixtures. `HOME` and XDG directories may also be isolated there.
+Tests no longer create `.scratch` under the source checkout. Do not run live
+smoke recipes or public diagnostic checks as part of these frontend gates.
+
