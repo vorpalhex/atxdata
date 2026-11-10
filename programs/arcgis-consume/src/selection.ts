@@ -1,6 +1,10 @@
 import { acquirePublished, verifyPublished } from "./published";
 import { waterCatalog } from "./water";
-import { unavailablePolicy, sourcePolicy } from "./profile-policy";
+import {
+  unavailablePolicy,
+  sourcePolicy,
+  profileAllowed,
+} from "./profile-policy";
 import { Archive } from "./archive";
 import { array, ensure, integer, object, same } from "./check";
 import {
@@ -21,7 +25,7 @@ import {
   sourceService,
   catalogEntry,
 } from "./catalog";
-import { allowed, terms } from "./rules";
+import { terms } from "./rules";
 import { layerSchema, featurePage, featureIds } from "./schema";
 import { validateBudget } from "./policy";
 
@@ -229,19 +233,22 @@ async function gate(
 ) {
   a.guard = undefined;
   a.setSpacing(3000);
+  const source = a.store.options(run)?.source;
   const rules: Record<string, string | undefined> = {};
   for (const origin of origins) {
     const text = await robotsPolicy(a, run, origin);
     rules[origin] = text;
     if (text !== undefined)
-      a.setSpacing(allowed(origin + "/robots.txt", text, origin + "/"));
+      a.setSpacing(
+        profileAllowed(source, origin + "/robots.txt", text, origin + "/"),
+      );
   }
   a.guard = (url) => {
     const origin = new URL(url).origin;
     ensure(origin in rules, "authority missing robots gate");
     const text = rules[origin];
     if (text !== undefined)
-      a.setSpacing(allowed(origin + "/robots.txt", text, url));
+      a.setSpacing(profileAllowed(source, origin + "/robots.txt", text, url));
   };
 }
 function validateInvocation(
@@ -270,6 +277,13 @@ function validateInvocation(
 }
 function featureItem(item: unknown) {
   return ["Feature Service", "Map Service"].includes(String(object(item).type));
+}
+function admitProfileItem(source: Source, item: unknown) {
+  ensure(
+    source !== "water" || featureItem(item),
+    "Water catalog feature identity mismatch",
+  );
+  if (featureItem(item)) sourceService(object(item).url, source);
 }
 function selectionKey(source: Source, s: Selection) {
   return `${source}:${s.item}:${s.layer ?? "file"}:${s.fields?.join(",") ?? "*"}`;
@@ -342,7 +356,7 @@ async function performSelection(
     "json",
     (v) => validateItem(v, selected.item),
   );
-  if (featureItem(item)) sourceService(object(item).url, source);
+  admitProfileItem(source, item);
   const original = originalSource(item, entry, selected);
   const serviceOrigin = new URL(original).origin;
   if (!origins.includes(serviceOrigin))
@@ -408,7 +422,7 @@ export async function executeSelection(
     const prior = a.store.latestCollection(key);
     if (prior) {
       await a.verify();
-      const summary = await verifySelection(a, prior.id);
+      const summary = await verifySelection(a, prior.id, selected);
       ensure(
         same(summary, JSON.parse(prior.summary)),
         "stored summary differs from original content",
@@ -593,7 +607,25 @@ async function acquireFeatures(
   await a.request(run, "service-after", queryUrl(base, {}), "json");
   await a.request(run, "item-after", itemUrl(s.item), "json");
 }
-export async function verifySelection(a: Archive, run: string) {
+type InterpretationBounds = Pick<Selection, "expandedBytes" | "maxMembers">;
+function interpretationBounds(
+  s: Selection,
+  current?: InterpretationBounds,
+): Selection {
+  return {
+    ...s,
+    expandedBytes: Math.min(
+      s.expandedBytes,
+      current?.expandedBytes ?? s.expandedBytes,
+    ),
+    maxMembers: Math.min(s.maxMembers, current?.maxMembers ?? s.maxMembers),
+  };
+}
+export async function verifySelection(
+  a: Archive,
+  run: string,
+  current?: InterpretationBounds,
+) {
   const s = a.store.options(run) as Selection & { source: Source };
   ensure(s, "missing selection checkpoint");
   validateSelection(s);
@@ -615,6 +647,7 @@ export async function verifySelection(a: Archive, run: string) {
   const catalog = await readCatalog(a, run, s.source, s.maxPages, true);
   const entry = catalogEntry(catalog.items, s.item, s.layer);
   ensure(entry, "item missing from retained catalog");
+  admitProfileItem(s.source, item);
   if (["Feature Service", "Map Service"].includes(String(item.type))) {
     sourceService(item.url, s.source);
     const base = selectedService(item, entry, s).root;
@@ -642,7 +675,12 @@ export async function verifySelection(a: Archive, run: string) {
     return {
       source: s.source,
       ...sourcePolicy(a, run),
-      ...(await verifyPublished(a, run, s, item)),
+      ...(await verifyPublished(
+        a,
+        run,
+        interpretationBounds(s, current),
+        item,
+      )),
     };
   ensure(
     same(await read("service"), await read("service-after")),

@@ -16,10 +16,10 @@ const city = "https://services.arcgis.com/robots.txt",
 function policy(source?: string, rows: Record<string, unknown>[] = []) {
   const db = new Database(":memory:");
   db.exec(
-    "CREATE TABLE attempts(id TEXT,run TEXT,label TEXT,url TEXT,status INTEGER,finished TEXT,error TEXT,bytes INTEGER,started TEXT)",
+    "CREATE TABLE attempts(id TEXT,run TEXT,label TEXT,url TEXT,status INTEGER,finished TEXT,error TEXT,bytes INTEGER,started TEXT,headers TEXT)",
   );
   for (const [i, row] of rows.entries())
-    db.query("INSERT INTO attempts VALUES(?,?,?,?,?,?,?,?,?)").run(
+    db.query("INSERT INTO attempts VALUES(?,?,?,?,?,?,?,?,?,?)").run(
       String(i),
       "run",
       "robots-" + new URL(row.url as string).hostname,
@@ -29,6 +29,7 @@ function policy(source?: string, rows: Record<string, unknown>[] = []) {
       row.error as string,
       row.bytes as number,
       String(i),
+      JSON.stringify(row.headers ?? {}),
     );
   const archive = {
     store: {
