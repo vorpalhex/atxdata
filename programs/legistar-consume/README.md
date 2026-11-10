@@ -186,6 +186,19 @@ just smoke-ingest
 
 These contact Legistar and may download substantial data. They were not run during the offline cleanup. Historical full-ingest results from the original repository are not verification of this port.
 
+## Retained-document reuse
+
+Repeat ingestion verifies each retained downloaded file's SHA-256 and recorded
+byte size before reporting it as skipped. Cached paths must be beneath the
+configured document root, with regular original files and no symlink ancestors.
+A corrupt or unsafe cached document returns a failed outcome before any request
+or document-row mutation; preserve it for investigation rather than deleting it
+to force success. A legacy null byte size is accepted only when the stored hash
+matches the actual bytes. As before, an absent original can be downloaded again.
+This is local integrity checking, not an upstream freshness check or a publisher
+signature. It does not add process locking, immutable remote version history,
+or hostile-filesystem race guarantees.
+
 ## Current Gaps
 
 - scraper fallback

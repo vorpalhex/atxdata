@@ -1,14 +1,15 @@
 import { createHash } from "node:crypto";
-import { createWriteStream, existsSync, mkdirSync, renameSync, rmSync } from "node:fs";
+import { createWriteStream, mkdirSync, renameSync, rmSync } from "node:fs";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { basename, dirname, extname, join } from "node:path";
 import type { AppConfig } from "../config";
-import type { AppDatabase, StoredDocument } from "../storage/db";
+import type { AppDatabase } from "../storage/db";
 import type { DocumentManifestEntry, NormalizedMeeting } from "../types";
 import type { HttpClient } from "../util/http";
 import type { Logger } from "../util/logger";
 import { extensionFromContentType, sanitizeSegment } from "../util/strings";
+import { cachedDocumentBytes } from "./cache";
 
 export type DownloadOutcome =
   | { status: "downloaded"; bytes: number }
@@ -23,12 +24,17 @@ export async function downloadDocument(
   config: AppConfig,
   logger: Logger,
 ): Promise<DownloadOutcome> {
-  const id = db.upsertDocument(entry);
   const existing = db.getDocumentBySourceUrl(entry.sourceUrl);
-  if (hasDownloadedFile(existing)) {
-    logger.info("document.skipped", { id, url: entry.sourceUrl, path: existing.storagePath });
-    return { status: "skipped", bytes: existing.byteSize ?? 0 };
+  try {
+    const bytes = await cachedDocumentBytes(existing, config.documentStorePath);
+    if (bytes !== undefined) {
+      logger.info("document.skipped", { id: existing?.id, url: entry.sourceUrl, path: existing?.storagePath });
+      return { status: "skipped", bytes };
+    }
+  } catch (error) {
+    return { status: "failed", error: error instanceof Error ? error.message : String(error) };
   }
+  const id = db.upsertDocument(entry);
 
   try {
     const response = await fetchDocumentResponse(http, entry.sourceUrl);
@@ -65,9 +71,6 @@ export async function downloadDocument(
   }
 }
 
-function hasDownloadedFile(document: StoredDocument | null): document is StoredDocument & { storagePath: string } {
-  return Boolean(document?.downloadStatus === "downloaded" && document.storagePath && existsSync(document.storagePath));
-}
 
 async function fetchDocumentResponse(http: HttpClient, url: string): Promise<Response> {
   const response = await http.fetchWithRetry(url);
