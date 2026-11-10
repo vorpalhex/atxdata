@@ -44,36 +44,46 @@ type Command=typeof COMMANDS[number];
 const NETWORK=new Set<string>(["discover","collect","sync","archive"]);
 const ALLOWED=new Set(['--root', '--source', '--limit', '--year', '--chapter', '--date', '--role', '--url', '--page', '--input', '--origin', '--observation', '--headers', '--image', '--images', '--review', '--allow-network', '--human', '--source-href', '--archive-value', '--max-pdf-bytes', '--max-bytes', '--max-requests', '--max-pages']);
 const BOOLEANS=new Set(["--allow-network","--human"]);
+type ParseState={flags:Record<string,string>;command?:string;info?:string;ended?:boolean;helpCommand?:boolean;failure?:string};
+function fail(state:ParseState,message:string):void {state.failure??=message;}
+// Consume a required value even when it resembles an option, as before.
+function consumeValue(args:string[],index:number,equal:number,key:string,state:ParseState):number {
+ const value=equal<0?args[++index]:args[index]!.slice(equal+1);
+ if(!value || (equal<0 && value.startsWith('--'))) fail(state,'missing '+key+' value; see --help');
+ else state.flags[key]=value;
+ return index;
+}
+function consumeOption(args:string[],index:number,state:ParseState):number {
+ const token=args[index]!,equal=token.indexOf('='),key=equal<0?token:token.slice(0,equal);
+ if(!ALLOWED.has(key)){fail(state,'unknown option; see --help');return index;}
+ if(Object.hasOwn(state.flags,key)) fail(state,'duplicate option; see --help');
+ if(BOOLEANS.has(key)) {
+  if(equal>=0) fail(state,'boolean switches do not take values');
+  state.flags[key]='yes';return index;
+ }
+ return consumeValue(args,index,equal,key,state);
+}
+function consumeWord(token:string,state:ParseState):void {
+ if(!state.command && token==='help' && !state.helpCommand){state.info='help';state.helpCommand=true;return;}
+ if(!state.command) state.command=token; else fail(state,'unexpected operand; see --help');
+}
+function consumeToken(args:string[],index:number,state:ParseState):number {
+ const token=args[index]!;
+ if(state.ended) fail(state,'unexpected operand; see --help');
+ else if(token==='--') state.ended=true;
+ else if(token==='-h'||token==='--help') state.info='help';
+ else if(token==='--version') state.info='version';
+ else if(token.startsWith('--')) return consumeOption(args,index,state);
+ else consumeWord(token,state);
+ return index;
+}
 // Parse in token context: values and tokens after -- are never help/selectors.
 function parseCLI(args:string[]) {
- const flags:Record<string,string>={};
- let command:string|undefined, info:string|undefined, ended=false, helpCommand=false, failure:string|undefined;
- const fail=(message:string)=>{failure??=message;};
- for(let i=0;i<args.length;i++) {
-  const token=args[i]!;
-  if(ended){fail('unexpected operand; see --help');continue;}
-  if(token==='--'){ended=true;continue;}
-  if(token==='-h'||token==='--help'){info='help';continue;}
-  if(token==='--version'){info='version';continue;}
-  if(token.startsWith('--')) {
-   const equal=token.indexOf('='),key=equal<0?token:token.slice(0,equal);
-   if(!ALLOWED.has(key)){fail('unknown option; see --help');continue;}
-   if(Object.hasOwn(flags,key)) fail('duplicate option; see --help');
-   if(BOOLEANS.has(key)) {
-    if(equal>=0) fail('boolean switches do not take values');
-    flags[key]='yes';continue;
-   }
-   const value=equal<0?args[++i]:token.slice(equal+1);
-   if(!value || (equal<0 && value.startsWith('--'))) fail('missing '+key+' value; see --help');
-   else flags[key]=value;
-   continue;
-  }
-  if(!command && token==='help' && !helpCommand){info='help';helpCommand=true;continue;}
-  if(!command) command=token; else fail('unexpected operand; see --help');
- }
+ const state:ParseState={flags:{}};
+ for(let i=0;i<args.length;i++) i=consumeToken(args,i,state);
+ const {command,flags,info,failure}=state;
  if(command && !(COMMANDS as readonly string[]).includes(command)) throw Error('unknown command; see --help');
- if(info) return {command,flags,info};
- if(failure) throw Error(failure);
+ if(!info && failure) throw Error(failure);
  return {command,flags,info};
 }
 function required(opts:Options,name:string):string {
@@ -156,15 +166,20 @@ function validate(command:Command,opts:Options):void {
   'review-context':['observation'], 'review-pdf':['observation','input','review'],
  };
  for(const key of operands[command]??[]) required(opts,key);
+ validateTarget(command,opts);
+ if(command==='review-pdf') validateReviewImages(opts);
+}
+// Pure admissibility only; retained-child membership remains engine-owned.
+function validateTarget(command:Command,opts:Options):void {
  if(command==='import-page' || command==='discover') {
   const page=required(opts,'page');
   if(pageUrl(sourceName(required(opts,'source')),page,page)!==page) throw Error('noncanonical source-linked discovery URL');
  }
  if(command==='archive') requireArchiveEndpoint(required(opts,'source-href'),required(opts,'page'));
- if(command==='review-pdf') {
-  if(opts.image && opts.images) throw Error('use either --image or --images, not both');
-  if(!opts.image && !opts.images) throw Error('required --image or --images');
- }
+}
+function validateReviewImages(opts:Options):void {
+ if(opts.image && opts.images) throw Error('use either --image or --images, not both');
+ if(!opts.image && !opts.images) throw Error('required --image or --images');
 }
 export async function run(args:string[]):Promise<unknown> {
  const parsed=parseCLI(args),command=parsed.command;

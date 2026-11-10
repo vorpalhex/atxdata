@@ -9,37 +9,42 @@ import { executeSelection, selectionOptions } from "./selection";
 import { statFile } from "../../civicclerk-consume/src/archive";
 const COMMANDS=["list","rules","discover","collect","sync","status","verify"];
 const ALLOWED=new Set(['--archive', '--source', '--terms-sha256', '--resume', '--item', '--layer', '--service', '--fields', '--page-size', '--max-records', '--max-pages', '--max-requests', '--max-bytes', '--response-bytes', '--raw-bytes', '--expanded-bytes', '--max-members']);
-const BOOLEANS=new Set<string>();
+type ParseState={flags:Record<string,string>;command?:string;info?:string;ended?:boolean;helpCommand?:boolean;failure?:string};
+function fail(state:ParseState,message:string):void {state.failure??=message;}
+// Consume a required value even when it resembles an option, as before.
+function consumeValue(args:string[],index:number,equal:number,key:string,state:ParseState):number {
+ const value=equal<0?args[++index]:args[index]!.slice(equal+1);
+ if(!value || (equal<0 && value.startsWith('--'))) fail(state,'missing '+key+' value; see --help');
+ else state.flags[key]=value;
+ return index;
+}
+function consumeOption(args:string[],index:number,state:ParseState):number {
+ const token=args[index]!,equal=token.indexOf('='),key=equal<0?token:token.slice(0,equal);
+ if(!ALLOWED.has(key)){fail(state,'unknown option; see --help');return index;}
+ if(Object.hasOwn(state.flags,key)) fail(state,'duplicate option; see --help');
+ return consumeValue(args,index,equal,key,state);
+}
+function consumeWord(token:string,state:ParseState):void {
+ if(!state.command && token==='help' && !state.helpCommand){state.info='help';state.helpCommand=true;return;}
+ if(!state.command) state.command=token; else fail(state,'unexpected operand; see --help');
+}
+function consumeToken(args:string[],index:number,state:ParseState):number {
+ const token=args[index]!;
+ if(state.ended) fail(state,'unexpected operand; see --help');
+ else if(token==='--') state.ended=true;
+ else if(token==='-h'||token==='--help') state.info='help';
+ else if(token==='--version') state.info='version';
+ else if(token.startsWith('--')) return consumeOption(args,index,state);
+ else consumeWord(token,state);
+ return index;
+}
 // Parse in token context: values and tokens after -- are never help/selectors.
 function parseCLI(args:string[]) {
- const flags:Record<string,string>={};
- let command:string|undefined, info:string|undefined, ended=false, helpCommand=false, failure:string|undefined;
- const fail=(message:string)=>{failure??=message;};
- for(let i=0;i<args.length;i++) {
-  const token=args[i]!;
-  if(ended){fail('unexpected operand; see --help');continue;}
-  if(token==='--'){ended=true;continue;}
-  if(token==='-h'||token==='--help'){info='help';continue;}
-  if(token==='--version'){info='version';continue;}
-  if(token.startsWith('--')) {
-   const equal=token.indexOf('='),key=equal<0?token:token.slice(0,equal);
-   if(!ALLOWED.has(key)){fail('unknown option; see --help');continue;}
-   if(Object.hasOwn(flags,key)) fail('duplicate option; see --help');
-   if(BOOLEANS.has(key)) {
-    if(equal>=0) fail('boolean switches do not take values');
-    flags[key]='yes';continue;
-   }
-   const value=equal<0?args[++i]:token.slice(equal+1);
-   if(!value || (equal<0 && value.startsWith('--'))) fail('missing '+key+' value; see --help');
-   else flags[key]=value;
-   continue;
-  }
-  if(!command && token==='help' && !helpCommand){info='help';helpCommand=true;continue;}
-  if(!command) command=token; else fail('unexpected operand; see --help');
- }
+ const state:ParseState={flags:{}};
+ for(let i=0;i<args.length;i++) i=consumeToken(args,i,state);
+ const {command,flags,info,failure}=state;
  if(command && !COMMANDS.includes(command)) throw Error('unknown command; see --help');
- if(info) return {command,flags,info};
- if(failure) throw Error(failure);
+ if(!info && failure) throw Error(failure);
  return {command,flags,info};
 }
 const help=`ArcGIS private, bounded catalog and item acquisition
@@ -143,6 +148,34 @@ function legacyDispatch(
         archive.store.latestCollection(options.source!)))
   );
 }
+async function executeArchive(options:ReturnType<typeof parseArgs>,archive:Archive):Promise<unknown> {
+  if (options.command === "status")
+    return {
+      ...archive.store.status(),
+      integrity: archive.store.integrity(),
+      limits,
+    };
+  const adapter = new Adapter(archive);
+  if (options.command === "verify") return await adapter.verify();
+  if (legacyDispatch(options, archive))
+    return await adapter.execute(
+      options.source!,
+      options.command as Command,
+      options,
+    );
+  if (options.selection)
+    return await executeSelection(
+      archive,
+      options.source!,
+      options.command as Command,
+      { ...options, ...options.selection },
+    );
+  return await adapter.execute(
+    options.source!,
+    options.command as Command,
+    options,
+  );
+}
 export async function main(
   args: string[],
   dependencies: Partial<Dependencies> = {},
@@ -177,32 +210,7 @@ export async function main(
     );
   const archive = await Archive.open(root, dependencies);
   try {
-    if (options.command === "status")
-      return {
-        ...archive.store.status(),
-        integrity: archive.store.integrity(),
-        limits,
-      };
-    const adapter = new Adapter(archive);
-    if (options.command === "verify") return await adapter.verify();
-    if (legacyDispatch(options, archive))
-      return await adapter.execute(
-        options.source!,
-        options.command as Command,
-        options,
-      );
-    if (options.selection)
-      return await executeSelection(
-        archive,
-        options.source!,
-        options.command as Command,
-        { ...options, ...options.selection },
-      );
-    return await adapter.execute(
-      options.source!,
-      options.command as Command,
-      options,
-    );
+    return await executeArchive(options,archive);
   } finally {
     await archive.close();
   }
