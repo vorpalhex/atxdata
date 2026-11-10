@@ -3,7 +3,8 @@ import { collect, discover, verifyAcquisition, UnsupportedSource } from './acqui
 import type { Dependencies } from '../../arcgis-consume/src/archive';
 import { decimalInteger as integer } from './model';
 import { ensure } from './acquisition-options';
-export const acquisitionHelp = 'discover --source-archive PRIVATE_SOURCE (--fiscal-year YEAR | --first-year YEAR --last-year YEAR) [budgets] [--refresh]\ncollect (or acquire) --source-archive PRIVATE_SOURCE --output PRIVATE_IMPORT --fiscal-year YEAR [budgets] [--refresh]\nverify-source --source-archive PRIVATE_SOURCE --output PRIVATE_IMPORT\nBudgets: --max-requests N (10), --max-bytes N (104857600 per file), --max-total-bytes N (209715200 consumed bodies per run), --max-rows N (1000000). Positive safe decimal integers. Retries=0; redirects=0; spacing>=3 seconds plus server/policy cooldown. Discovery is caller-bounded HEAD candidates, not a complete history or content validation. Refresh requests a new snapshot; default reuse and verify-source make zero HTTP requests.';
+import { information, guidance, commandOf } from './frontend';
+export const acquisitionHelp = 'discover --source-archive PRIVATE_SOURCE (--fiscal-year YEAR | --first-year YEAR --last-year YEAR) [budgets] [--refresh]\ncollect (or acquire/sync) --source-archive PRIVATE_SOURCE --output PRIVATE_IMPORT --fiscal-year YEAR [budgets] [--refresh]\nverify-source --source-archive PRIVATE_SOURCE --output PRIVATE_IMPORT\nBudgets: --max-requests N (10), --max-bytes N (104857600 per file), --max-total-bytes N (209715200 consumed bodies per run), --max-rows N (1000000). Positive safe decimal integers. Retries=0; redirects=0; spacing>=3 seconds plus server/policy cooldown. Discovery is caller-bounded HEAD candidates, not a complete history or content validation. Refresh requests a new snapshot; default reuse and verify-source make zero HTTP requests.';
 const stringOptions = ['source-archive', 'output', 'fiscal-year', 'first-year', 'last-year', 'max-requests', 'max-bytes', 'max-total-bytes', 'max-rows'];
 type Values = Record<string, string | boolean | undefined>;
 type Command = {
@@ -25,7 +26,7 @@ function parseCommand(args: string[]): Command {
         ]) });
     const names = tokens.filter(token => token.kind === 'option').map(token => token.name);
     const parsed = values as Values;
-    ensure(new Set(names).size === names.length && positionals.length === 1 && parsed['source-archive'], 'usage');
+    ensure(new Set(names).size === names.length && positionals.length === 1 && parsed['source-archive'] && commandOf(args)===positionals[0], 'usage');
     for (const key of stringOptions.filter(key => !['source-archive', 'output'].includes(key))) {
         if (parsed[key] !== undefined)
             integer(text(parsed, key));
@@ -58,7 +59,7 @@ function discoverCommand({ values }: Command, dependencies: Partial<Dependencies
     return discover({ ...options, years: candidateYears(values, options.maxRequests) }, dependencies);
 }
 function collectCommand({ command, values }: Command, dependencies: Partial<Dependencies>) {
-    ensure(['collect', 'acquire'].includes(command) && values.output && values['fiscal-year'], 'usage');
+    ensure(['collect', 'acquire', 'sync'].includes(command) && values.output && values['fiscal-year'], 'usage');
     ensure(!values['first-year'] && !values['last-year'], 'usage');
     return collect({ ...common(values), output: text(values, 'output'), fiscalYear: integer(text(values, 'fiscal-year')) }, dependencies);
 }
@@ -83,12 +84,21 @@ function errorResult(error: unknown, write: (text: string) => void) {
     return 1;
 }
 export async function runAcquisitionCli(args: string[], write: (text: string) => void = console.log, dependencies: Partial<Dependencies> = {}): Promise<number> {
+    let rendered='', exit=0;
+    const capture=(text:string)=>{rendered=text;};
     try {
-        const safe = safeResult(await dispatch(parseCommand(args), dependencies));
-        write(JSON.stringify(safe));
-        return resultExit(safe);
+        const info = information(args);
+        if (info !== undefined) rendered=info;
+        else {
+            const safe = safeResult(await dispatch(parseCommand(args), dependencies));
+            rendered=JSON.stringify(safe);
+            exit=resultExit(safe);
+        }
     }
     catch (error) {
-        return errorResult(error, write);
+        if (!(error instanceof UnsupportedSource)) guidance();
+        exit=errorResult(error, capture);
     }
+    write(rendered);
+    return exit;
 }

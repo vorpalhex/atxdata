@@ -45,7 +45,8 @@ test("OS denies public transport, allows bounded localhost native streaming in s
       new Response(child.stdout).text(),
       new Response(child.stderr).text(),
     ]);
-    expect(stderr).toBe("");
+    if(exit===1){expect(stderr).toContain('use --help or help COMMAND');expect(stderr).not.toContain(sourceArchive);expect(stderr).not.toContain(output);}
+    else expect(stderr).toBe("");
     return { exit, result: JSON.parse(stdout) };
   }
   try {

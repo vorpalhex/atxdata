@@ -60,6 +60,45 @@ Import defaults: `--max-bytes 104857600` (100 MiB), `--max-rows 1000000`. Overri
 
 ### Exit codes and output
 
+### CLI discovery, parsing and delivery
+
+`bun run src/cli.ts -h`/`--help`, `help COMMAND` and each `COMMAND -h`/`--help`
+are offline paths, including all source commands. `--version` reports the newly
+declared package version 0.1.0, before or after a command. No archive/config or
+transport initialization is required. Plain invocation retains stdout's fixed
+failure object and exit 1, with useful help on stderr.
+
+GNU equals/split string values and options before/after commands are supported
+within each documented command's scope. In particular, `--source-archive` may
+precede or follow discover/collect/acquire/verify-source; `sync` is an additive
+collect alias. During execution, duplicate options fail, including duplicate
+equal values; explicit informational requests bypass operational duplicate
+validation as well as unknown-option errors.
+Integer restrictions above are unchanged. Option values named like commands
+are never command selectors. `--` ends options and shields subsequent operands
+from help/command selection; no extra operands are accepted. A required value
+spelling `--help` is not help (use equals syntax to pass option-like values to
+strict execution parsing). Explicit information bypasses unknown options, but
+missing/malformed value syntax can still fail. No grouped short value options,
+stdin CSV promise, prompts, color or pager are added.
+
+Parser/operational failures keep exactly `{"error":"operation_failed"}` on
+stdout/status 1 and add safe recovery guidance on stderr. No underlying private
+error, target path, source record or stack is printed. Use `help COMMAND` to
+check required options; use local private tools for detailed archive review.
+
+The shipped entrypoint uses one checked descriptor writer shared by importer
+and acquisition renderers. It checks completed partial writes and bounds total
+delivery to five seconds, including blocking pipes and nonblocking backpressure,
+with no buffered stdout left to flush. On timeout it terminates the pending
+output worker after a safe diagnostic. Genuine non-EPIPE write failure returns 1 rather than
+false success, and never recursively writes an error envelope to failed stdout.
+Quiet EPIPE preserves the completed domain status, including partial/unavailable/
+unsupported outcomes. It does not assert complete downstream delivery. Completed
+imports/checkpoints remain valid retained facts; output failure does not roll
+them back. The import-1 no-batch statement below concerns domain failures, not a
+post-commit delivery failure. Retry normally only after reviewing retained state.
+
 - Import `0`: clean import, or verified reuse of an identical clean file.
 - Import `2`: **`imported_with_rejections` / partial**, including reuse of an identical partial file. Accepted rows remain available.
 - Import `1`: validation, parser, filesystem, locking, or SQLite failure; no successful batch is recorded.

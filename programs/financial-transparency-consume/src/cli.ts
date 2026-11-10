@@ -1,4 +1,6 @@
-import { acquisitionHelp, runAcquisitionCli } from "./acquisition-cli";
+import { runAcquisitionCli } from "./acquisition-cli";
+import { information, guidance, help, commandOf, sourceCommands } from "./frontend";
+import { writeOutput, OutputFailure, outputStatus } from "./output";
 import { parseArgs } from "node:util";
 import { importCsv } from "./importer";
 import { verifyArchive } from "./verify";
@@ -60,7 +62,7 @@ function execute(args: string[]): { result: object; exit: number } {
     .filter((token) => token.kind === "option")
     .map((token) => token.name);
   if (new Set(names).size !== names.length) throw new Error("duplicate_option");
-  if (positionals.length !== 1 || !values.output) throw new Error("usage");
+  if (positionals.length !== 1 || !values.output || commandOf(args)!==positionals[0]) throw new Error("usage");
   if (positionals[0] === "import") return importCommand(values, values.output);
   if (
     !["verify", "status"].includes(positionals[0]) ||
@@ -72,31 +74,33 @@ function execute(args: string[]): { result: object; exit: number } {
 export function runCli(
   args: string[],
   write: (text: string) => void = console.log,
+  diagnose: (text: string) => void = console.error,
 ): number {
-  if (args.length === 1 && args[0] === "--help") {
-    write(
-      "Fiscal-year CSV importer and acquisition companion. Browser download is separate optional input.\nimport --file CSV --fiscal-year YEAR --output PRIVATE_ARCHIVE [--max-bytes N] [--max-rows N]\nverify --output PRIVATE_ARCHIVE\nstatus --output PRIVATE_ARCHIVE\nImport exits: 0 clean/reused clean; 2 imported_with_rejections (also reused); 1 failure. Verify/status: 0 locally verified, 1 failure. Native collect also exits 3 unavailable, 4 unsupported. No financial census completeness claim. seed is unsupported.\n" +
-        acquisitionHelp,
-    );
-    return 0;
-  }
+  let text: string, exit: number;
   try {
-    const { result, exit } = execute(args);
-    write(JSON.stringify(result));
-    return exit;
+    const info = information(args);
+    if (info !== undefined) { text=info; exit=0; }
+    else { const outcome=execute(args); text=JSON.stringify(outcome.result); exit=outcome.exit; }
   } catch {
-    write(JSON.stringify({ error: "operation_failed" }));
-    return 1;
+    if (!args.length) diagnose(help());
+    guidance(diagnose);
+    text=JSON.stringify({ error: "operation_failed" }); exit=1;
   }
+  write(text);
+  return exit;
 }
 if (import.meta.main) {
   const args = process.argv.slice(2);
-  process.exitCode = [
-    "discover",
-    "collect",
-    "acquire",
-    "verify-source",
-  ].includes(args[0])
-    ? await runAcquisitionCli(args)
-    : runCli(args);
+  let command: string | undefined;
+  try { command=commandOf(args); } catch { /* normal parser renders safe failure */ }
+  let rendered='';
+  const capture=(text:string)=>{rendered=text;};
+  const exit = sourceCommands.includes(command ?? '')
+    ? await runAcquisitionCli(args,capture)
+    : runCli(args,capture);
+  try { await writeOutput(rendered); process.exitCode=exit; }
+  catch(error){
+    if(error instanceof OutputFailure){process.exitCode=outputStatus(error,exit);if(error.timedOut)process.exit(1);}
+    else {console.error('financial-transparency-consume: output delivery failed.');process.exitCode=1;}
+  }
 }

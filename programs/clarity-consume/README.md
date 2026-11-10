@@ -28,7 +28,7 @@ Requires Bun and project dependencies. From this program directory:
 
 A duplicate ID `collect` verifies retained originals and returns existing coverage with zero HTTP. `Collector.collect(id, refresh)` remains compatible; `collectDate(date, refresh)` adds calendar selection. Leading zeroes in IDs are preserved. This is local reuse, not a remote freshness check. Use `--refresh` for a new bounded source observation and new byte versions; prior originals are not overwritten. A changed current-version token never becomes a path without literal digits validation. Before/after tokens and disagreement coverage remain explicit. No claim of immutable server content is made.
 
-Calendar selection is mutually exclusive with ID selection. Invalid dates, rollover dates, timezone strings and path-like IDs fail before HTTP or archive opening at the CLI. Catalog dates are parsed explicitly as M/D/YYYY with optional ` 12:00:00 AM`; XML/settings dates use the same real-calendar parser, without `Date.parse` or timezone conversion. The selected date must agree across catalog, settings and XML, not just the election name. Ambiguous dates list matching IDs/labels; nonexistent dates list available catalog candidates. No result/version request is sent for an absent catalog ID or unresolved date.
+Calendar selection is mutually exclusive with ID selection. Invalid dates, rollover dates, timezone strings and path-like IDs fail before HTTP or archive opening at the CLI. Catalog dates are parsed explicitly as M/D/YYYY with optional ` 12:00:00 AM`; XML/settings dates use the same real-calendar parser, without `Date.parse` or timezone conversion. The selected date must agree across catalog, settings and XML, not just the election name. Ambiguous dates list matching IDs/labels; nonexistent dates list available catalog candidates. The native CLI preserves this guidance on stderr with status 1 and empty stdout, including literal leading-zero IDs; it suggests `--election` or `--refresh`. Only explicitly classified date-selection errors expose public catalog guidance (terminal controls escaped); unexpected/private failures remain generic. No result/version request is sent for an absent catalog ID or unresolved date.
 
 Without `--refresh`, dates first consult the latest hash-verified retained catalog. An unambiguous matching completed/disagreement snapshot is verified and reused with zero HTTP, even after reopening. Missing or ambiguous dates in that retained catalog fail locally: use `--refresh` to obtain a fresh bounded catalog observation. If the catalog now assigns a different date to the same ID, the old snapshot is not relabeled or reused for that new date. With no retained catalog, or an unambiguous date without a completed snapshot, policy/catalog discovery precedes collection. A resumed checkpoint keeps its own catalog; refreshing the catalog index never invalidates the historical snapshot's original labels/dates, and checkpoint reuse cannot roll that index backwards.
 
@@ -73,6 +73,38 @@ Focused remedy verification: 81 tests passed, 456 assertions, typecheck passed, 
 Fresh Bun LCOV is used for crapper; the strict goal is every measured function below CRAP 10. Dryer uses 0.8. Full-source mutation execution is in a private common-root mirror after an unchanged-worker full-suite baseline. Mutation survivors are reported explicitly, not treated as a zero-survivor acceptance pass; the expensive countywide-shaped fixture is run in the full suite but excluded from repeated mutation workers. Independent chief review, backward-archive verification and final acceptance remain separate from these implementation receipts. No commit/push is performed by this worker.
 
 ## Development and limitations
+
+### CLI discovery and delivery
+
+`bun src/cli.ts --help`, `-h`, `help COMMAND`, and `COMMAND --help`/`-h`
+are offline informational paths; `--version` reports the newly declared package
+version 0.1.0 (also accepted after a command). No archive is opened for these
+requests. Plain invocation prints useful help on stderr and retains exit 1.
+Known value options consume their next token: a value spelling `--help` is not
+help. `--` ends option parsing; following operands are not informational flags.
+Explicit help bypasses unknown options, but malformed/missing option values can
+still fail parsing. GNU equals/split string values and archive options around a
+command work. Repeated options retain last-value-wins compatibility; collection
+selection remains exactly one ID or date. There are no grouped short value
+options, prompts, stdin archive support, color, or pager.
+
+Normal pretty JSON bytes and domain statuses are unchanged. Native descriptor
+writes check short writes and bound total delivery to five seconds, including
+blocking pipes and nonblocking backpressure, without rerunning domain operations.
+On timeout the native entrypoint terminates its pending output worker after a
+safe diagnostic; it does not wait indefinitely for a non-reading consumer.
+Non-EPIPE delivery failures now return 1 with a privacy-safe stderr diagnostic:
+the prior silent success was incorrect. EPIPE is intentionally quiet and retains
+the completed operation's status (normally 0); it does not assert that a consumer
+received all output. Completed checkpoints remain retained, not rolled back.
+
+Offline tests: set `TMPDIR` to a canonical existing private external scratch
+directory. On macOS, run `bun test` under `sandbox-exec` with `(deny network*)`
+and narrow localhost bind/inbound/outbound allowances for authored native
+fixtures, as documented by the financial sibling's offline test command. Run
+`bun node_modules/typescript/bin/tsc --noEmit` for typecheck. Generated probes,
+coverage and dependency installation belong in an external execution mirror,
+not this checkout. Retained-input replay is separate, not needed for CLI tests.
 
     bun test --coverage --coverage-reporter=lcov --coverage-reporter=text
     crapper --use-existing-coverage --threshold 10 src

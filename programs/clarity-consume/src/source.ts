@@ -37,10 +37,21 @@ export function sourceDate(value:unknown):string {
   if(!match)throw new Error('unsupported source election date; expected M/D/YYYY [12:00:00 AM]');
   return isoDate(`${match[3]}-${match[1].padStart(2,'0')}-${match[2].padStart(2,'0')}`);
 }
+// Only errors created by selectDate carry a public selection diagnostic.
+// Keep ordinary Error/message compatibility; never classify by message prefix.
+const dateSelectionErrors = new WeakMap<object,string>();
+export function dateSelectionDiagnostic(error:unknown):string|undefined {
+  return error instanceof Error ? dateSelectionErrors.get(error) : undefined;
+}
 export function selectDate(entries:Election[],date:string):Election {
   const matches=entries.filter(e=>sourceDate(e.Date)===date);
   const candidates=(matches.length?matches:entries).map(e=>`${e.EID} (${sourceDate(e.Date)}: ${e.ElectionName})`).join(', ');
-  if(matches.length!==1)throw new Error(`${matches.length?'ambiguous':'nonexistent'} catalog date ${date}; candidates: ${candidates || 'none'}`);
+  if(matches.length!==1){
+    const error=new Error(`${matches.length?'ambiguous':'nonexistent'} catalog date ${date}; candidates: ${candidates || 'none'}`);
+    // Escape terminal controls in public catalog labels, without changing library errors.
+    dateSelectionErrors.set(error,JSON.stringify(error.message).slice(1,-1));
+    throw error;
+  }
   return matches[0];
 }
 export function catalog(value: unknown): Election[] {
