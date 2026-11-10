@@ -8,7 +8,11 @@ The [Financial Transparency Portal](https://financialtransparency.traviscountytx
 
 One publisher-provided FY2027 CSV was acquired through the normal browser and reconciled against one selected payment's two displayed lines. Acquisition is supervised. The trimmed [Bun/SQLite importer](../../../programs/financial-transparency-consume/README.md) then imports the downloaded local file without network access, retains original bytes and quarantines malformed records. The former Power BI query/transport/continuation machinery was removed, not claimed repaired or enabled. The earlier test-isolation incident remains historical provenance, not evidence of source denial.
 
-## Browser procedure
+## Current native acquisition companion
+
+The [program README](../../../programs/financial-transparency-consume/README.md) now documents caller-selected fiscal-year static-file HEAD discovery, bounded native collection, source/import binding and independent timing verification. The normal-browser download receipt established the anonymous `https://tctransparency.traviscountytx.gov/Reports/DataSAP/PaymentRegister_YEAR.csv` contract; no Power BI query/token replay is used. A later real FY2027 original is 3217989 bytes,19487 records,19486 accepted and1 quarantined, distinct from the earlier byte version below. FY2026 HEAD declared38248830 bytes; its contents were not acquired/validated. Independent final review and chief integration passed171tests/typecheck, including current retained-byte fixture replay and unchanged old v1 import verification. Older source-cache ledgers missing independent timing facts require operator review unchanged; do not fabricate migration facts or call the new replay original publisher history. Candidate-year availability is not an exhaustive historical census. Browser export remains an optional supervised input route.
+
+## Earlier supervised browser procedure
 
 Use the general agent-browser skill through the terminal tool. Use an explicit reviewed config, unique owned local session and a fresh private download directory outside the repository. Normal browser subresources/concurrency are allowed; searches and exports remain deliberate. No Power BI request/token replay or hidden-model extraction is needed.
 

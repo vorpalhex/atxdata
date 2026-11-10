@@ -144,7 +144,11 @@ A deliberate 100-byte ceiling on the ZIP transfer failed with curl exit 56, stde
 
 Documentation-only deliverable: TDD/coverage/CRAP below 10, dryer code similarity at 0.8, mutator, TypeScript typecheck and SQLite/client-state integrity gates are not applicable; no production client code changed. Executable documentation, real ZIP/geometry/schema/identity validation, failure/full-transfer recovery, local checksum reruns and publication scans are the applicable checks. Independent review is chief-owned and remains a separate gate.
 
-## Bounded collector implementation (2026-11-06)
+## Current source-wide collector
+
+The current [program README](../../../programs/arcgis-consume/README.md) documents bounded paginated discovery, selectable advertised items/layers and native/published-file strategies beyond the original sample. Independent timing/guard recheck and chief integration passed88tests/typecheck plus two unchanged operator-policy failures. The original308-record body was reused in NEW evidence-bearing compatibility ledgers; the prior original collector SQLite/history was not recovered. Old ledgers without independent timing facts require explicit review. No new public ZIP transfer, person-level collection or complete historical inventory is implied.
+
+## Historical bounded collector implementation (2026-11-06)
 
 The retained manual recipe above is separate from [arcgis-consume](../../../programs/arcgis-consume/README.md), a new headless Bun/TypeScript library/CLI using one reusable ArcGIS adapter for this publication and TNR. `rules`, bounded `discover`, `collect`/`sync`, SQLite `status`, and zero-HTTP `verify` commands are documented in its README. Source state, raw files, HTTP headers, publisher attributes and signed redirects remain private outside source.
 

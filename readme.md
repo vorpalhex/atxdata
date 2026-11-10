@@ -38,6 +38,8 @@ LLM contributions are acceptable, but will generally be heavily scrutinized. We 
 
 Each program currently retains its own dependencies, configuration, and commands.
 
+Local integration snapshot at code commit `d7fbb45`: all eight suites ran in separate processes with outbound public networking denied, retained-input gates enabled and zero skips. Results: 995 passing tests, two pre-existing ArcGIS robots-policy failures, and eight passing typechecks. The operator-owned ArcGIS policy is unchanged. This is local functional/retained-input evidence, not new public acquisition or complete publisher history. enCodePlus feature work is paused; its unintegrated historical/raw work is excluded.
+
 ### legistar-consume
 
 Run from the program directory:

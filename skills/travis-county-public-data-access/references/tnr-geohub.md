@@ -189,7 +189,11 @@ These checks establish bounded record and geometry completeness for this one liv
 
 This deliverable changes documentation only. TDD/CRAP/coverage, dryer structural duplication at 0.8, mutation testing, typecheck and SQLite integrity/client recovery gates are not applicable; no production code/client was added or changed. Live content/pagination checks, local checksum rerun, capped-failure/full-transfer recovery, command validation and publication scans are the applicable evidence. Independent review remains a separate operator-owned gate.
 
-## Bounded collector implementation (2026-11-06)
+## Current source-wide collector
+
+The current [program README](../../../programs/arcgis-consume/README.md) documents selectable advertised items/services/layers/ranges, resumable catalog discovery and configurable finite acquisition bounds. Independent timing/guard recheck and chief integration passed88tests/typecheck plus the two unchanged operator-policy failures; rules.ts is unchanged. Gate rollback is checked against independent timing evidence. Older ledgers missing those facts require explicit review, not automatic migration. Actual original4/308bytes reconstructed NEW compatible ledgers, not recovered historical collector state. These local checks add no fresh public search/acquisition or historical-coverage proof.
+
+## Historical bounded collector implementation (2026-11-06)
 
 The manual recipe above remains a retained observation, not the new runtime. [arcgis-consume](../../../programs/arcgis-consume/README.md) now implements the named TNR feature-query strategy and the separate Voter Maps published-file strategy through one Bun/TypeScript adapter, using existing collector HTTP/streaming/archive helpers and SQLite provenance. `rules`, `discover`, `collect`, `sync`, `status` and zero-HTTP `verify` commands, bounds, reviewed terms hashes and recovery rules are documented there. Runtime state/originals remain outside source.
 
