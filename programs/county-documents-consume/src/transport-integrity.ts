@@ -5,6 +5,7 @@ import {sha} from "./engine";
 import {verifySchema,readCooldown} from "./schema";
 import {reservationReceipt,attemptReceipt} from './budgets';
 import {verifyCooldownObligations} from './cooldown-integrity';
+import {verifyRedirects,redirectEdges,boundRobots,hasRedirectSchema} from './redirects';
 export type Representation={attempt:string;representation:string;encoding:string;wire_bytes:number|null;decoded_bytes:number;encoded_hash:string|null;decoded_hash:string;wire_path:string|null;decoded_path:string};
 type Attempt={source:Source;id:string;run:string;run_kind:string;kind:string;url:string;status:number|null;error:string|null;bytes:number|null;sha:string|null;reservation:number;ended:number|null;headers:string|null};
 function requireChecks(checks:boolean[],message:string):void {
@@ -16,9 +17,10 @@ function verifyLegacy(engine:Engine,a:Attempt,r:Representation):void {
  requireChecks([a.kind==='robots',a.status===200,a.error==='Error: Content-Length mismatch',a.ended!==null,new URL(a.url).pathname==='/robots.txt',h.get('content-type')?.startsWith('text/plain')===true,['br','gzip'].includes(h.get('content-encoding')??''),r.encoding===h.get('content-encoding'),a.bytes===r.decoded_bytes,a.sha===r.decoded_hash,r.wire_bytes===null,r.encoded_hash===null,r.wire_path===null], 'legacy classifier failure identity');
  requireChecks([resolution!==null,resolution?.evidence_hash===r.decoded_hash,Boolean(resolution?.reason.trim()),Boolean(resolution?.previous_gate.trim()),(resolution?.resolved_at??0)>=a.ended!], 'legacy resolution evidence');
 }
-function verifyKnown(a:Attempt,r:Representation,blocked:boolean):void {
+function verifyKnown(engine:Engine,a:Attempt,r:Representation,blocked:boolean):void {
  requireChecks([r.representation==='encoded-and-decoded',a.bytes===r.wire_bytes,a.sha===r.encoded_hash,r.wire_path===`${r.encoded_hash}.wire`,Number.isInteger(r.wire_bytes),r.wire_bytes!>=0,r.wire_bytes!<=a.reservation], 'wire accounting');
- requireChecks([a.status!==null,a.status===200 || a.error!==null,a.ended!==null || blocked,a.error===null || blocked], 'status/error/stop accounting');
+ const redirect=a.run.startsWith('transport-work-v3:') && a.status===302 && redirectEdges(engine).some(e=>e.attempt===a.id);
+ requireChecks([a.status!==null,a.status===200 || a.error!==null || redirect,a.ended!==null || blocked,a.error===null || blocked], 'status/error/stop accounting');
 }
 function verifyDecision(engine:Engine,a:Attempt,receipt:ReturnType<typeof reservationReceipt>):void {
  if(!receipt) return;
@@ -39,20 +41,24 @@ function verifyAttempt(engine:Engine,a:Attempt,blocked:boolean):void {
  }
  requireChecks([Number.isInteger(r.decoded_bytes),r.decoded_bytes>=0,r.decoded_bytes<=cap,/^[a-f0-9]{64}$/.test(r.decoded_hash)], 'decoded accounting');
  if(r.representation==='legacy-decoded-only') verifyLegacy(engine,a,r);
- else verifyKnown(a,r,blocked);
+ else verifyKnown(engine,a,r,blocked);
 }
 function verifyRobots(engine:Engine):void {
  const rows=engine.db.query<{origin:string;body:string;sha:string},[]>("SELECT * FROM robots").all();
  for(const r of rows) {
   const receipt=engine.db.query("SELECT 1 FROM attempts a JOIN representations r ON r.attempt=a.id WHERE a.kind='robots' AND a.url=? AND a.status=200 AND r.decoded_hash=?").get(r.origin+'/robots.txt',r.sha);
-  requireChecks([sha(r.body)===r.sha,receipt!==null], 'robots provenance');
+  requireChecks([sha(r.body)===r.sha,receipt!==null || boundRobots(engine,r.origin,r.sha)], 'robots provenance');
  }
- const missing=engine.db.query("SELECT 1 FROM attempts a JOIN representations r ON r.attempt=a.id LEFT JOIN robots b ON a.url=b.origin||'/robots.txt' AND b.sha=r.decoded_hash WHERE a.kind='robots' AND (a.error IS NULL OR r.representation='legacy-decoded-only') AND a.ended IS NOT NULL AND b.origin IS NULL LIMIT 1").get();
+ const missing=engine.db.query("SELECT 1 FROM attempts a JOIN representations r ON r.attempt=a.id LEFT JOIN robots b ON a.url=b.origin||'/robots.txt' AND b.sha=r.decoded_hash WHERE a.kind='robots' AND a.status=200 AND (a.error IS NULL OR r.representation='legacy-decoded-only') AND a.ended IS NOT NULL AND b.origin IS NULL LIMIT 1").get();
  requireChecks([missing===null], 'robots decision missing');
+ if(hasRedirectSchema(engine)) {
+  for(const row of engine.db.query<{origin:string;sha:string},[]>('SELECT b.origin,r.sha FROM robots_bindings b JOIN robots r ON r.origin=b.origin').all()) requireChecks([boundRobots(engine,row.origin,row.sha)],'robots redirect binding');
+ }
 }
 export function verifyTransportLedger(engine:Engine,pendingClassifier?:string):void {
  verifySchema(engine.db);
  const gate=readCooldown(engine.db);
+ verifyRedirects(engine);
  const orphan=engine.db.query("SELECT 1 FROM classifier_resolutions c LEFT JOIN representations r ON r.attempt=c.attempt WHERE r.representation IS NULL OR r.representation<>'legacy-decoded-only' LIMIT 1").get();
  requireChecks([orphan===null], 'orphan classifier resolution');
  const attempts=engine.db.query<Attempt,[]>("SELECT a.*,r.kind run_kind,r.source FROM attempts a JOIN runs r ON a.run=r.id ORDER BY a.rowid").all();

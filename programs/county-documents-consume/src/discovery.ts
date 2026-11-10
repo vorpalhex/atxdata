@@ -1,8 +1,8 @@
 import {load} from 'cheerio';
 import {officialUrl,sources,type Source} from './adapters';
 export type PageLink={url:string;href:string;label:string};
-const PREFIX:Record<Source,string[]>={budgets:['/planning-budget'],'county-code':['/commissioners-court/county-code','/regs/traviscounty-tx/'],'meeting-archives':['/departments/commissioners-court/cc-archives'],'election-documents':['/current-election-information/','/election-results','/elections/','/past-election']};
-const RELEVANT:Record<Source,RegExp>={budgets:/budget|fiscal|fy[\s-]*\d|annual|archive|adopted|taxpayer|tax.rate|financial|polic|summary|volume|next|previous|page\s*\d|\b\d{4}\b/i,'county-code':/code|archive|title|chapter|ordinance|next|previous|page\s*\d/i,'meeting-archives':/minutes|archive|\b\d{4}\b|next|previous|page\s*\d/i,'election-documents':/results|reconcil|certif|audit|precinct|archive|past|histor|next|previous|page\s*\d/i};
+const PREFIX:Record<Source,string[]>={'austin-financial-publications':['/budget-excellence','/financial-services'],budgets:['/planning-budget'],'county-code':['/commissioners-court/county-code','/regs/traviscounty-tx/'],'meeting-archives':['/departments/commissioners-court/cc-archives'],'election-documents':['/current-election-information/','/election-results','/elections/','/past-election']};
+const RELEVANT:Record<Source,RegExp>={'austin-financial-publications':/budget|financial|bond|debt|annual|report|insights|\b\d{4}\b/i,budgets:/budget|fiscal|fy[\s-]*\d|annual|archive|adopted|taxpayer|tax.rate|financial|polic|summary|volume|next|previous|page\s*\d|\b\d{4}\b/i,'county-code':/code|archive|title|chapter|ordinance|next|previous|page\s*\d/i,'meeting-archives':/minutes|archive|\b\d{4}\b|next|previous|page\s*\d/i,'election-documents':/results|reconcil|certif|audit|precinct|archive|past|histor|next|previous|page\s*\d/i};
 /** Narrow source paths AND actual retained link required. Never a general same-host crawler. */
 export function pageUrl(source:Source,raw:string,base:string):string {
  const value=officialUrl(source,raw,base),url=new URL(value);

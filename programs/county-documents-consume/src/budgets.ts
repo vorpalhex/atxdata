@@ -47,6 +47,6 @@ export function attemptReceipt(a:{run:string;run_kind:string;kind:string;reserva
  const checks=[["pdf","page","robots"].includes(a.kind),Number.isSafeInteger(cap),cap>0,a.kind==="pdf" || cap===3145728];
  if(!checks.every(Boolean)) throw Error("transport integrity/budget: full reservation required");
  const receipt=reservationReceipt(a.run_kind,a.kind,cap);
- if(a.run.startsWith("transport-work-") && (!(a.run.startsWith("transport-work-v1:") || a.run.startsWith("transport-work-v2:")) || receipt===null)) throw Error("versioned run identity downgrade");
+ if(a.run.startsWith("transport-work-") && (!(a.run.startsWith("transport-work-v1:") || a.run.startsWith("transport-work-v2:") || a.run.startsWith("transport-work-v3:")) || receipt===null)) throw Error("versioned run identity downgrade");
  return receipt;
 }

@@ -11,7 +11,7 @@ function responseTime(a:Completion):number {
  const receipt=attemptReceipt(a);
  // Old receipts lack header time. Completion is a conservative upper bound for
  // relative holds, not a fabricated observation. Insufficient old gates refuse reviewably.
- if(!a.run.startsWith('transport-work-v2:')) return timestamp(a.ended!);
+ if(!a.run.startsWith('transport-work-v2:') && !a.run.startsWith('transport-work-v3:')) return timestamp(a.ended!);
  const timing=receipt?.headerTiming;
  if(timing?.clockBasis!=='unix-ms') throw Error('cooldown header clock basis missing');
  const observed=timestamp(timing.observed);

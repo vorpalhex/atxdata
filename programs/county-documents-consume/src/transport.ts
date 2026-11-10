@@ -10,6 +10,7 @@ import {cooldown,robotsPolicy} from "./policy";
 import {verifySchema,readCooldown} from "./schema";
 import {verifyRepresentations} from './archive-verification';
 import {verifyTransportLedger} from "./transport-integrity";
+import {redirectTarget,hasRedirectSchema} from "./redirects";
 export {cooldown} from "./policy";
 
 type Dependencies={fetch:(url:string,init:RequestInit)=>Promise<Response>;now:()=>number;sleep:(ms:number)=>Promise<void>};
@@ -26,6 +27,9 @@ export class Transport {
  private acknowledgement:HumanAcknowledgement|undefined;
  private postBody:string|undefined;
  private anonymous=false;
+ private redirectStop:string|undefined;
+ private pendingEdge:string|undefined;
+ private chainRoot:string|undefined;
  private readonly cookies=new Map<string,string>();
  constructor(private readonly engine:Engine,dependencies:Partial<Dependencies>={},budget:Partial<WorkBudget>={},options:{human?:boolean}={}) {
   this.human=humanOption(options.human);
@@ -62,7 +66,7 @@ export class Transport {
  private gate():number {
   verifyTransportLedger(this.engine);
   const row=readCooldown(this.engine.db);
-  if(row.blocked) throw new Error(`transport stopped: ${row.blocked}`);
+  if(row.blocked && row.blocked!==this.redirectStop) throw new Error(`transport stopped: ${row.blocked}`);
   return row.not_before;
  }
  private async wait():Promise<void> {
@@ -75,9 +79,12 @@ export class Transport {
  private start(source:Source,url:string,kind:Kind):Attempt {
   // Recheck after the awaited pacing gate; another instance may have reserved the archive.
   this.gate();
-  const cap=this.budget(source,kind),run=this.engine.start(source,this.operation.receipt(kind,cap,kind==='robots'?undefined:this.acknowledgement),'transport-work-v2:'+crypto.randomUUID()),id=crypto.randomUUID();
+  if(source.startsWith('austin-') && !hasRedirectSchema(this.engine)) throw Error('Austin transport requires new schema4 archive; no automatic migration');
+  const cap=this.budget(source,kind),run=this.engine.start(source,this.operation.receipt(kind,cap,kind==='robots'?undefined:this.acknowledgement),(source.startsWith('austin-')?'transport-work-v3:':'transport-work-v2:')+crypto.randomUUID()),id=crypto.randomUUID();
   this.engine.db.transaction(()=>{
    this.engine.db.run("INSERT INTO attempts(id,run,url,kind,started,reservation) VALUES(?,?,?,?,?,?)",[id,run,url,kind,this.deps.now(),cap]);
+   if(this.pendingEdge) this.engine.db.run('UPDATE redirect_edges SET target_attempt=? WHERE attempt=? AND target_attempt IS NULL',[id,this.pendingEdge]);
+   this.pendingEdge=undefined;
    this.engine.db.run("UPDATE cooldowns SET blocked='unfinished attempt requires operator review' WHERE id=1");
   })();
   return {cap,run,id};
@@ -109,17 +116,25 @@ export class Transport {
    this.engine.db.run("INSERT INTO representations VALUES(?,?, 'encoded-and-decoded',?,?,?,?,?,?)",[attempt.id,decoded.encoding,decoded.wire.length,decoded.body.length,decoded.encodedHash,decoded.decodedHash,wire.path,body.path]);
    this.engine.db.run("UPDATE attempts SET bytes=?,sha=? WHERE id=?",[decoded.wire.length,decoded.encodedHash,attempt.id]);
   })();
-  if(status!==200) throw new Error(`HTTP ${status}; no redirect/retry fanout`);
+  let redirect:string|undefined;
+  if(status===302 && attempt.run.startsWith('transport-work-v3:')) {
+   const row=this.engine.db.query<{source:Source;url:string},[string]>('SELECT r.source,a.url FROM attempts a JOIN runs r ON r.id=a.run WHERE a.id=?').get(attempt.id)!;
+   redirect=redirectTarget(row.source,row.url,status,response.headers.get('location'),kind);
+   this.engine.db.run('INSERT INTO redirect_edges VALUES(?,?,NULL)',[attempt.id,redirect]);
+   this.chainRoot??=attempt.id;
+   this.redirectStop??='redirect chain pending: '+attempt.id;
+   this.pendingEdge=attempt.id;
+  } else if(status!==200) throw new Error(`HTTP ${status}; no redirect/retry fanout`);
   if((kind!=="pdf" || !/^application\/pdf(?:;|$)/i.test(response.headers.get("content-type")??"")) && /captcha|cf-chl-|access denied|verify you are human/i.test(decoded.body.toString())) throw new Error("source challenge/denial");
-  return {body:decoded.body,mime:response.headers.get("content-type")??"",attempt:attempt.id,headers:JSON.stringify([...response.headers])};
+  return {body:decoded.body,mime:response.headers.get("content-type")??"",attempt:attempt.id,headers:JSON.stringify([...response.headers]),redirect};
  }
  private end(attempt:Attempt,delay:number,error?:unknown) {
   this.engine.db.run("UPDATE attempts SET ended=?,error=? WHERE id=?",[this.deps.now(),error?String(error):null,attempt.id]);
   this.engine.db.run("UPDATE cooldowns SET not_before=MAX(not_before,?) WHERE id=1",[this.deps.now()+Math.max(3000,delay)]);
-  if(!error) this.engine.db.run("UPDATE cooldowns SET blocked=NULL WHERE id=1");
+  if(!error) this.engine.db.run("UPDATE cooldowns SET blocked=? WHERE id=1",[this.redirectStop??null]);
   this.engine.finish(attempt.run,error);
  }
- private async request(source:Source,url:string,kind:Kind,delay:number) {
+ private async requestOne(source:Source,url:string,kind:Kind,delay:number) {
   transportUrl(source,url,kind);
   await this.engine.preflight();
   await this.wait();
@@ -134,9 +149,29 @@ export class Transport {
    throw error;
   }
  }
+ private async request(source:Source,url:string,kind:Kind,delay:number) {
+  const visited=new Set<string>();
+  for(;;) {
+   if(visited.has(url) || visited.size>=4) throw Error('redirect cycle/hop ceiling');
+   visited.add(url);
+   const result=await this.requestOne(source,url,kind,delay);
+   if(!result.redirect) return {...result,url};
+   url=result.redirect;
+  }
+ }
+ private finishRedirect():void {
+  if(!this.redirectStop) return;
+  verifyTransportLedger(this.engine);
+  const gate=readCooldown(this.engine.db);
+  if(gate.blocked!==this.redirectStop) throw Error('redirect stop changed; operator review');
+  this.engine.db.run('UPDATE cooldowns SET blocked=NULL WHERE id=1');
+  this.redirectStop=undefined;this.chainRoot=undefined;
+ }
  private saveRobots(origin:string,body:string,observed:number):number {
   const delay=robotsPolicy(body,"/robots.txt");
-  this.engine.db.run("INSERT INTO robots VALUES(?,?,?,?,?)",[origin,body,sha(body),delay,observed]);
+  const old=this.engine.db.query<{sha:string},[string]>('SELECT sha FROM robots WHERE origin=?').get(origin);
+  if(old && old.sha!==sha(body)) throw Error('changed retained policy requires operator review');
+  if(!old) this.engine.db.run("INSERT INTO robots VALUES(?,?,?,?,?)",[origin,body,sha(body),delay,observed]);
   this.engine.db.run("UPDATE cooldowns SET not_before=MAX(not_before,?) WHERE id=1",[observed+delay]);
   return delay;
  }
@@ -146,7 +181,15 @@ export class Transport {
   if(!row) {
    const result=await this.request(source,origin+"/robots.txt","robots",2000);
    if(!/^text\/plain(?:;|$)/i.test(result.mime)) throw new Error("robots MIME unresolved");
-   this.saveRobots(origin,result.body.toString(),this.deps.now());
+   this.engine.db.transaction(()=>{
+    const observed=this.deps.now();
+    this.saveRobots(new URL(result.url).origin,result.body.toString(),observed);
+    if(this.chainRoot) {
+     this.saveRobots(origin,result.body.toString(),observed);
+     this.engine.db.run('INSERT INTO robots_bindings VALUES(?,?,?)',[origin,this.chainRoot,result.attempt]);
+    }
+   })();
+   this.finishRedirect();
    row={body:result.body.toString(),sha:sha(result.body)};
   }
   if(sha(row.body)!==row.sha) throw new Error("robots provenance corrupted");
@@ -216,7 +259,9 @@ export class Transport {
    const delay=await this.robots(source,url);
    const result=await this.request(source,url,"page",delay);
    if(!/^text\/html(?:;|$)/i.test(result.mime)) throw new Error("HTML MIME mismatch");
-   return this.engine.importPage(source,url,result.body.toString(),"live-http",result.headers);
+   const imported=await this.engine.importPage(source,result.url,result.body.toString(),"live-http",result.headers);
+   this.finishRedirect();
+   return imported;
   });
  }
  async discoverTree(source:Source,url:string) {
@@ -238,7 +283,9 @@ export class Transport {
    const row=this.engine.observation(id);
    const delay=await this.robots(row.source,row.url);
    const result=await this.request(row.source,row.url,"pdf",delay);
-   return this.engine.importPdf(id,result.body,result.mime,"live-http",result.headers);
+   const imported=await this.engine.importPdf(id,result.body,result.mime,"live-http",result.headers);
+   this.finishRedirect();
+   return imported;
   });
  }
 }

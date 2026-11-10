@@ -21,7 +21,7 @@ function selectedIdentity(row:Evidence) {
  return {source:row.source,url:row.url,chapter:row.chapter,year:row.year,date:row.date,role:row.role};
 }
 function knownReceiptSchema(receipt:{schema:number;identityPolicy:string}):boolean {
- return [2,3,4].includes(receipt.schema) && (receipt.schema!==4 || receipt.identityPolicy==='scoped-title-v1');
+ return ([2,3,4].includes(receipt.schema) && (receipt.schema!==4 || receipt.identityPolicy==='scoped-title-v1')) || receipt.schema===5 && receipt.identityPolicy==='austin-fiscal-title-v1';
 }
 export class Engine {
  readonly db:Database;
@@ -105,7 +105,7 @@ export class Engine {
    this.db.transaction(()=>{
     this.policyIntegrity();
     this.db.run("INSERT INTO snapshots VALUES(?,?,?,?,?,?,?,?)",[id,source,url,artifact.hash,artifact.path,origin,new Date().toISOString(),run]);
-    this.db.run("INSERT INTO snapshot_metadata VALUES(?,?,?,?,?,?)",[id,3,rows.length,headers,headers===null?null:sha(headers),origin==="live-http"?new Date().toISOString():null]);
+    this.db.run("INSERT INTO snapshot_metadata VALUES(?,?,?,?,?,?)",[id,source==='austin-financial-publications'?4:3,rows.length,headers,headers===null?null:sha(headers),origin==="live-http"?new Date().toISOString():null]);
     for(const evidence of rows) this.db.run("INSERT INTO observations VALUES(?,?,?,?,?,'pending')",[crypto.randomUUID(),id,source,evidence.url,JSON.stringify(evidence)]);
    })();
    return {snapshot:id,occurrences:rows.length,unique:new Set(rows.map(row=>row.url)).size};
@@ -151,7 +151,7 @@ export class Engine {
   return inspectPdf(join(this.root,candidate.path));
  }
  private receipt(row:Evidence,bytes:Uint8Array,parsed:Awaited<ReturnType<typeof inspectPdf>>,headers:string|null) {
-  return {schema:4,identityPolicy:"scoped-title-v1",parser:"Poppler",quality:"text-identity-only",structuredInterpretation:false,documentSha256:sha(bytes),selection:selectedIdentity(row),textHash:sha(parsed.text),info:parsed.info,pages:parsed.pages,body:bodyEvidence(parsed.text),headers,originalRetrievedAt:null as string|null};
+  return {schema:row.source==='austin-financial-publications'?5:4,identityPolicy:row.source==='austin-financial-publications'?'austin-fiscal-title-v1':"scoped-title-v1",parser:"Poppler",quality:"text-identity-only",structuredInterpretation:false,documentSha256:sha(bytes),selection:selectedIdentity(row),textHash:sha(parsed.text),info:parsed.info,pages:parsed.pages,body:bodyEvidence(parsed.text),headers,originalRetrievedAt:null as string|null};
  }
  async validatePdf(bytes:Uint8Array,mime:string,row:Evidence,headers:string|null=null):Promise<string> {
   const parsed=await this.parsedPdf(bytes,mime);
@@ -183,6 +183,7 @@ export class Engine {
  async acceptRendered(id:string,bytes:Uint8Array,image:Uint8Array,review:RenderedReview,headers:string|null=null) {
   await this.preflight();
   const row=this.observation(id);
+  if(row.source==='austin-financial-publications') throw Error('Austin requires text identity; county rendered review is unsupported');
   requireReview(review,row,bytes,image);
   const parsed=await this.parsedPdf(bytes,"application/pdf");
   if(parsed.pages!==1) throw new Error("manual rendered identity review supports one-page documents only");
@@ -196,7 +197,9 @@ export class Engine {
  }
  async acceptRenderedPages(id:string,bytes:Uint8Array,images:Uint8Array[],review:PageReview,headers:string|null=null) {
   await this.preflight();
-  const row=this.observation(id),parsed=await this.parsedPdf(bytes,'application/pdf');
+  const row=this.observation(id);
+  if(row.source==='austin-financial-publications') throw Error('Austin requires text identity; county rendered review is unsupported');
+  const parsed=await this.parsedPdf(bytes,'application/pdf');
   requirePageReview(review,row,bytes,images,parsed.pages);
   const candidate=join(this.root,`${sha(bytes)}.candidate`),imagePaths:string[]=[];
   for(const [index,entry] of review.pages.entries()) {
@@ -239,6 +242,8 @@ export class Engine {
   return {documents:selected.length,versions,httpRequests:0};
  }
  private selectedHistory(row:Listed):number {
+  const oversized=this.db.query('SELECT 1 FROM history h JOIN versions v ON h.source=v.source AND h.url=v.url AND h.sha=v.sha WHERE h.observation=? AND v.bytes>? LIMIT 1').get(row.id,this.maxPdfBytes);
+  if(oversized) throw Error('current caller PDF byte budget exceeded by retained original');
   const count=this.db.query<{n:number},[string]>("SELECT COUNT(*) n FROM history WHERE observation=?").get(row.id)!.n;
   if(row.status!=="downloaded" || !count) throw new Error("selected download incomplete");
   return count;
@@ -268,6 +273,7 @@ export class Engine {
  private async verifyReceipt(version:Version,bytes:Buffer,parsed:Awaited<ReturnType<typeof inspectPdf>>,history:{observation:string;receipt:string;receipt_hash:string}) {
   if(sha(history.receipt)!==history.receipt_hash) throw new Error("validation receipt hash mismatch");
   const row=this.observation(history.observation),receipt=JSON.parse(history.receipt);
+  if(row.source==='austin-financial-publications' && (receipt.schema!==5 || receipt.identityPolicy!=='austin-fiscal-title-v1')) throw Error('Austin PDF requires versioned city identity receipt');
   if(receipt.schema===undefined) {this.verifyLegacyReceipt(receipt,parsed,row);return;}
   const checks=[knownReceiptSchema(receipt),receipt.documentSha256===version.sha,JSON.stringify(receipt.selection)===JSON.stringify(selectedIdentity(row)),receipt.parser==="Poppler",receipt.structuredInterpretation===false,receipt.textHash===sha(parsed.text),receipt.info===parsed.info,receipt.pages===parsed.pages];
   if(!checks.every(Boolean)) throw new Error("validation receipt schema/selection mismatch");
@@ -315,7 +321,7 @@ export class Engine {
  }
  private snapshotMeta(id:string):SnapshotMeta {
   const meta=this.db.query<SnapshotMeta,[string]>("SELECT * FROM snapshot_metadata WHERE snapshot=?").get(id);
-  if(!meta || ![1,2,3].includes(meta.adapter_schema)) throw new Error("snapshot schema receipt missing");
+  if(!meta || ![1,2,3,4].includes(meta.adapter_schema)) throw new Error("snapshot schema receipt missing");
   if((meta.headers===null?null:sha(meta.headers))!==meta.headers_hash) throw new Error("snapshot header receipt mismatch");
   return meta;
  }
@@ -323,6 +329,7 @@ export class Engine {
   const bytes=await this.readArtifact(snapshot.path);
   if(sha(bytes)!==snapshot.sha) throw new Error("snapshot hash mismatch");
   const meta=this.snapshotMeta(snapshot.id);
+  if((snapshot.source==='austin-financial-publications')!==(meta.adapter_schema===4)) throw Error('source/adapter metadata version mismatch');
   const expected=discover(snapshot.source,snapshot.url,bytes.toString(),meta.adapter_schema).map(row=>this.serializedEvidence(row,meta.adapter_schema)).sort();
   const stored=this.db.query<{id:string;evidence:string;source:string;url:string},[string]>("SELECT * FROM observations WHERE snapshot=?").all(snapshot.id);
   for(const row of stored) this.observation(row.id);

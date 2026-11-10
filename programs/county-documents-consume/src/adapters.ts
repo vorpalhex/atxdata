@@ -2,6 +2,7 @@ import {load} from "cheerio";
 import {pageUrl} from "./discovery";
 
 export const sources={
+    "austin-financial-publications":{pages:["https://www.austintexas.gov/budget-excellence/data-and-insights","https://www.austintexas.gov/financial-services/financial-transparency"],disclaimer:"City of Austin publication discovery; not county results or proof of historical completeness. Widen wrappers and redirect acquisition remain gated."},
     "county-code":{pages:["https://www.traviscountytx.gov/commissioners-court/county-code"],disclaimer:"Reference-only online code, not the Clerk's official paper record. Historical/Title30 availability requires actual supported source links; blocked external links remain explicit."},
     budgets:{pages:["https://www.traviscountytx.gov/planning-budget/current-year","https://www.traviscountytx.gov/planning-budget","https://www.traviscountytx.gov/planning-budget/archives"],disclaimer:"Document acquisition only, not structured financial interpretation."},
     "meeting-archives":{pages:["https://countyclerk.traviscountytx.gov/departments/commissioners-court/cc-archives/"],disclaimer:"Historical static minutes only. No CivicClerk IDs or boundary completeness; originals private, no public cache/index."},
@@ -13,7 +14,8 @@ export type Evidence={
     chapter:string|null;year:string|null;date:string|null;originalDate:string|null;
     role:string;publicationDate:null;state:"official"|"unofficial"|"unknown";
     volume:string|null;language:string|null;jurisdiction:string|null;session:string|null;
-    fiscalYear:string|null;taxYear:string|null;administeringCounty:"Travis";
+    fiscalYear:string|null;taxYear:string|null;administeringCounty:"Travis"|null;
+    publisher?:"City of Austin";
 };
 export type Selection={limit:number;chapter?:string;year?:string;date?:string;role?:string;url?:string};
 export function sourceName(value:string):Source {
@@ -22,14 +24,15 @@ export function sourceName(value:string):Source {
 }
 export function transportUrl(source:Source,raw:string,kind:string):string {
  const url=new URL(raw),host=new URL(sources[source].pages[0]).hostname;
- if(kind==='robots' && url.href===`https://${url.hostname}/robots.txt` && (url.hostname===host || source==='county-code' && url.hostname==='online.encodeplus.com')) return url.href;
+ if(kind==='robots' && url.href===`https://${url.hostname}/robots.txt` && (url.hostname===host || source==='county-code' && url.hostname==='online.encodeplus.com' || source==='austin-financial-publications' && url.hostname==='services.austintexas.gov')) return url.href;
  if(url.pathname==='/robots.txt') throw Error('robots URL requires exact robots operation');
  return officialUrl(source,raw,sources[source].pages[0]);
 }
 export function officialUrl(source:Source,raw:string,base:string):string {
     const url=new URL(raw,base),host=new URL(sources[source].pages[0]).hostname;
+    const edims=source==='austin-financial-publications' && url.hostname==='services.austintexas.gov' && url.pathname==='/edims/document.cfm' && /^\?id=\d+$/.test(url.search) && !url.hash;
     const encode=source==="county-code" && url.hostname==="online.encodeplus.com" && url.pathname.startsWith("/regs/traviscounty-tx/");
-    if(url.protocol!=="https:" || (url.hostname!==host && !encode) || url.username || url.password || url.port) throw new Error("not an official HTTPS link");
+    if(url.protocol!=="https:" || (url.hostname!==host && !encode && !edims) || url.username || url.password || url.port) throw new Error("not an official HTTPS link");
     return url.href;
 }
 function baseEvidence(source:Source,pageUrl:string,href:string,label:string,headings:string[]):Evidence {
@@ -99,9 +102,15 @@ function election(row:Evidence):Evidence|null {
     const jurisdiction=/\bCity of ([^|]+?)(?: Election|$)/i.exec(context)?.[0]?.replace(/ Election$/,"")??null;
     return {...row,...electionDate(row.headings),role,state:officialState(context),jurisdiction};
 }
-const adapters:Record<Source,(row:Evidence)=>Evidence|null>={"county-code":chapter,budgets:budget,"meeting-archives":minutes,"election-documents":election};
+function austinFinancial(row:Evidence):Evidence|null {
+    const context=[...row.headings,row.label].join(' | ');
+    const role=roleFrom(context,[[/quarter/i,'quarterly-report'],[/monthly/i,'monthly-report'],[/comprehensive|\bACFR\b|\bCAFR\b/i,'annual-financial-report'],[/proposed/i,'proposed'],[/adopted/i,'adopted'],[/bond|debt/i,'debt-publication']])??'financial-publication';
+    const year=fiscalYear(row);
+    return {...row,year,fiscalYear:year,role,publisher:'City of Austin',jurisdiction:'City of Austin',administeringCounty:null};
+}
+const adapters:Record<Source,(row:Evidence)=>Evidence|null>={"county-code":chapter,budgets:budget,"meeting-archives":minutes,"election-documents":election,'austin-financial-publications':austinFinancial};
 type Candidate={href:string;label:string;headings:string[]};
-function pageCandidates(html:string):Candidate[] {
+function pageCandidates(html:string,austin=false):Candidate[] {
     const $=load(html),headings:string[]=[],rows:Candidate[]=[];
     let links=0;
     $("h1,h2,h3,h4,h5,h6,strong,b,a").each((_,element)=>{
@@ -113,7 +122,7 @@ function pageCandidates(html:string):Candidate[] {
             return;
         }
         const href=node.attr("href");
-        if(!href || !/\.pdf(?:[?#]|$)/i.test(href)) return;
+        if(!href || (!/\.pdf(?:[?#]|$)/i.test(href) && !(austin && /^https:\/\/services\.austintexas\.gov\/edims\/document\.cfm\?id=\d+$/.test(href)))) return;
         if(++links>2000) throw new Error("link ceiling");
         const local=node.closest(".sow-accordion-panel,.accordion-group").find(".sow-accordion-title,.accordion-heading").first().text();
         rows.push({href,label:text,headings:local?[...headings,local]:[...headings]});
@@ -132,11 +141,12 @@ function parseCandidate(source:Source,pageUrl:string,candidate:Candidate,schema:
     if(schema>=3 && source==="county-code" && /^Title\s+30\b/i.test(row.label)) return {...row,role:"title-30"};
     return adapters[source](row);
 }
-export function discover(source:Source,page:string,html:string,schema=3):Evidence[] {
+export function discover(source:Source,page:string,html:string,schema=source==='austin-financial-publications'?4:3):Evidence[] {
+    if(source==='austin-financial-publications' && schema!==4) throw Error('Austin requires adapter metadata schema4');
     if(schema<3 && !(sources[source].pages as readonly string[]).includes(page)) throw new Error("unapproved discovery page");
     if(schema>=3) pageUrl(source,page,page);
     if(Buffer.byteLength(html)>3*1024*1024) throw new Error("metadata byte limit");
-    return pageCandidates(html).map(candidate=>parseCandidate(source,page,candidate,schema)).filter((row):row is Evidence=>row!==null);
+    return pageCandidates(html,source==='austin-financial-publications').map(candidate=>parseCandidate(source,page,candidate,schema)).filter((row):row is Evidence=>row!==null);
 }
 export function select(rows:Evidence[],selection:Selection):Evidence[] {
     if(!Number.isSafeInteger(selection.limit) || selection.limit<1 || selection.limit>2000) throw new Error("invalid selection limit");

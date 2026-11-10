@@ -22,8 +22,10 @@ CREATE TABLE IF NOT EXISTS robots(origin TEXT PRIMARY KEY,body TEXT NOT NULL,sha
 CREATE TABLE IF NOT EXISTS representations(attempt TEXT PRIMARY KEY REFERENCES attempts(id),encoding TEXT NOT NULL,representation TEXT NOT NULL,wire_bytes INTEGER,decoded_bytes INTEGER NOT NULL,encoded_hash TEXT,decoded_hash TEXT NOT NULL,wire_path TEXT,decoded_path TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS classifier_resolutions(attempt TEXT PRIMARY KEY REFERENCES attempts(id),resolved_at INTEGER NOT NULL,previous_gate TEXT NOT NULL,reason TEXT NOT NULL,evidence_hash TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS history_receipts(observation TEXT NOT NULL,sha TEXT NOT NULL,receipt_hash TEXT NOT NULL,PRIMARY KEY(observation,sha),FOREIGN KEY(observation,sha) REFERENCES history(observation,sha));
-CREATE TABLE IF NOT EXISTS archive_schema(id INTEGER PRIMARY KEY CHECK(id=1),version INTEGER NOT NULL CHECK(version=3));
-INSERT OR IGNORE INTO archive_schema VALUES(1,3);
+CREATE TABLE IF NOT EXISTS archive_schema(id INTEGER PRIMARY KEY CHECK(id=1),version INTEGER NOT NULL CHECK(version=4));
+INSERT OR IGNORE INTO archive_schema VALUES(1,4);
+CREATE TABLE redirect_edges(attempt TEXT PRIMARY KEY REFERENCES attempts(id),target_url TEXT NOT NULL,target_attempt TEXT UNIQUE REFERENCES attempts(id));
+CREATE TABLE robots_bindings(origin TEXT PRIMARY KEY REFERENCES robots(origin),redirect_attempt TEXT NOT NULL UNIQUE REFERENCES redirect_edges(attempt),final_attempt TEXT NOT NULL REFERENCES attempts(id));
 CREATE TABLE IF NOT EXISTS snapshot_metadata(snapshot TEXT PRIMARY KEY REFERENCES snapshots(id),adapter_schema INTEGER NOT NULL,observation_count INTEGER NOT NULL,headers TEXT,headers_hash TEXT,original_retrieved_at TEXT);
 CREATE TABLE IF NOT EXISTS artifact_checkpoints(path TEXT PRIMARY KEY,sha TEXT NOT NULL,bytes INTEGER NOT NULL,status TEXT NOT NULL CHECK(status IN ('writing','promoted')),partial TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS validation_history(source TEXT NOT NULL,url TEXT NOT NULL,sha TEXT NOT NULL,receipt_hash TEXT NOT NULL,receipt TEXT NOT NULL,observed TEXT NOT NULL,PRIMARY KEY(source,url,sha,receipt_hash),FOREIGN KEY(source,url,sha) REFERENCES versions(source,url,sha));
@@ -71,7 +73,14 @@ export function verifySchema(db:Database):void {
  readCooldown(db);
  const base=db.query<{schema_version:number},[]>("SELECT schema_version FROM settings WHERE id=1").get();
  const extension=db.query<{version:number},[]>("SELECT version FROM archive_schema WHERE id=1").get();
- if(base?.schema_version!==1 || extension?.version!==3) throw new Error("schema mismatch");
+ if(base?.schema_version!==1 || ![3,4].includes(extension?.version??0)) throw new Error("schema mismatch");
+ if(extension?.version===4) {
+  requireTables(db,['redirect_edges','robots_bindings']);
+  for(const [name,expected] of [['redirect_edges',['attempt','target_url','target_attempt']],['robots_bindings',['origin','redirect_attempt','final_attempt']]] as const) {
+   const actual=db.query<{name:string},[]>(`PRAGMA table_info(${name})`).all().map(row=>row.name);
+   if(JSON.stringify(actual)!==JSON.stringify(expected)) throw Error('redirect schema column mismatch');
+  }
+ }
  const integrity=db.query<{integrity_check:string},[]>("PRAGMA integrity_check").get();
  if(integrity?.integrity_check!=="ok" || db.query("PRAGMA foreign_key_check").all().length) throw new Error("SQLite integrity failure");
 }

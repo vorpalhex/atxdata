@@ -81,10 +81,20 @@ function scopedIdentity(text:string,row:Evidence):boolean {
   case 'meeting-archives': return minutesIdentity(text,row);
   case 'budgets': return /(?:\bFISCAL YEAR|\bFY)\s*(\d{4})\b/i.exec(text.slice(0,512))?.[1]===row.year;
   case 'election-documents': return Boolean(row.year && text.includes(row.year));
+  case 'austin-financial-publications': return austinFinancialIdentity(text,row);
  }
 }
 export function requireTextIdentity(text:string,row:Evidence):void {
+ if(row.source==='austin-financial-publications') {
+  if(!scopedIdentity(text,row)) throw Error('Austin PDF body identity unresolved');
+  return;
+ }
  if(!/Travis/i.test(text) || !scopedIdentity(text,row) || !publicationIdentity(text,row)) throw new Error("PDF body identity unresolved; private rendered inspection required");
+}
+function austinFinancialIdentity(text:string,row:Evidence):boolean {
+ const title=text.slice(0,512).replace(/\s+/g,' ').trim();
+ const roles:Record<string,RegExp>={'quarterly-report':/\bquarterly financial report\b/i,'monthly-report':/\bmonthly financial report\b/i,'annual-financial-report':/\b(?:annual comprehensive|comprehensive annual) financial report\b/i,proposed:/\bproposed budget\b/i,adopted:/\badopted budget\b/i,'debt-publication':/\b(?:bond|debt|official statement)\b/i};
+ return row.publisher==='City of Austin' && row.jurisdiction==='City of Austin' && row.administeringCounty===null && /^City of Austin\b/i.test(title) && Boolean(row.fiscalYear && /\b(?:Fiscal Year|FY)\s*(\d{4})\b/i.exec(title)?.[1]===row.fiscalYear) && Boolean(roles[row.role]?.test(title));
 }
 /** Render one explicitly selected physical page; not OCR or corpus interpretation. */
 export async function renderIdentity(path:string,root:string,page=1):Promise<Buffer> {
