@@ -271,3 +271,10 @@ except loopback fixtures. `HOME` and XDG directories may also be isolated there.
 Tests no longer create `.scratch` under the source checkout. Do not run live
 smoke recipes or public diagnostic checks as part of these frontend gates.
 
+Frontend quality tests also import the real token guard, Commander entrypoint,
+shared checked writer and diagnostic report path. These complement, not replace,
+native sink/monitor/signal fixtures: Bun parent-process LCOV does not measure
+subprocess CLI execution. Importing the product entrypoint does not execute it;
+CLI invocation still uses the same checked stdout/stderr queues. The diagnostic
+keeps request deadline/cleanup, bounded body preview and report classification
+as local operations, without changing its nine checks or request policy.

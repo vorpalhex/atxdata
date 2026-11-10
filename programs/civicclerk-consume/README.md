@@ -115,3 +115,9 @@ to separate private fixture state for the shared Legistar helper tests. Run `bun
 test` and `bun run typecheck` with locked dependencies and OS networking denied
 except loopback for authored fixtures. No retained source input is needed by
 these suites. Do not run examples against public services without authorization.
+
+The frontend quality tests import the actual parser/help/dispatch path so Bun's
+parent-process LCOV measures it; native delivery and fixture subprocess tests are
+retained separately. A green native test does not instrument its child CLI in
+parent LCOV. Local token-context, help selection and duplicate checks remain
+separate from collector validation, with unchanged error precedence and JSON.

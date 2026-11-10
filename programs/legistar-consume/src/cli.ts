@@ -123,17 +123,20 @@ program.command("retry-failed").action(async () => {
 /** Commander treats root operands after -- as subcommand selectors. Guard that
  * boundary with tokens derived from the existing option declarations, never a
  * raw argv search (required values may themselves look like help/commands). */
-function rejectProtectedSelectors(args: string[]): void {
+function tokenOptions() {
   const options: Record<string, { type: "string" | "boolean"; short?: string }> = { help: { type: "boolean", short: "h" } };
   for (const option of [...program.options, ...program.commands.flatMap(command => command.options)]) {
     if (option.long) options[option.long.slice(2)] = { type: option.required || option.optional ? "string" : "boolean", ...(option.short ? { short: option.short.slice(1) } : {}) };
   }
-  const parsed = (() => {
-    try { return parseArgs({ args, options, allowPositionals: true, strict: false, tokens: true }); }
-    catch { return undefined; } // Let Commander retain its established usage diagnostics.
-  })();
-  if (!parsed) return;
-  const { tokens } = parsed;
+  return options;
+}
+function boundaryTokens(args: string[]) {
+  try { return parseArgs({ args, options: tokenOptions(), allowPositionals: true, strict: false, tokens: true }).tokens; }
+  catch { return undefined; } // Let Commander retain its established usage diagnostics.
+}
+export function rejectProtectedSelectors(args: string[]): void {
+  const tokens = boundaryTokens(args);
+  if (!tokens) return;
   const boundary = tokens.find(token => token.kind === "option-terminator")?.index;
   if (boundary === undefined) return;
   const operands = tokens.filter(token => token.kind === "positional");
@@ -147,10 +150,10 @@ async function flushOutputs(): Promise<void> {
   for (const result of results) if (result.status === "rejected") throw result.reason;
 }
 
-async function main() {
+export async function main(argv: string[] = process.argv) {
   try {
-    rejectProtectedSelectors(process.argv.slice(2));
-    await program.parseAsync(process.argv);
+    rejectProtectedSelectors(argv.slice(2));
+    await program.parseAsync(argv);
     await flushOutputs();
   } catch (error) {
     const failure = error as Error & { code?: string; exitCode?: number };
@@ -169,7 +172,7 @@ async function fail(error: unknown): Promise<never> {
   await Promise.allSettled([output.flush(), diagnostics.flush()]);
   process.exit(1);
 }
-void main();
+if (import.meta.main) void main();
 
 function makeContext() {
   const config = loadConfig();

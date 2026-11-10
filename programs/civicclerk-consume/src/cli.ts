@@ -91,34 +91,54 @@ async function listCommand(values: Record<string,string|undefined>, client: CliC
       write(JSON.stringify(await api.listEvents(from, to, { maxPages })));
     }
 }
-export async function runCli(args: string[], client?: Pick<CivicClerkClient, "listEvents" | "downloadEvent"> & Partial<Pick<CivicClerkClient, "listEventsPage">>, write: (line: string) => void = console.log): Promise<void> {
-  const { positionals, values: parsed, tokens } = parseArgs({ args, tokens:true, allowPositionals: true, strict: true, options: {
+function parseCli(args: string[]) {
+  return parseArgs({ args, tokens:true, allowPositionals: true, strict: true, options: {
     help: { type: "boolean", short: "h" }, version: { type: "boolean" },
     from: { type: "string" }, to: { type: "string" }, "event-id": { type: "string" }, output: { type: "string" },
     "max-bytes": { type: "string" }, "max-documents": { type: "string" }, "file-types": { type: "string" },
     "max-pages": { type: "string" }, checkpoint: { type: "string" }, resume: { type: "string" },
   } });
-  const { help: helpRequested, version: versionRequested, ...values } = parsed;
+}
+type ParsedCli = ReturnType<typeof parseCli>;
+function optionBoundary(tokens: ParsedCli["tokens"]): number {
   const boundary = tokens.find(token => token.kind === "option-terminator")?.index ?? Infinity;
   if (tokens.some(token => token.kind === "positional" && token.index > boundary)) throw new Error(usage);
+  return boundary;
+}
+function information({ positionals, values, tokens }: ParsedCli): string | undefined {
+  const boundary = optionBoundary(tokens);
   const helpCommand = tokens.find(token => token.kind === "positional" && token.index < boundary && token.value === "help");
-  if (helpCommand && positionals[0] === "help") {
-    if (positionals.length > 2 || (positionals[1] && !["list-meetings", "ingest-meeting"].includes(positionals[1]))) throw new Error(usage);
-    write(help(positionals[1])); return;
-  }
-  if (helpRequested) { write(help(positionals[0])); return; }
-  if (versionRequested) { write(`civicclerk-consume ${version}`); return; }
+  if (helpCommand && positionals[0] === "help") return commandHelp(positionals);
+  if (values.help) return help(positionals[0]);
+  if (values.version) return `civicclerk-consume ${version}`;
+}
+function commandHelp(positionals: string[]): string {
+  if (positionals.length > 2 || (positionals[1] && !["list-meetings", "ingest-meeting"].includes(positionals[1]))) throw new Error(usage);
+  return help(positionals[1]);
+}
+function rejectDuplicates(tokens: ParsedCli["tokens"]): void {
   const seen = new Set<string>();
-  for (const token of tokens) if (token.kind === "option") { if (seen.has(token.name)) throw new Error(`duplicate option ${token.name}`); seen.add(token.name); }
+  for (const token of tokens) if (token.kind === "option") {
+    if (seen.has(token.name)) throw new Error(`duplicate option ${token.name}`);
+    seen.add(token.name);
+  }
+}
+async function ingestCommand(values: Record<string,string|undefined>, client: CliClient | undefined, write:(line:string)=>void): Promise<void> {
+  requireOptions(values, ["event-id", "output"], ["max-bytes", "max-documents", "file-types"]);
+  const id = eventId(values["event-id"]);
+  const options = { maxBytes: limit(values["max-bytes"]), maxDocuments: limit(values["max-documents"]), fileTypes: fileTypes(values["file-types"]) };
+  write(JSON.stringify(await (client ?? makeClient()).downloadEvent(id, values.output ?? "", options)));
+}
+export async function runCli(args: string[], client?: Pick<CivicClerkClient, "listEvents" | "downloadEvent"> & Partial<Pick<CivicClerkClient, "listEventsPage">>, write: (line: string) => void = console.log): Promise<void> {
+  const parsed = parseCli(args);
+  const text = information(parsed);
+  if (text !== undefined) { write(text); return; }
+  rejectDuplicates(parsed.tokens);
+  const { positionals, values: { help: _help, version: _version, ...values } } = parsed;
   if (positionals.length !== 1) throw new Error(usage);
-  if (positionals[0] === "list-meetings") {
-    await listCommand(values,client,write);
-  } else if (positionals[0] === "ingest-meeting") {
-    requireOptions(values, ["event-id", "output"], ["max-bytes", "max-documents", "file-types"]);
-    const id = eventId(values["event-id"]);
-    const options = { maxBytes: limit(values["max-bytes"]), maxDocuments: limit(values["max-documents"]), fileTypes: fileTypes(values["file-types"]) };
-    write(JSON.stringify(await (client ?? makeClient()).downloadEvent(id, values.output ?? "", options)));
-  } else throw new Error(usage);
+  if (positionals[0] === "list-meetings") await listCommand(values,client,write);
+  else if (positionals[0] === "ingest-meeting") await ingestCommand(values,client,write);
+  else throw new Error(usage);
 }
 if (import.meta.main) {
   const output = new CheckedOutput();

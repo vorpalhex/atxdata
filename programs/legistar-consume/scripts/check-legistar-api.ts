@@ -55,9 +55,8 @@ const checks = [
 ];
 
 type CheckOptions = { fetcher?: typeof fetch; timeoutMs?: number; maxBytes?: number; signal?: AbortSignal };
-export async function check(name: string, url: string, options: CheckOptions = {}): Promise<CheckResult> {
+function requestDeadline(options: CheckOptions) {
   const controller = new AbortController();
-  let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
   let timer: ReturnType<typeof setTimeout> | undefined;
   const abort = () => controller.abort(new Error("diagnostic interrupted"));
   options.signal?.addEventListener("abort", abort, { once: true });
@@ -67,55 +66,69 @@ export async function check(name: string, url: string, options: CheckOptions = {
     controller.signal.addEventListener("abort", () => reject(controller.signal.reason), { once: true });
     if (controller.signal.aborted) reject(controller.signal.reason);
   });
+  const cleanup = () => {
+    clearTimeout(timer);
+    options.signal?.removeEventListener("abort", abort);
+    controller.abort();
+  };
+  return { controller, deadline, cleanup };
+}
+type BodyState = { reader?: ReadableStreamDefaultReader<Uint8Array> };
+async function readPreview(response: Response, maxBytes: number, body: BodyState): Promise<string> {
+  body.reader = response.body?.getReader();
+  const decoder = new TextDecoder();
+  let size = 0, text = "";
+  while (body.reader) {
+    const { done, value } = await body.reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > maxBytes) throw new Error("diagnostic response byte limit exceeded");
+    text += decoder.decode(value, { stream: true });
+  }
+  text += decoder.decode();
+  return text.replace(/\s+/g, " ").trim().slice(0, 220);
+}
+async function requestCheck(name: string, url: string, options: CheckOptions, controller: AbortController, body: BodyState): Promise<CheckResult> {
+  const started = performance.now();
+  const response = await (options.fetcher ?? fetch)(url, {
+    redirect: "manual", signal: controller.signal,
+    headers: { Accept: "application/json,text/html;q=0.9,*/*;q=0.8", "User-Agent": firefoxUserAgent },
+  });
+  // A non-cooperative fixture/transport may settle after the deadline.
+  if (controller.signal.aborted) { void response.body?.cancel().catch(() => {}); throw controller.signal.reason; }
+  const elapsedMs = Math.round(performance.now() - started);
+  const bodyPreview = await readPreview(response, options.maxBytes ?? 65_536, body);
+  return { name, url, status: response.status, statusText: `${response.statusText} (${elapsedMs}ms)`, contentType: response.headers.get("content-type"), bodyPreview };
+}
+function cancelReader(reader: BodyState["reader"]): void {
+  // Cancel without an unbounded cleanup await (a stalled source may ignore it).
+  if (reader) void reader.cancel().catch(() => {}).finally(() => { try { reader.releaseLock(); } catch {} });
+}
+export async function check(name: string, url: string, options: CheckOptions = {}): Promise<CheckResult> {
+  const request = requestDeadline(options);
+  const body: BodyState = {};
   try {
-    const started = performance.now();
-    const work = async (): Promise<CheckResult> => {
-      const response = await (options.fetcher ?? fetch)(url, {
-        redirect: "manual", signal: controller.signal,
-        headers: { Accept: "application/json,text/html;q=0.9,*/*;q=0.8", "User-Agent": firefoxUserAgent },
-      });
-      // A non-cooperative fixture/transport may settle after the deadline.
-      if (controller.signal.aborted) { void response.body?.cancel().catch(() => {}); throw controller.signal.reason; }
-      const elapsedMs = Math.round(performance.now() - started);
-      reader = response.body?.getReader();
-      const decoder = new TextDecoder();
-      let size = 0, text = "";
-      while (reader) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        size += value.byteLength;
-        if (size > (options.maxBytes ?? 65_536)) throw new Error("diagnostic response byte limit exceeded");
-        text += decoder.decode(value, { stream: true });
-      }
-      text += decoder.decode();
-      return { name, url, status: response.status, statusText: `${response.statusText} (${elapsedMs}ms)`, contentType: response.headers.get("content-type"), bodyPreview: text.replace(/\s+/g, " ").trim().slice(0, 220) };
-    };
-    return await Promise.race([work(), deadline]);
+    return await Promise.race([requestCheck(name, url, options, request.controller, body), request.deadline]);
   } catch (error) {
     const message = error instanceof Error && /^diagnostic (deadline|response byte limit|interrupted)/.test(error.message) ? error.message : "diagnostic request failed";
     return { name, url, error: message };
   } finally {
-    clearTimeout(timer);
-    options.signal?.removeEventListener("abort", abort);
-    controller.abort();
-    // Cancel without an unbounded cleanup await (a stalled source may ignore it).
-    if (reader) { const current = reader; void current.cancel().catch(() => {}).finally(() => { try { current.releaseLock(); } catch {} }); }
+    request.cleanup();
+    cancelReader(body.reader);
   }
 }
 
-function classify(results: CheckResult[]): string {
+function successful(result: CheckResult): boolean {
+  return Boolean(result.status && result.status >= 200 && result.status < 300);
+}
+function requiresToken(result: CheckResult): boolean {
+  return [401, 403].includes(result.status ?? 0) && /key|token|required|unauthor/i.test(result.bodyPreview ?? `${result.statusText ?? ""}`);
+}
+export function classify(results: CheckResult[]): string {
   const apiResults = results.filter((result) => result.url.includes("webapi.legistar.com"));
-  const targetSuccess = apiResults.find((result) =>
-    result.name.includes("City Council event items") &&
-    result.status &&
-    result.status >= 200 &&
-    result.status < 300,
-  );
-  const apiSuccess = apiResults.find((result) => result.status && result.status >= 200 && result.status < 300);
-  const requiresToken = apiResults.some((result) =>
-    [401, 403].includes(result.status ?? 0) &&
-    /key|token|required|unauthor/i.test(result.bodyPreview ?? `${result.statusText ?? ""}`),
-  );
+  const targetSuccess = apiResults.find((result) => result.name.includes("City Council event items") && successful(result));
+  const apiSuccess = apiResults.find(successful);
+  const tokenRequired = apiResults.some(requiresToken);
 
   if (targetSuccess) {
     return "API is usable without a key for the requested City Council smoke case. Use client key `austintexas`; keep scraping as fallback.";
@@ -125,15 +138,29 @@ function classify(results: CheckResult[]): string {
     return `API appears usable without a key. First successful check: ${apiSuccess.name}.`;
   }
 
-  if (requiresToken) {
+  if (tokenRequired) {
     return "API does not appear usable without a key/token. Start with scraping fallback.";
   }
 
   return "API access is inconclusive. Inspect check output before choosing API or scraping.";
 }
 
-async function main(args: string[]) {
-  const output = new CheckedOutput();
+function renderReport(results: CheckResult[], output: Pick<CheckedOutput, "line">): void {
+  for (const result of results) {
+    output.line(`\n## ${result.name}`);
+    output.line(result.url);
+    if (result.error) {
+      output.line(`ERROR: ${result.error}`);
+      continue;
+    }
+    output.line(`status: ${result.status} ${result.statusText}`);
+    output.line(`content-type: ${result.contentType ?? "(none)"}`);
+    output.line(`body: ${result.bodyPreview || "(empty)"}`);
+  }
+  output.line(`\n## Verdict`);
+  output.line(classify(results));
+}
+export async function main(args: string[], output: Pick<CheckedOutput, "line" | "flush"> = new CheckedOutput()) {
   const { values, positionals } = parseArgs({ args, strict: true, allowPositionals: true, options: { help: { type: "boolean", short: "h" }, version: { type: "boolean" } } });
   if (positionals.length) throw new Error("Unexpected operand; use check-legistar-api --help");
   if (values.help) {
@@ -153,19 +180,7 @@ async function main(args: string[]) {
       results.push(await check(item.name, item.url, { signal: controller.signal }));
     }
 
-    for (const result of results) {
-      output.line(`\n## ${result.name}`);
-      output.line(result.url);
-      if (result.error) {
-        output.line(`ERROR: ${result.error}`);
-        continue;
-      }
-      output.line(`status: ${result.status} ${result.statusText}`);
-      output.line(`content-type: ${result.contentType ?? "(none)"}`);
-      output.line(`body: ${result.bodyPreview || "(empty)"}`);
-    }
-    output.line(`\n## Verdict`);
-    output.line(classify(results));
+    renderReport(results, output);
     await output.flush();
   } finally {
     process.off("SIGINT", interrupt); process.off("SIGTERM", terminate);
