@@ -1,4 +1,5 @@
 import robotsParser from "robots-parser";
+import { Database } from "bun:sqlite";
 import { type Dependencies } from "../../arcgis-consume/src/archive";
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
@@ -224,10 +225,10 @@ function receipt(snapshot: Snapshot, rows: number, reused: boolean) {
     reused,
   };
 }
-function findSnapshot(s: Session, key: string) {
-  if (!existsSync(join(s.root, "data.sqlite"))) return;
+function findSnapshot(root: string, key: string) {
+  if (!existsSync(join(root, "data.sqlite"))) return;
   const target = JSON.parse(key);
-  const db = openData(s.root, true);
+  const db = openData(root, true);
   try {
     return db
       .query<Snapshot, []>("SELECT * FROM snapshots ORDER BY rowid DESC")
@@ -407,6 +408,35 @@ async function pages(s: Session, snapshot: Snapshot, options: CollectOptions) {
   );
   return receipt(snapshot, offset, false);
 }
+function resumeBounds(options: CollectOptions, key: string) {
+  if (!options.resume) return options;
+  rootPreflight(options.root);
+  const snapshot = findSnapshot(options.root, key);
+  if (!snapshot || snapshot.status === "complete") return options;
+  const db = new Database(join(options.root, "transport", "state.sqlite"), {
+    readonly: true,
+  });
+  try {
+    const row = db
+      .query<{ options: string }, [string]>(
+        "SELECT options FROM acquisition_options WHERE run=?",
+      )
+      .get(snapshot.id)!;
+    const saved = JSON.parse(row.options);
+    for (const [name, value] of Object.entries(options.budget ?? {}))
+      ensure(
+        value === saved.budget[name],
+        `resume budget ${name} differs from frozen limit`,
+      );
+    ensure(
+      options.timeoutMs === undefined || options.timeoutMs === saved.timeoutMs,
+      "resume timeout differs from frozen limit",
+    );
+    return { ...options, timeoutMs: saved.timeoutMs };
+  } finally {
+    db.close();
+  }
+}
 function flags(options: CollectOptions) {
   ensure(!(options.refresh && options.resume), "refresh conflicts with resume");
   for (const key of ["refresh", "resume"] as const)
@@ -426,8 +456,10 @@ export async function collect(
     ...selected,
     ...(filter === undefined ? {} : { where: filter }),
   });
+  budget(options.budget);
+  options = resumeBounds(options, key);
   return withSession(options, deps, async (s) => {
-    let snapshot = findSnapshot(s, key);
+    let snapshot = findSnapshot(s.root, key);
     if (snapshot?.status === "complete" && !options.refresh)
       return reuse(s, snapshot, options);
     ensure(

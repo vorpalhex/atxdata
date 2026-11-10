@@ -280,6 +280,51 @@ function verifyDomain(root: string, hasSource: boolean) {
     db.close();
   }
 }
+function verifyInventory(
+  db: Database,
+  transport: Database,
+  snapshots: Snapshot[],
+) {
+  for (const run of transport
+    .query<{ id: string; status: string }, []>(
+      "SELECT id,status FROM runs WHERE command='collect'",
+    )
+    .all()) {
+    const originals = transport
+      .query<{ label: string }, [string]>(
+        "SELECT label FROM observations WHERE run=? AND label LIKE 'page:%' ORDER BY rowid",
+      )
+      .all(run.id);
+    const snapshot = snapshots.find((s) => s.id === run.id);
+    ensure(
+      snapshot || (run.status !== "succeeded" && originals.length === 0),
+      "snapshot inventory missing retained collection",
+    );
+    if (!snapshot) continue;
+    ensure(
+      run.status !== "succeeded" || snapshot.status === "complete",
+      "snapshot inventory completion mismatch",
+    );
+    const pages = db
+      .query<Page, [string]>(
+        "SELECT * FROM pages WHERE snapshot=? ORDER BY offset",
+      )
+      .all(run.id);
+    const offset = pages.reduce((n, p) => n + p.count, 0);
+    const unindexed = originals.filter(
+      (o) => o.label !== "page:end" && !pages.some((p) => p.label === o.label),
+    );
+    // One next-page receipt may precede its atomic derived-page commit after interruption.
+    ensure(
+      unindexed.length === 0 ||
+        (snapshot.status === "partial" &&
+          run.status !== "succeeded" &&
+          unindexed.length === 1 &&
+          unindexed[0]!.label === `page:${offset}`),
+      "page inventory missing retained collection",
+    );
+  }
+}
 function rootInventory(root: string) {
   if (existsSync(root)) {
     ensure(lstatSync(root).isDirectory(), "archive root must be a directory");
@@ -317,6 +362,7 @@ export function verifyData(root: string) {
     const snapshots = db
       .query<Snapshot, []>("SELECT * FROM snapshots ORDER BY rowid")
       .all();
+    verifyInventory(db, transport, snapshots);
     let rows = 0;
     for (const snapshot of snapshots)
       rows += verifySnapshot(db, transport, root, snapshot);
