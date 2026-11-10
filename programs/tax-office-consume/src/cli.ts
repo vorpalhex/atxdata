@@ -16,11 +16,14 @@ function argumentsFor(command:string,args:string[],allowed:string[]){
 function validateBudgets(values:Map<string,string>){
  for(const key of BUDGETS)if(values.has(key)){const raw=values.get(key)!;if(!/^\d+$/.test(raw))throw new Error(key+' ceiling');positive(Number(raw),key);}
 }
+function validateDelinquency(values:Map<string,string>){
+ if(!values.has('--max-rows'))throw new Error('required --max-rows');
+ if(values.has('--catalog-version')||values.has('--version'))throw new Error('catalog/version selectors require catalog item selection');
+}
 function validateSelection(command:string,values:Map<string,string>){
  if(['import','collect'].includes(command)){
   const selected=values.get('--selection')!;if(selected!=='delinquency'&&(command==='import'||!selected.startsWith('/')))throw new Error('explicit supported selection required');
-  if(selected==='delinquency'&&!values.has('--max-rows'))throw new Error('required --max-rows');
-  if(selected==='delinquency'&&(values.has('--catalog-version')||values.has('--version')))throw new Error('catalog/version selectors require catalog item selection');
+  if(selected==='delinquency')validateDelinquency(values);
  }
 }
 function options(command:string,args:string[]){
