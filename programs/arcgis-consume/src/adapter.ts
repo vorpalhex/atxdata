@@ -39,6 +39,7 @@ export class Adapter {
     command: Command,
     options: { termsSha256?: string; resume?: string } = {},
   ) {
+    ensure(source === "tnr" || source === "voter", "city profiles require the general selection engine");
     if (command === "collect" && !options.resume) {
       const prior = this.archive.store.latestCollection(source);
       if (prior) {

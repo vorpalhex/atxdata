@@ -12,6 +12,24 @@ export const configs = {
     service,
     layer: service + "/0",
   },
+  austin: {
+    label: "Austin GeoHub catalog",
+    site: "f12e78cda44143378c133030ae258a0e",
+    item: "f12e78cda44143378c133030ae258a0e",
+    hub: "https://geohub.austintexas.gov/",
+    strategy: "catalog-selection",
+    service: "",
+    layer: "",
+  },
+  water: {
+    label: "Austin Water public dashboard layers",
+    site: "8a124bcb3c65411daeb5f3d549ecd6d3",
+    item: "8a124bcb3c65411daeb5f3d549ecd6d3",
+    hub: "https://www.austintexas.gov/water/water-leaks",
+    strategy: "dashboard-selection",
+    service: "",
+    layer: "",
+  },
   voter: {
     label: "Election Precincts published ZIP",
     site: "7900dcb8fa674dcf93bcbbd49c29e0db",
@@ -25,8 +43,8 @@ export const configs = {
 export type Source = keyof typeof configs;
 export function source(value: unknown): Source {
   ensure(
-    value === "tnr" || value === "voter",
-    "supported source is tnr or voter",
+    value === "tnr" || value === "voter" || value === "austin" || value === "water",
+    "supported source is tnr, voter, austin or water",
   );
   return value;
 }
@@ -113,6 +131,18 @@ export function validateItem(value: unknown, id: string) {
   ensure(typeof item.title === "string", "item title missing");
   return item;
 }
+export function stableItem(before:unknown,after:unknown,source:Source) {
+  if(source!=="austin" && source!=="water") return same(before,after);
+  const normalize=(value:unknown)=>{
+    const item=object(value);
+    if(item.categories===undefined) return item;
+    const categories=array(item.categories);
+    ensure(categories.every(c=>typeof c==="string"),"invalid item categories");
+    return {...item,categories:[...categories].sort()};
+  };
+  return same(normalize(before),normalize(after));
+}
+
 export function validatePublishedItem(value: unknown) {
   const item = validateItem(value, configs.voter.item);
   ensure(

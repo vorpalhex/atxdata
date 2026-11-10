@@ -5,6 +5,7 @@ import metadata from "../package.json";
 import { writeStdout } from "./cli-output";
 import { type Dependencies, Archive, limits } from "./archive";
 import { Adapter, type Command } from "./adapter";
+import { sourceService } from "./catalog";
 import { configs, source, type Source } from "./sources";
 import { ensure } from "./check";
 import { executeSelection, selectionOptions } from "./selection";
@@ -188,6 +189,9 @@ export function parseArgs(args: string[]) {
   let selected: Source | undefined;
   if (!["list", "status", "verify"].includes(command))
     selected = source(flags["--source"]);
+  if ((selected === "austin" || selected === "water") && ["collect", "sync"].includes(command))
+    ensure(flags["--item"], "city collection requires explicit --item from discover");
+  if(selected && flags["--service"]) sourceService(flags["--service"],selected);
   const termsSha256 = flags["--terms-sha256"];
   if (["discover", "collect", "sync"].includes(command))
     ensure(
