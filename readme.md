@@ -38,7 +38,55 @@ LLM contributions are acceptable, but will generally be heavily scrutinized. We 
 
 Each program currently retains its own dependencies, configuration, and commands.
 
+### CLI discovery and script contracts
+
+This Hermes Agent-assisted pass targets offline discoverability, validation before
+side effects, and reliable scripted result delivery while preserving collection
+semantics and source safeguards.
+
+Install dependencies using the relevant program README, then use its source-run
+entrypoint. There is no repository-wide installed binary. For example, from this
+repository:
+
+```sh
+bun run programs/arcgis-consume/src/cli.ts --help
+bun run programs/arcgis-consume/src/cli.ts help collect
+bun run programs/legistar-consume/scripts/check-legistar-api.ts --help
+```
+
+All eight program frontends provide offline `-h`/`--help`, command-local help,
+`help COMMAND`, and `--version` without opening an archive or issuing HTTP
+requests. Package/CLI version `0.1.0` identifies the frontend, not a dataset or
+publisher release. Option placement, repeated flags, numeric spelling and
+informational precedence are documented per program; they are not identical.
+Tax's `collect --version HASH` remains a retained-data selector; standalone
+`--version` reports the program version.
+Required values and operands after application `--` are not reinterpreted as help.
+The Bun launcher may consume its own separator before forwarding application
+arguments; see the program READMEs for the tested boundary.
+
+Ordinary results retain their existing JSON or NDJSON schemas and domain exit
+statuses. In particular, Financial's fixed stdout failure object and Legistar's
+stdout cron records remain supported. Operational guidance belongs on stderr.
+Checked result delivery rejects genuine write failures and bounds stalled output;
+a failed delivery can leave a partial stdout prefix, but does not erase completed
+archive/checkpoint work. Broken-pipe statuses are deliberately program-specific.
+
+The documented Legistar API diagnostic is a ninth public CLI surface: explicit
+help/version and invalid arguments make no requests, while plain invocation runs
+the bounded diagnostic. Do not use plain invocation merely to discover its flags.
+CLI verification uses authored offline/loopback fixtures and preserves source
+policies, locks, cooldowns and acquisition limits. It does not establish current
+publisher availability, complete historical coverage, or Linux/Windows support.
+
 Local integration snapshot at code commit `d7fbb45`: all eight suites ran in separate processes with outbound public networking denied, retained-input gates enabled and zero skips. Results: 995 passing tests, two pre-existing ArcGIS robots-policy failures, and eight passing typechecks. The operator-owned ArcGIS policy is unchanged. This is local functional/retained-input evidence, not new public acquisition or complete publisher history. enCodePlus feature work is paused; its unintegrated historical/raw work is excluded.
+
+CLI frontend integration at code commit `577c005`: 1,091 passing tests, the same
+two inherited ArcGIS policy failures, zero skips, and eight passing typechecks.
+Independent scoped frontend quality measurements are strictly below CRAP 10;
+selected mutation checks are bounded samples, not whole-product coverage. Mixed
+stdout/stderr terminal probes cover all nine public surfaces. This remains local
+macOS/Bun verification, with no new publisher acquisition or remote push.
 
 ### legistar-consume
 
