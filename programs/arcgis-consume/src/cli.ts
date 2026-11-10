@@ -1,53 +1,121 @@
+import { Command as Commander, Option } from "commander";
+import { parseCLI as parseOptions } from "./cli-parser";
 import { isAbsolute } from "node:path";
 import metadata from "../package.json";
-import {writeStdout} from "./cli-output";
+import { writeStdout } from "./cli-output";
 import { type Dependencies, Archive, limits } from "./archive";
 import { Adapter, type Command } from "./adapter";
 import { configs, source, type Source } from "./sources";
 import { ensure } from "./check";
 import { executeSelection, selectionOptions } from "./selection";
 import { statFile } from "../../civicclerk-consume/src/archive";
-const COMMANDS=["list","rules","discover","collect","sync","status","verify"];
-const ALLOWED=new Set(['--archive', '--source', '--terms-sha256', '--resume', '--item', '--layer', '--service', '--fields', '--page-size', '--max-records', '--max-pages', '--max-requests', '--max-bytes', '--response-bytes', '--raw-bytes', '--expanded-bytes', '--max-members']);
-type ParseState={flags:Record<string,string>;command?:string;info?:string;ended?:boolean;helpCommand?:boolean;failure?:string};
-function fail(state:ParseState,message:string):void {state.failure??=message;}
-// Consume a required value even when it resembles an option, as before.
-function consumeValue(args:string[],index:number,equal:number,key:string,state:ParseState):number {
- const value=equal<0?args[++index]:args[index]!.slice(equal+1);
- if(!value || (equal<0 && value.startsWith('--'))) fail(state,'missing '+key+' value; see --help');
- else state.flags[key]=value;
- return index;
+const COMMANDS = [
+  "list",
+  "rules",
+  "discover",
+  "collect",
+  "sync",
+  "status",
+  "verify",
+];
+export function createProgram() {
+  const program = new Commander()
+    .name("arcgis-consume")
+    .description("ArcGIS private, bounded catalog and item acquisition")
+    .usage("COMMAND [options]")
+    .helpOption(false);
+  program.addOption(new Option("-h, --help", "Offline help"));
+  program.addOption(
+    new Option("--version", "Declared package version, offline"),
+  );
+  program.addOption(
+    new Option("--archive <value>", "Absolute private archive directory"),
+  );
+  program.addOption(new Option("--source <value>", "Exact source ID"));
+  program.addOption(
+    new Option(
+      "--terms-sha256 <value>",
+      "Reviewed catalog or item terms SHA256",
+    ),
+  );
+  program.addOption(
+    new Option("--resume <value>", "Matching settled interrupted run ID"),
+  );
+  program.addOption(new Option("--item <value>", "Catalog-backed item ID"));
+  program.addOption(
+    new Option("--layer <value>", "Advertised layer ID (zero allowed)"),
+  );
+  program.addOption(
+    new Option("--service <value>", "Assert the selected matching service"),
+  );
+  program.addOption(
+    new Option(
+      "--fields <value>",
+      "Actual comma-separated fields including OID",
+    ),
+  );
+  program.addOption(
+    new Option(
+      "--page-size <value>",
+      "Positive safe-integer operation budget; see defaults below",
+    ),
+  );
+  program.addOption(
+    new Option(
+      "--max-records <value>",
+      "Positive safe-integer operation budget; see defaults below",
+    ),
+  );
+  program.addOption(
+    new Option(
+      "--max-pages <value>",
+      "Positive safe-integer operation budget; see defaults below",
+    ),
+  );
+  program.addOption(
+    new Option(
+      "--max-requests <value>",
+      "Positive safe-integer operation budget; see defaults below",
+    ),
+  );
+  program.addOption(
+    new Option(
+      "--max-bytes <value>",
+      "Positive safe-integer operation budget; see defaults below",
+    ),
+  );
+  program.addOption(
+    new Option(
+      "--response-bytes <value>",
+      "Positive safe-integer operation budget; see defaults below",
+    ),
+  );
+  program.addOption(
+    new Option(
+      "--raw-bytes <value>",
+      "Positive safe-integer operation budget; see defaults below",
+    ),
+  );
+  program.addOption(
+    new Option(
+      "--expanded-bytes <value>",
+      "Positive safe-integer operation budget; see defaults below",
+    ),
+  );
+  program.addOption(
+    new Option(
+      "--max-members <value>",
+      "Positive safe-integer operation budget; see defaults below",
+    ),
+  );
+  for (const name of COMMANDS)
+    program.command(name).description(name.replaceAll("-", " "));
+  return program;
 }
-function consumeOption(args:string[],index:number,state:ParseState):number {
- const token=args[index]!,equal=token.indexOf('='),key=equal<0?token:token.slice(0,equal);
- if(!ALLOWED.has(key)){fail(state,'unknown option; see --help');return index;}
- if(Object.hasOwn(state.flags,key)) fail(state,'duplicate option; see --help');
- return consumeValue(args,index,equal,key,state);
+function parseCLI(args: string[]) {
+  return parseOptions(createProgram(), args);
 }
-function consumeWord(token:string,state:ParseState):void {
- if(!state.command && token==='help' && !state.helpCommand){state.info='help';state.helpCommand=true;return;}
- if(!state.command) state.command=token; else fail(state,'unexpected operand; see --help');
-}
-function consumeToken(args:string[],index:number,state:ParseState):number {
- const token=args[index]!;
- if(state.ended) fail(state,'unexpected operand; see --help');
- else if(token==='--') state.ended=true;
- else if(token==='-h'||token==='--help') state.info='help';
- else if(token==='--version') state.info='version';
- else if(token.startsWith('--')) return consumeOption(args,index,state);
- else consumeWord(token,state);
- return index;
-}
-// Parse in token context: values and tokens after -- are never help/selectors.
-function parseCLI(args:string[]) {
- const state:ParseState={flags:{}};
- for(let i=0;i<args.length;i++) i=consumeToken(args,i,state);
- const {command,flags,info,failure}=state;
- if(command && !COMMANDS.includes(command)) throw Error('unknown command; see --help');
- if(!info && failure) throw Error(failure);
- return {command,flags,info};
-}
-const help=`ArcGIS private, bounded catalog and item acquisition
+const help = `ArcGIS private, bounded catalog and item acquisition
 Usage: bun src/cli.ts COMMAND [options]
 Commands: list, rules, discover, collect, sync, status, verify
 Workflow (review terms before authorization):
@@ -68,17 +136,21 @@ Positive safe-integer defaults: --page-size 1000, --max-records 1000000, --max-p
 Legacy preset routes: omit --item with --source tnr or voter; bare collect may reuse a verified old preset collection. Explicit --item or sync uses the general acquisition route. collect reuses verified local results; sync requests a new bounded observation. status/verify are offline and require existing state.
 Default operational output is JSON; errors use stderr/status 1. No prompts or paging. See README for policy, review and privacy limitations.
 `;
-function commandHelp(command?:string):string {
- if(!command) return help;
- const purpose:Record<string,string>={
-  list:'List preset IDs and general/legacy defaults offline; no archive required.',
-  rules:'Review catalogTerms and selected item terms; inspect advertised layers. Requires --source and --archive; optional --item.',
-  discover:'Enumerate catalog item IDs with --source, --archive and reviewed catalog --terms-sha256; bounded by --max-pages.',
-  collect:'Collect/reuse a verified selection with --source, --archive and reviewed item --terms-sha256; choose --item and advertised --layer for services.',
-  sync:'Request a new bounded observation using the same explicit selection/terms options as collect.',
-  status:'Inspect existing --archive state offline.',verify:'Verify existing --archive checkpoints/history offline; no HTTP.',
- };
- return `ArcGIS ${command}\nUsage: bun src/cli.ts ${command} [options]\n${purpose[command]}\n${help}`;
+function commandHelp(command?: string): string {
+  if (!command) return createProgram().helpInformation() + "\n" + help;
+  const purpose: Record<string, string> = {
+    list: "List preset IDs and general/legacy defaults offline; no archive required.",
+    rules:
+      "Review catalogTerms and selected item terms; inspect advertised layers. Requires --source and --archive; optional --item.",
+    discover:
+      "Enumerate catalog item IDs with --source, --archive and reviewed catalog --terms-sha256; bounded by --max-pages.",
+    collect:
+      "Collect/reuse a verified selection with --source, --archive and reviewed item --terms-sha256; choose --item and advertised --layer for services.",
+    sync: "Request a new bounded observation using the same explicit selection/terms options as collect.",
+    status: "Inspect existing --archive state offline.",
+    verify: "Verify existing --archive checkpoints/history offline; no HTTP.",
+  };
+  return `ArcGIS ${command}\nUsage: bun src/cli.ts ${command} [options]\n${purpose[command]}\n${createProgram().helpInformation()}\n${help}`;
 }
 function presetSelection(
   selected: Source | undefined,
@@ -148,7 +220,10 @@ function legacyDispatch(
         archive.store.latestCollection(options.source!)))
   );
 }
-async function executeArchive(options:ReturnType<typeof parseArgs>,archive:Archive):Promise<unknown> {
+async function executeArchive(
+  options: ReturnType<typeof parseArgs>,
+  archive: Archive,
+): Promise<unknown> {
   if (options.command === "status")
     return {
       ...archive.store.status(),
@@ -180,10 +255,10 @@ export async function main(
   args: string[],
   dependencies: Partial<Dependencies> = {},
 ): Promise<unknown> {
-  const parsed=parseCLI(args);
-  if(parsed.info==='version') return `arcgis-consume ${metadata.version}`;
-  if(parsed.info==='help') return commandHelp(parsed.command);
-  if(!parsed.command) throw Error(commandHelp());
+  const parsed = parseCLI(args);
+  if (parsed.info === "version") return `arcgis-consume ${metadata.version}`;
+  if (parsed.info === "help") return commandHelp(parsed.command);
+  if (!parsed.command) throw Error(commandHelp());
   const options = parseArgs(args);
   if (options.command === "list")
     return Object.entries(configs).map(([id, c]) => {
@@ -210,15 +285,18 @@ export async function main(
     );
   const archive = await Archive.open(root, dependencies);
   try {
-    return await executeArchive(options,archive);
+    return await executeArchive(options, archive);
   } finally {
     await archive.close();
   }
 }
 if (import.meta.main) {
   try {
-    const result=await main(Bun.argv.slice(2));
-    await writeStdout((typeof result==='string'?result:JSON.stringify(result,null,2))+'\n');
+    const result = await main(Bun.argv.slice(2));
+    await writeStdout(
+      (typeof result === "string" ? result : JSON.stringify(result, null, 2)) +
+        "\n",
+    );
   } catch (error) {
     console.error(
       error instanceof Error

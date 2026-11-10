@@ -1,11 +1,11 @@
-import {test,expect} from 'bun:test';
-import {mkdtempSync,writeFileSync} from 'node:fs';
-import {join} from 'node:path';
+import { test, expect } from "bun:test";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 
 // Isolate module mocks in a subprocess: domain/native tests retain real node:fs.
-test('checked asynchronous writer: partial UTF8, retry, zero progress and error classification',()=>{
- const module=import.meta.dir+'/../src/frontend.ts';
- const code=`
+test("checked asynchronous writer: partial UTF8, retry, zero progress and error classification", () => {
+  const module = import.meta.dir + "/../src/frontend.ts";
+  const code = `
  import {mock,test} from 'bun:test';
  import {strict as assert} from 'node:assert';
  let mode='partial',parts=[],calls=0;
@@ -34,13 +34,19 @@ test('checked asynchronous writer: partial UTF8, retry, zero progress and error 
  try{
   process.exitCode=0;f.failure(Object.assign(new Error('domain'),{code:'EPIPE'}));assert.equal(process.exitCode,1);assert.equal(diagnostics.length,1);
   diagnostics=[];process.exitCode=0;f.failure(Object.assign(new Error('stdout'),{code:'EPIPE',outputFailure:true}));
-  const tax=${JSON.stringify(module.includes('tax-office-consume'))};assert.equal(process.exitCode,tax?0:1);assert.equal(diagnostics.length,tax?0:1);
+  const tax=${JSON.stringify(module.includes("tax-office-consume"))};assert.equal(process.exitCode,tax?0:1);assert.equal(diagnostics.length,tax?0:1);
  }finally{console.error=old;process.exitCode=0;}
  test('isolated writer faults',()=>{});
  `;
- const root=mkdtempSync(join(process.env.TMPDIR!,'writer-faults-'));
- const fixture=join(root,'writer.test.ts');writeFileSync(fixture,code);
- const p=Bun.spawnSync([process.execPath,'test',fixture],{env:process.env,timeout:15000});
- if(p.exitCode)console.error(p.stderr.toString());
- expect(p.exitCode).toBe(0);expect(p.stderr.toString()).toContain('1 pass');expect(p.stderr.toString()).toContain('0 fail');
+  const root = mkdtempSync(join(process.env.TMPDIR!, "writer-faults-"));
+  const fixture = join(root, "writer.test.ts");
+  writeFileSync(fixture, code);
+  const p = Bun.spawnSync([process.execPath, "test", fixture], {
+    env: process.env,
+    timeout: 15000,
+  });
+  if (p.exitCode) console.error(p.stderr.toString());
+  expect(p.exitCode).toBe(0);
+  expect(p.stderr.toString()).toContain("1 pass");
+  expect(p.stderr.toString()).toContain("0 fail");
 });

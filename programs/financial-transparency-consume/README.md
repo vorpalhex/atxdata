@@ -41,6 +41,17 @@ Each source archive has one `.civicclerk.lock` writer (the shared engine's lock 
 
 Bounded native acceptance actually acquired FY2027 once (a disclosed repeat of a retained normal-browser dataset): SHA-256 `2eecb8cc58d02a722143ee8d41eeb96f00e6c0a76d25b8fb4d1804924a837075`, 3,217,989 bytes, 19,487 CSV records, 19,486 accepted and one width quarantine. Robots404 and HEAD200 for FY2026/FY2027 were the other three requests. FY2026 remains metadata-only. Zero-network acquisition reuse, discovery reuse, source-bound verification and verification of a copy of the retained real v1 archive were separately exercised under the earlier provider. Those original source ledgers predate independent timing facts and now require operator review; historical cache-success receipts are not current source-cache compatibility clearance. An evidence-bearing retained-byte replay records new fixture timing only. This does not establish complete years or historical coverage. No captured source rows are repository fixtures.
 
+## CLI tooling
+
+The package pins Commander 14.0.3 for option consumption, command metadata and
+help, without a sibling/root parser dependency. Compatibility guards preserve
+the documented contextual information, value and duplicate-option behavior.
+Domain validation and checked output delivery are unchanged.
+
+Run `bun run format` or `bun run format:check` for the explicit CLI/frontend,
+output-helper, related test and documentation file set. Prettier 3.9.10 uses
+its defaults; collector/domain files and generated lockfiles are not formatted.
+
 ## Run
 
 Requires Bun 1.3.14+ and a local filesystem with SQLite and exclusive-create semantics. From this program directory:

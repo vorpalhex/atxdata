@@ -11,6 +11,17 @@ Headless Bun/TypeScript + SQLite collector for the public Travis County Clarity 
 
 No version-history enumeration, guessed fallback routes, municipal IDs, voter data, authentication, cookies, challenges, certification inference or audit equivalence. Unsupported schema, policy, identity or format changes fail closed and require adapter review. IDs and leading zeroes remain source-scoped strings.
 
+## CLI tooling
+
+The package pins Commander 14.0.3 for option consumption, command metadata and
+help, without a sibling/root parser dependency. Compatibility guards preserve
+the documented contextual information, value and duplicate-option behavior.
+Domain validation and checked output delivery are unchanged.
+
+Run `bun run format` or `bun run format:check` for the explicit CLI/frontend,
+output-helper, related test and documentation file set. Prettier 3.9.10 uses
+its defaults; collector/domain files and generated lockfiles are not formatted.
+
 ## Run
 
 Requires Bun and project dependencies. From this program directory:

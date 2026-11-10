@@ -1,7 +1,13 @@
 import { runAcquisitionCli } from "./acquisition-cli";
-import { information, guidance, help, commandOf, sourceCommands } from "./frontend";
+import {
+  information,
+  guidance,
+  help,
+  commandOf,
+  sourceCommands,
+} from "./frontend";
 import { writeOutput, OutputFailure, outputStatus } from "./output";
-import { parseArgs } from "node:util";
+import { parseCommand, importOptions } from "./frontend";
 import { importCsv } from "./importer";
 import { verifyArchive } from "./verify";
 import { decimalInteger as integer } from "./model";
@@ -45,27 +51,13 @@ function importCommand(
   };
 }
 function execute(args: string[]): { result: object; exit: number } {
-  const { positionals, values, tokens } = parseArgs({
-    args,
-    tokens: true,
-    allowPositionals: true,
-    strict: true,
-    options: {
-      file: { type: "string" },
-      output: { type: "string" },
-      "fiscal-year": { type: "string" },
-      "max-bytes": { type: "string" },
-      "max-rows": { type: "string" },
-    },
-  });
-  const names = tokens
-    .filter((token) => token.kind === "option")
-    .map((token) => token.name);
-  if (new Set(names).size !== names.length) throw new Error("duplicate_option");
-  if (positionals.length !== 1 || !values.output || commandOf(args)!==positionals[0]) throw new Error("usage");
-  if (positionals[0] === "import") return importCommand(values, values.output);
+  const parsed = parseCommand(args, importOptions);
+  const values = parsed.values as Values;
+  const command = parsed.command;
+  if (!values.output) throw new Error("usage");
+  if (command === "import") return importCommand(values, values.output);
   if (
-    !["verify", "status"].includes(positionals[0]) ||
+    !["verify", "status"].includes(command) ||
     Object.keys(values).some((key) => key !== "output")
   )
     throw new Error("usage");
@@ -79,12 +71,19 @@ export function runCli(
   let text: string, exit: number;
   try {
     const info = information(args);
-    if (info !== undefined) { text=info; exit=0; }
-    else { const outcome=execute(args); text=JSON.stringify(outcome.result); exit=outcome.exit; }
+    if (info !== undefined) {
+      text = info;
+      exit = 0;
+    } else {
+      const outcome = execute(args);
+      text = JSON.stringify(outcome.result);
+      exit = outcome.exit;
+    }
   } catch {
     if (!args.length) diagnose(help());
     guidance(diagnose);
-    text=JSON.stringify({ error: "operation_failed" }); exit=1;
+    text = JSON.stringify({ error: "operation_failed" });
+    exit = 1;
   }
   write(text);
   return exit;
@@ -92,15 +91,28 @@ export function runCli(
 if (import.meta.main) {
   const args = process.argv.slice(2);
   let command: string | undefined;
-  try { command=commandOf(args); } catch { /* normal parser renders safe failure */ }
-  let rendered='';
-  const capture=(text:string)=>{rendered=text;};
-  const exit = sourceCommands.includes(command ?? '')
-    ? await runAcquisitionCli(args,capture)
-    : runCli(args,capture);
-  try { await writeOutput(rendered); process.exitCode=exit; }
-  catch(error){
-    if(error instanceof OutputFailure){process.exitCode=outputStatus(error,exit);if(error.timedOut)process.exit(1);}
-    else {console.error('financial-transparency-consume: output delivery failed.');process.exitCode=1;}
+  try {
+    command = commandOf(args);
+  } catch {
+    /* normal parser renders safe failure */
+  }
+  let rendered = "";
+  const capture = (text: string) => {
+    rendered = text;
+  };
+  const exit = sourceCommands.includes(command ?? "")
+    ? await runAcquisitionCli(args, capture)
+    : runCli(args, capture);
+  try {
+    await writeOutput(rendered);
+    process.exitCode = exit;
+  } catch (error) {
+    if (error instanceof OutputFailure) {
+      process.exitCode = outputStatus(error, exit);
+      if (error.timedOut) process.exit(1);
+    } else {
+      console.error("financial-transparency-consume: output delivery failed.");
+      process.exitCode = 1;
+    }
   }
 }

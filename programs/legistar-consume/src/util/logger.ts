@@ -5,10 +5,16 @@ export type Logger = {
 };
 
 let nativeWriter: ((line: string) => void) | undefined;
-export function setLogWriter(writer: (line: string) => void): void { nativeWriter = writer; }
+export function setLogWriter(writer: (line: string) => void): void {
+  nativeWriter = writer;
+}
 
 export function createLogger(runId?: string): Logger {
-  function write(level: "info" | "warn" | "error", event: string, data: Record<string, unknown> = {}) {
+  function write(
+    level: "info" | "warn" | "error",
+    event: string,
+    data: Record<string, unknown> = {},
+  ) {
     (nativeWriter ?? console.log)(
       JSON.stringify({
         ...data,
@@ -28,8 +34,8 @@ export function createLogger(runId?: string): Logger {
 }
 
 export function makeRunId(prefix = "run"): string {
-  return `${prefix}_${new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14)}_${Math.random()
-    .toString(36)
-    .slice(2, 8)}`;
+  return `${prefix}_${new Date()
+    .toISOString()
+    .replace(/[-:.TZ]/g, "")
+    .slice(0, 14)}_${Math.random().toString(36).slice(2, 8)}`;
 }
-

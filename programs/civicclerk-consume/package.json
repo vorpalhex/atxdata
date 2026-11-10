@@ -7,10 +7,16 @@
     "list:meetings": "bun run src/cli.ts list-meetings",
     "ingest:meeting": "bun run src/cli.ts ingest-meeting",
     "typecheck": "tsc --noEmit",
-    "test": "bun test"
+    "test": "bun test",
+    "format": "prettier --write src/cli.ts test/cli.test.ts test/commander.test.ts test/frontend.test.ts test/frontend-quality.test.ts test/delivery.test.ts test/stderr.test.ts test/support/frontend-fixture.ts package.json README.md",
+    "format:check": "prettier --check src/cli.ts test/cli.test.ts test/commander.test.ts test/frontend.test.ts test/frontend-quality.test.ts test/delivery.test.ts test/stderr.test.ts test/support/frontend-fixture.ts package.json README.md"
   },
   "devDependencies": {
     "@types/bun": "1.3.13",
-    "typescript": "6.0.3"
+    "typescript": "6.0.3",
+    "prettier": "3.9.10"
+  },
+  "dependencies": {
+    "commander": "14.0.3"
   }
 }

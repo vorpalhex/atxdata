@@ -81,6 +81,13 @@ Resume integrity: a supplied resume must be a non-null JSON object with complete
 
 ## CLI frontend contract (initial package version 0.1.0)
 
+The frontend uses pinned Commander 14.0.3 for option definitions/consumption and
+command help. Narrow compatibility guards retain singleton rejection,
+information precedence, and split-value/terminator handling; collector selectors
+and validation remain separate. Help layout is Commander-generated, not a stable
+machine schema. `bun run format` and `bun run format:check` use pinned Prettier
+3.9.10 on an explicit CLI-only file list, not collector sources or lockfiles.
+
 `bun run src/cli.ts --help`, `-h`, `--version`, `help COMMAND`, and each
 command's `-h`/`--help` are offline: no archive, configuration validation or
 transport initialization. Plain invocation intentionally retains status 1 and the

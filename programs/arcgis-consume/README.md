@@ -4,6 +4,10 @@ Read-only Bun/SQLite acquisition from the TNR and Voter Maps hub catalogs. `tnr`
 
 ## CLI frontend contract
 
+Commander 14.0.3 defines and consumes the CLI options and command registry; generated help retains the source workflow and safety notes. Small local compatibility guards preserve the published duplicate/value/terminator and informational-precedence contracts rather than adopting different parser defaults. Each program owns its dependency and frontend; no shared parser package is required.
+
+`bun run format` and `bun run format:check` use pinned Prettier 3.9.10 on the explicit CLI-only paths in package.json. Collector/domain files and generated lockfiles are outside that formatting scope.
+
 The declared initial package/CLI version is 0.1.0 (not a publisher or upstream release). `--version` prints it without opening an archive. `-h`, `--help`, and `help COMMAND` provide offline help; command-local help lists its requirements and the workflow. Required option values and tokens after application `--` are never help or command selectors. Bun consumes its first `--`; pass a second `--` when the application must receive the boundary. Operands after that boundary are rejected because this CLI uses named target options, not positional file inputs.
 
 Long values accept both `--name=value` and `--name value`. All known options can precede or follow the command; their operational scope is unchanged: a command consumes only the options relevant to it (e.g. status ignores selection filters). Unknown/duplicate options and empty/incomplete values fail with status 1; no prefix matching or positional catch-all exists. Required split values beginning with `--` are rejected as missing values, not interpreted as help; use equals for literal option-like values. There are no grouped short operational flags. Informational options bypass unrelated option/required-target errors, but an unknown command remains an error; the last informational option wins. Repeated operational options remain errors. Numbers retain their existing decimal-digits-only bounds (including leading zeros); no exponent/decimal/negative coercion is added.
@@ -81,17 +85,17 @@ After a settled interruption, repeat its command/options with `--resume RUN_ID`.
 
 General CLI defaults (all numeric overrides require finite positive safe integers; layer IDs may be zero):
 
-| Option | Default | Meaning |
-| --- | ---: | --- |
-| `--max-requests` | 1000 | All attempts in this operation, including robots and redirects |
-| `--max-bytes` | 268435456 | Combined received/reserved response bytes |
-| `--response-bytes` | 16777216 | Each metadata/count/ID/feature response |
-| `--raw-bytes` | 134217728 | Each published file |
-| `--expanded-bytes` | 536870912 | Combined ZIP declared/actual expansion |
-| `--max-records` | 1000000 | Complete selected feature/file record count, not a prefix |
-| `--max-pages` | 1000 | Catalog pages and feature pages, separately bounded |
-| `--page-size` | 1000 | Requested features per page/batch, capped by server metadata |
-| `--max-members` | 1000 | ZIP members |
+| Option             |   Default | Meaning                                                        |
+| ------------------ | --------: | -------------------------------------------------------------- |
+| `--max-requests`   |      1000 | All attempts in this operation, including robots and redirects |
+| `--max-bytes`      | 268435456 | Combined received/reserved response bytes                      |
+| `--response-bytes` |  16777216 | Each metadata/count/ID/feature response                        |
+| `--raw-bytes`      | 134217728 | Each published file                                            |
+| `--expanded-bytes` | 536870912 | Combined ZIP declared/actual expansion                         |
+| `--max-records`    |   1000000 | Complete selected feature/file record count, not a prefix      |
+| `--max-pages`      |      1000 | Catalog pages and feature pages, separately bounded            |
+| `--page-size`      |      1000 | Requested features per page/batch, capped by server metadata   |
+| `--max-members`    |      1000 | ZIP members                                                    |
 
 These are configurable operating bounds, not observed source sizes. Responses are streamed to private, no-clobber raw paths. JSON and bounded ZIP semantic validation then use memory; very large explicitly configured ZIPs require corresponding memory. Feature pages are persisted separately rather than accumulated as one feature roll. Whole-layer IDs are bounded by the count/response budgets and retained for completeness reconciliation.
 
@@ -134,3 +138,5 @@ A separately bounded live metadata-only exercise completed TNR catalog discovery
 Historical evidence, not a fresh acquisition: the previous implementation retained four TNR polygons and a 308-record Election Precinct ZIP. Original page SHA-256 values were `4d151fb29b4891d07feb284c152dafbb13ad382cc99a443ac7348c430d037897` and `a2e9e6186f4746301276e06ad76bd5c63dfc2c05aed68bf6de880869fb0910f9`; ZIP SHA-256 was `108837b38a9f913740577b5ab0784c40022df20ea0e00930b56ba0b9bb145c41`. The old semantic/reuse paths are regression-tested, but locating and replaying those two actual historical archives remains an explicit handoff criterion, not a claimed current pass.
 
 Run tests with a private external TMPDIR and an OS outbound-network denial boundary that permits localhost fixtures. Keep coverage/metrics/mutation workers outside every checkout, in a private repository-layout mirror. Frozen offline installation succeeded; all changed files remain local and unstaged. Full-suite/typecheck, scoped mutation/CRAP/dryer receipts and residual classifications accompany the handoff. Independent review and acceptance remain chief-owned.
+
+The unchanged policy exceptions are exactly `robots longest-match rules, agent groups and stricter crawl-delay are respected` and `robots /query disallow is enforced before any feature query`. No other failures are accepted as policy exceptions.

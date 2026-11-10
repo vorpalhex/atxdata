@@ -15,6 +15,10 @@ The program imports existing CivicClerk archive/complete-transfer queue primitiv
 
 ## CLI frontend contract
 
+Commander 14.0.3 defines and consumes the CLI options and command registry; generated help retains the source workflow and safety notes. Small local compatibility guards preserve the published duplicate/value/terminator and informational-precedence contracts rather than adopting different parser defaults. Each program owns its dependency and frontend; no shared parser package is required.
+
+`bun run format` and `bun run format:check` use pinned Prettier 3.9.10 on the explicit CLI-only paths in package.json. Collector/domain files and generated lockfiles are outside that formatting scope.
+
 The declared initial package/CLI version is 0.1.0 (not a publisher or upstream release). `--version` prints it without opening an archive. `-h`, `--help`, and `help COMMAND` provide offline help; command-local help lists its requirements and the workflow. Required option values and tokens after application `--` are never help or command selectors. Bun consumes its first `--`; pass a second `--` when the application must receive the boundary. Operands after that boundary are rejected because this CLI uses named target options, not positional file inputs.
 
 Long values accept both `--name=value` and `--name value`. All known options can precede or follow the command; their operational scope is unchanged: a command consumes only the options relevant to it (e.g. status ignores selection filters). Unknown/duplicate options and empty/incomplete values fail with status 1; no prefix matching or positional catch-all exists. Required split values beginning with `--` are rejected as missing values, not interpreted as help; use equals for literal option-like values. There are no grouped short operational flags. Informational options bypass unrelated option/required-target errors, but an unknown command remains an error; the last informational option wins. Repeated operational options remain errors. Numbers retain their existing decimal-digits-only bounds (including leading zeros); no exponent/decimal/negative coercion is added.
@@ -142,13 +146,13 @@ The shared `.civicclerk.lock` protects the whole archive. Existing locks stop an
 
 The bounded implementation exercise used 6 total source attempts including the initial failed classifier receipt: county robots, one current budget page/PDF, VoteTravis robots and one election page/PDF. No further public requests were needed for County Code/minutes retained-original validation. One small PDF per live source, no large adopted budget download.
 
-| Sample | Bytes | SHA-256 |
-| --- | ---: | --- |
-| FY2027 taxpayer-impact statement | 127112 | `566b43f130ab8395088d566edd6df788a99322a3c385c758b536d4ed4321f5a3` |
-| June 11, 2022 official reconciliation (image-only) | 24807 | `d694dfc8a549dd42c8cbade09a8046d5fc19f3929c53cb1b4686171cb7df2156` |
-| Current reference Chapter 2, retained | 247899 | `12e09fbf334455d038aade4cba3a7a6e9ff54b790aef1f8953067d6ceddbc806` |
-| Current reference Chapter 464, retained | 411612 | `bb112d2ca93a32a96c05185bbcf585596067ce59722b12f0ed621ed1953bac6a` |
-| January 5, 2010 minutes, retained | 119994 | `3cdb0b3a0f7e11e90ac493dc56c913516c1c3e4c38077c4d5ce6918a873c4269` |
+| Sample                                             |  Bytes | SHA-256                                                            |
+| -------------------------------------------------- | -----: | ------------------------------------------------------------------ |
+| FY2027 taxpayer-impact statement                   | 127112 | `566b43f130ab8395088d566edd6df788a99322a3c385c758b536d4ed4321f5a3` |
+| June 11, 2022 official reconciliation (image-only) |  24807 | `d694dfc8a549dd42c8cbade09a8046d5fc19f3929c53cb1b4686171cb7df2156` |
+| Current reference Chapter 2, retained              | 247899 | `12e09fbf334455d038aade4cba3a7a6e9ff54b790aef1f8953067d6ceddbc806` |
+| Current reference Chapter 464, retained            | 411612 | `bb112d2ca93a32a96c05185bbcf585596067ce59722b12f0ed621ed1953bac6a` |
+| January 5, 2010 minutes, retained                  | 119994 | `3cdb0b3a0f7e11e90ac493dc56c913516c1c3e4c38077c4d5ce6918a873c4269` |
 
 Retained inventories reproduced 80 occurrences/80 unique current chapter URLs and 988 occurrences/987 unique historical minutes URLs. These are observed link inventories, not all-documents availability or archive completeness. All five selected originals passed offline verification; duplicate imports and local changed-byte fixtures retained correct versions.
 

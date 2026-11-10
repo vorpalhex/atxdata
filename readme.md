@@ -2,7 +2,7 @@
 
 Tools for monitoring Austin City Council activity.
 
-This is intended primarily to be *driven* by an LLM agent such as Codex/Claude/etc, so that non-technical users can get at the Austin City Council documents, make sense of them, and use an LLM to do interpretation and discovery. Your LLM will need a way to run commands, so a purely chat interface won't quite do it, but your chat LLM should be able to guide you to the right thing. 
+This is intended primarily to be _driven_ by an LLM agent such as Codex/Claude/etc, so that non-technical users can get at the Austin City Council documents, make sense of them, and use an LLM to do interpretation and discovery. Your LLM will need a way to run commands, so a purely chat interface won't quite do it, but your chat LLM should be able to guide you to the right thing.
 
 Give the URL of this repo: https://github.com/vorpalhex/atxdata to your LLM and ask it to help you get this project going. Give it a city council meeting date (near dates are fine, it can search for exact dates) and ask it to start getting documents and producing highlight reports. If you're stuck, reach out for help in Github Issues or on X to @Vorpalhex.
 
@@ -19,11 +19,11 @@ This does not attempt to tell you how to read the documents or even what to do w
 
 ## Contributing and Conduct
 
-We ask contributors to use "Thanksgiving Table" rules. That means no political bickering (no campaigning, ideological fights, etc), being polite even to your bitter enemies, and choosing to walk away instead of escalating into a fight. You are welcome to participate as long as you can follow the rules, violators will be asked to step away until they choose to participate correctly. 
+We ask contributors to use "Thanksgiving Table" rules. That means no political bickering (no campaigning, ideological fights, etc), being polite even to your bitter enemies, and choosing to walk away instead of escalating into a fight. You are welcome to participate as long as you can follow the rules, violators will be asked to step away until they choose to participate correctly.
 
 Reasonably high quality code contributions are welcome. Code contributions that are well meant but insufficient quality or awkwardly aligned may be rewritten instead of merged. Skill contributions will generally be heavily scrutinized. Additional personas for analysis are welcome so long as those personas are labeled truthfully, reasonably neutral, and relevant - more strongly partisan personas may be rejected and asked to be distributed through some other channel.
 
-LLM contributions are acceptable, but will generally be heavily scrutinized. We ask that LLM contributions be labeled and include an intent statement of what the contribution is intended to do, and that LLM contributions be less than 400 lines in a given PR. 
+LLM contributions are acceptable, but will generally be heavily scrutinized. We ask that LLM contributions be labeled and include an intent statement of what the contribution is intended to do, and that LLM contributions be less than 400 lines in a given PR.
 
 ## Programs
 
@@ -88,6 +88,29 @@ selected mutation checks are bounded samples, not whole-product coverage. Mixed
 stdout/stderr terminal probes cover all nine public surfaces. This remains local
 macOS/Bun verification, with no new publisher acquisition or remote push.
 
+### Shared CLI tooling
+
+The CLI-library migration standardizes all eight frontends and the Legistar API
+diagnostic on Commander `14.0.3`. Commander is already used by Legistar and
+includes TypeScript types, so this reuses the existing parser rather than adding
+a second parser ecosystem. Packages remain independently installable; there is
+no new root runtime package. Compatibility guards retain the documented
+program-specific argument and machine-output contracts.
+
+Prettier `3.9.10` uses the root `.prettierrc.json`. From any program directory:
+
+```sh
+bun install --frozen-lockfile
+bun run format
+bun run format:check
+```
+
+Formatting scripts name the CLI entrypoints, parsing/output helpers, related
+tests and changed manifests/docs explicitly. They do not format unrelated
+collectors, generated archives, Python helpers or the operator-owned ArcGIS
+`src/rules.ts`. Library migration acceptance is separate from the historical
+verification snapshots above.
+
 ### legistar-consume
 
 Run from the program directory:
@@ -135,4 +158,4 @@ This uses personas to raise points of interest in really large documents. If a d
 
 ### pdf-to-text
 
-This is a multi-tier skill meant to help get PDF documents so that your LLM can read them. We primarily use pdf2md which is a pdf text extractor and which includes page breaks and some other non-body text which can help LLMs navigate documents and be able to form correct citations (but errors may still occur and you should *always* validate citations).
+This is a multi-tier skill meant to help get PDF documents so that your LLM can read them. We primarily use pdf2md which is a pdf text extractor and which includes page breaks and some other non-body text which can help LLMs navigate documents and be able to form correct citations (but errors may still occur and you should _always_ validate citations).
