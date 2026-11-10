@@ -1,12 +1,17 @@
 import {readFile} from "node:fs/promises";
+import metadata from "../package.json";
+import {writeStdout} from "./cli-output";
 import {workBudget,type WorkBudget} from './budgets';
 import {statFile} from "../../civicclerk-consume/src/archive";
 import {Engine} from "./engine";
+import {pageUrl} from "./discovery";
+import {requireArchiveEndpoint} from "./historical";
 import {sourceName,type Selection} from "./adapters";
 import {Transport} from "./transport";
 import {reviewSelectionHash,type RenderedReview,type PageReview} from "./pdf";
 
 const help=`County document acquisition (private local originals only)
+Usage: bun run src/cli.ts COMMAND [options]
   bun run src/cli.ts COMMAND --root APPROVED_PRIVATE_DIRECTORY [options]
   status|catalog --source SOURCE (catalog requires source; status does not)
   list|verify --source SOURCE --limit N [--year YYYY --chapter TOKEN --date YYYY-MM-DD --role ROLE --url EXACT_URL]
@@ -17,6 +22,9 @@ const help=`County document acquisition (private local originals only)
   archive --source-href EXACT_PUBLISHED_HREF --page EXPLICIT_HTTPS_ENDPOINT [--archive-value VALUE] --allow-network [--human]
   discover --source SOURCE --page EXACT_DISCOVERY_URL --allow-network [--human]
   collect|sync --source SOURCE --limit N [selection options] --allow-network
+Help: -h, --help, help COMMAND; --version reports the declared package version offline.
+Examples (offline): status --root APPROVED_PRIVATE_DIRECTORY; list --root APPROVED_PRIVATE_DIRECTORY --source county-code --limit 1.
+Discovery workflow: import-page/discover -> catalog/list IDs -> review-context/import-pdf -> collect/verify. Explicit --allow-network is always required for network commands.
 Sources: county-code, budgets, meeting-archives, election-documents.
 Work budgets: --max-requests N (100), --max-bytes N (536870912), --max-pdf-bytes N (134217728), --max-pages N (50). Positive safe integers, per operation, not archive-lifetime quotas. Import and collect share PDF bounds; import/review also honor aggregate body/image byte budgets. Metadata stays3MiB/page and aggregate2000 document occurrences/source.
 Discovery follows only actual retained links in relevant source paths; bounded traversal returns complete/pending. catalog reports retained links/selectors and blocked original hrefs, not fabricated routes.
@@ -24,22 +32,49 @@ Discovery follows only actual retained links in relevant source paths; bounded t
 No redirects/retries/scheduler/server. Global durable >=3second completion pacing, robots, cooldowns, stop gates and history never reset between operations. collect verifies existing selected downloads without HTTP; sync explicitly requests new bytes. Interrupted artifacts/wire fail closed pending manual recovery.
 review-pdf accepts explicit reviewed physical pages and image/selection hashes, preserving legacy one-page receipts. Not OCR, interpretation or unattended acceptance. See README for review JSON and source caveats.
 `;
+function commandHelp(command?:string):string {
+ if(!command) return help;
+ const lines=help.split('\n');
+ const synopsis=lines.find(line=>line.trim().split(' ')[0]?.split('|').includes(command));
+ return `County document ${command}\nUsage: bun run src/cli.ts ${command} --root APPROVED_PRIVATE_DIRECTORY [options]\n${synopsis??''}\n${lines.slice(lines.findIndex(line=>line.startsWith('Sources:'))).join('\n')}\nUse --help for the complete command surface and README for source/review details.`;
+}
 type Options=Record<string,string>;
 const COMMANDS=["list","verify","status","catalog","import-page","import-pdf","review-pdf","review-context","discover","collect","sync","archive"] as const;
 type Command=typeof COMMANDS[number];
 const NETWORK=new Set<string>(["discover","collect","sync","archive"]);
-function options(args:string[]):Options {
- const parsed:Options={};
- const allowed=new Set(["root","source","limit","year","chapter","date","role","url","page","input","origin","observation","headers","image","images","review","allow-network","human","source-href","archive-value","max-pdf-bytes","max-bytes","max-requests","max-pages"]);
- for(let index=0;index<args.length;index++) {
-  const argument=args[index]!,key=argument.replace(/^--/,"");
-  if(!argument.startsWith("--") || !allowed.has(key) || Object.hasOwn(parsed,key)) throw new Error("unknown/duplicate option");
-  if(key==="allow-network" || key==="human") {parsed[key]="yes";continue;}
-  const value=args[++index];
-  if(!value || value.startsWith("--")) throw new Error(`missing --${key}`);
-  parsed[key]=value;
+const ALLOWED=new Set(['--root', '--source', '--limit', '--year', '--chapter', '--date', '--role', '--url', '--page', '--input', '--origin', '--observation', '--headers', '--image', '--images', '--review', '--allow-network', '--human', '--source-href', '--archive-value', '--max-pdf-bytes', '--max-bytes', '--max-requests', '--max-pages']);
+const BOOLEANS=new Set(["--allow-network","--human"]);
+// Parse in token context: values and tokens after -- are never help/selectors.
+function parseCLI(args:string[]) {
+ const flags:Record<string,string>={};
+ let command:string|undefined, info:string|undefined, ended=false, helpCommand=false, failure:string|undefined;
+ const fail=(message:string)=>{failure??=message;};
+ for(let i=0;i<args.length;i++) {
+  const token=args[i]!;
+  if(ended){fail('unexpected operand; see --help');continue;}
+  if(token==='--'){ended=true;continue;}
+  if(token==='-h'||token==='--help'){info='help';continue;}
+  if(token==='--version'){info='version';continue;}
+  if(token.startsWith('--')) {
+   const equal=token.indexOf('='),key=equal<0?token:token.slice(0,equal);
+   if(!ALLOWED.has(key)){fail('unknown option; see --help');continue;}
+   if(Object.hasOwn(flags,key)) fail('duplicate option; see --help');
+   if(BOOLEANS.has(key)) {
+    if(equal>=0) fail('boolean switches do not take values');
+    flags[key]='yes';continue;
+   }
+   const value=equal<0?args[++i]:token.slice(equal+1);
+   if(!value || (equal<0 && value.startsWith('--'))) fail('missing '+key+' value; see --help');
+   else flags[key]=value;
+   continue;
+  }
+  if(!command && token==='help' && !helpCommand){info='help';helpCommand=true;continue;}
+  if(!command) command=token; else fail('unexpected operand; see --help');
  }
- return parsed;
+ if(command && !(COMMANDS as readonly string[]).includes(command)) throw Error('unknown command; see --help');
+ if(info) return {command,flags,info};
+ if(failure) throw Error(failure);
+ return {command,flags,info};
 }
 function required(opts:Options,name:string):string {
  const value=opts[name];
@@ -110,15 +145,38 @@ const ACTIONS:Record<Command,(engine:Engine,opts:Options)=>unknown>={
  collect:(engine,opts)=>collect(engine,opts,false),
  sync:(engine,opts)=>collect(engine,opts,true),
 };
+// Pure CLI requirements precede opening the archive; action/library guards remain.
+function validate(command:Command,opts:Options):void {
+ required(opts,'root');
+ if(['catalog','list','verify','import-page','discover','collect','sync'].includes(command)) sourceName(required(opts,'source'));
+ if(['list','verify','collect','sync'].includes(command)) selection(opts);
+ const operands:Partial<Record<Command,string[]>>={
+  archive:['source-href','page'], discover:['page'],
+  'import-page':['page','input','origin'], 'import-pdf':['observation','input','origin'],
+  'review-context':['observation'], 'review-pdf':['observation','input','review'],
+ };
+ for(const key of operands[command]??[]) required(opts,key);
+ if(command==='import-page' || command==='discover') {
+  const page=required(opts,'page');
+  if(pageUrl(sourceName(required(opts,'source')),page,page)!==page) throw Error('noncanonical source-linked discovery URL');
+ }
+ if(command==='archive') requireArchiveEndpoint(required(opts,'source-href'),required(opts,'page'));
+ if(command==='review-pdf') {
+  if(opts.image && opts.images) throw Error('use either --image or --images, not both');
+  if(!opts.image && !opts.images) throw Error('required --image or --images');
+ }
+}
 export async function run(args:string[]):Promise<unknown> {
- const command=args[0];
- if(!command || command==="help" || command==="--help") return help;
- if(!(COMMANDS as readonly string[]).includes(command)) throw new Error("unknown command");
- const opts=options(args.slice(1));
+ const parsed=parseCLI(args),command=parsed.command;
+ if(parsed.info==='version') return `county-documents-consume ${metadata.version}`;
+ if(parsed.info==='help') return commandHelp(command);
+ if(!command) {if(Object.keys(parsed.flags).length) throw Error('required command; see --help');return commandHelp();}
+ const opts:Options=Object.fromEntries(Object.entries(parsed.flags).map(([key,value])=>[key.slice(2),value]));
  if(NETWORK.has(command) && opts["allow-network"]!=="yes") throw new Error("network requires --allow-network");
  const budget=budgets(opts);
+ validate(command as Command,opts);
  const engine=await Engine.open(required(opts,"root"),{maxPdfBytes:budget.maxPdfBytes});
  try {return await ACTIONS[command as Command](engine,opts);}
  finally {await engine.close();}
 }
-if(import.meta.main) run(Bun.argv.slice(2)).then(result=>console.log(typeof result==="string"?result:JSON.stringify(result,null,2))).catch(error=>{console.error(error.message);process.exitCode=1;});
+if(import.meta.main) run(Bun.argv.slice(2)).then(result=>writeStdout((typeof result==="string"?result:JSON.stringify(result,null,2))+"\n")).catch(error=>{console.error(error.message);process.exitCode=1;});

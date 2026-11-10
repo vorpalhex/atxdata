@@ -1,43 +1,79 @@
 import { isAbsolute } from "node:path";
+import metadata from "../package.json";
+import {writeStdout} from "./cli-output";
 import { type Dependencies, Archive, limits } from "./archive";
 import { Adapter, type Command } from "./adapter";
 import { configs, source, type Source } from "./sources";
 import { ensure } from "./check";
 import { executeSelection, selectionOptions } from "./selection";
 import { statFile } from "../../civicclerk-consume/src/archive";
-function parseFlags(args: string[]) {
-  const flags: Record<string, string> = {};
-  for (let i = 1; i < args.length; i += 2) {
-    const key = args[i],
-      value = args[i + 1];
-    ensure(
-      [
-        "--archive",
-        "--source",
-        "--terms-sha256",
-        "--resume",
-        "--item",
-        "--layer",
-        "--service",
-        "--fields",
-        "--page-size",
-        "--max-records",
-        "--max-pages",
-        "--max-requests",
-        "--max-bytes",
-        "--response-bytes",
-        "--raw-bytes",
-        "--expanded-bytes",
-        "--max-members",
-      ].includes(key) &&
-        value &&
-        !value.startsWith("--") &&
-        !(key in flags),
-      "unknown, duplicate or incomplete option",
-    );
-    flags[key] = value;
+const COMMANDS=["list","rules","discover","collect","sync","status","verify"];
+const ALLOWED=new Set(['--archive', '--source', '--terms-sha256', '--resume', '--item', '--layer', '--service', '--fields', '--page-size', '--max-records', '--max-pages', '--max-requests', '--max-bytes', '--response-bytes', '--raw-bytes', '--expanded-bytes', '--max-members']);
+const BOOLEANS=new Set<string>();
+// Parse in token context: values and tokens after -- are never help/selectors.
+function parseCLI(args:string[]) {
+ const flags:Record<string,string>={};
+ let command:string|undefined, info:string|undefined, ended=false, helpCommand=false, failure:string|undefined;
+ const fail=(message:string)=>{failure??=message;};
+ for(let i=0;i<args.length;i++) {
+  const token=args[i]!;
+  if(ended){fail('unexpected operand; see --help');continue;}
+  if(token==='--'){ended=true;continue;}
+  if(token==='-h'||token==='--help'){info='help';continue;}
+  if(token==='--version'){info='version';continue;}
+  if(token.startsWith('--')) {
+   const equal=token.indexOf('='),key=equal<0?token:token.slice(0,equal);
+   if(!ALLOWED.has(key)){fail('unknown option; see --help');continue;}
+   if(Object.hasOwn(flags,key)) fail('duplicate option; see --help');
+   if(BOOLEANS.has(key)) {
+    if(equal>=0) fail('boolean switches do not take values');
+    flags[key]='yes';continue;
+   }
+   const value=equal<0?args[++i]:token.slice(equal+1);
+   if(!value || (equal<0 && value.startsWith('--'))) fail('missing '+key+' value; see --help');
+   else flags[key]=value;
+   continue;
   }
-  return flags;
+  if(!command && token==='help' && !helpCommand){info='help';helpCommand=true;continue;}
+  if(!command) command=token; else fail('unexpected operand; see --help');
+ }
+ if(command && !COMMANDS.includes(command)) throw Error('unknown command; see --help');
+ if(info) return {command,flags,info};
+ if(failure) throw Error(failure);
+ return {command,flags,info};
+}
+const help=`ArcGIS private, bounded catalog and item acquisition
+Usage: bun src/cli.ts COMMAND [options]
+Commands: list, rules, discover, collect, sync, status, verify
+Workflow (review terms before authorization):
+  list -> rules/catalogTerms -> discover -> rules/item terms/layers -> collect
+  bun src/cli.ts list
+  bun src/cli.ts rules --source tnr --archive ABSOLUTE_PRIVATE_DIRECTORY
+  bun src/cli.ts discover --source tnr --archive ABSOLUTE_PRIVATE_DIRECTORY --terms-sha256 CATALOG_TERMS_SHA256
+  bun src/cli.ts rules --source tnr --item CATALOG_ITEM_ID --archive ABSOLUTE_PRIVATE_DIRECTORY
+  bun src/cli.ts collect --source tnr --item CATALOG_ITEM_ID --layer ADVERTISED_LAYER_ID --archive ABSOLUTE_PRIVATE_DIRECTORY --terms-sha256 ITEM_TERMS_SHA256
+Sources: tnr, voter. list returns preset IDs, defaults and legacyArchiveLimits.
+--archive is required except list: canonical absolute private directory outside source.
+--item selects a catalog-backed ID. --layer selects an advertised layer (zero allowed).
+--service asserts the matching service, never arbitrary URL permission.
+--fields comma-separated actual fields must include the actual OID.
+--terms-sha256: reviewed catalogTerms.sha256 for discover; selected item's terms.sha256 for collect/sync.
+--resume RUN_ID: repeat matching selection/budgets after a settled interruption; never steals locks or resets unknown transfers/cooldowns.
+Positive safe-integer defaults: --page-size 1000, --max-records 1000000, --max-pages 1000, --max-requests 1000, --max-bytes 268435456, --response-bytes 16777216, --raw-bytes 134217728, --expanded-bytes 536870912, --max-members 1000.
+Legacy preset routes: omit --item with --source tnr or voter; bare collect may reuse a verified old preset collection. Explicit --item or sync uses the general acquisition route. collect reuses verified local results; sync requests a new bounded observation. status/verify are offline and require existing state.
+Default operational output is JSON; errors use stderr/status 1. No prompts or paging. See README for policy, review and privacy limitations.
+`;
+function commandHelp(command?:string):string {
+ if(!command) return help;
+ const purpose:Record<string,string>={
+  list:'List preset IDs and general/legacy defaults offline; no archive required.',
+  rules:'Review catalogTerms and selected item terms; inspect advertised layers. Requires --source and --archive; optional --item.',
+  discover:'Enumerate catalog item IDs with --source, --archive and reviewed catalog --terms-sha256; bounded by --max-pages.',
+  collect:'Collect/reuse a verified selection with --source, --archive and reviewed item --terms-sha256; choose --item and advertised --layer for services.',
+  sync:'Request a new bounded observation using the same explicit selection/terms options as collect.',
+  status:'Inspect existing --archive state offline.',verify:'Verify existing --archive checkpoints/history offline; no HTTP.',
+ };
+ return `ArcGIS ${command}\nUsage: bun src/cli.ts ${command} [options]\n${purpose[command]}\n${help}`;
 }
 function presetSelection(
   selected: Source | undefined,
@@ -51,7 +87,8 @@ function presetSelection(
   });
 }
 export function parseArgs(args: string[]) {
-  const command = args[0];
+  const parsed = parseCLI(args);
+  const command = parsed.command ?? "";
   ensure(
     [
       "list",
@@ -64,7 +101,7 @@ export function parseArgs(args: string[]) {
     ].includes(command),
     "commands: list, rules, discover, collect, sync, status, verify",
   );
-  const flags = parseFlags(args);
+  const flags = parsed.flags;
   const archive = flags["--archive"];
   if (command !== "list")
     ensure(
@@ -110,6 +147,10 @@ export async function main(
   args: string[],
   dependencies: Partial<Dependencies> = {},
 ): Promise<unknown> {
+  const parsed=parseCLI(args);
+  if(parsed.info==='version') return `arcgis-consume ${metadata.version}`;
+  if(parsed.info==='help') return commandHelp(parsed.command);
+  if(!parsed.command) throw Error(commandHelp());
   const options = parseArgs(args);
   if (options.command === "list")
     return Object.entries(configs).map(([id, c]) => {
@@ -168,7 +209,8 @@ export async function main(
 }
 if (import.meta.main) {
   try {
-    console.log(JSON.stringify(await main(Bun.argv.slice(2)), null, 2));
+    const result=await main(Bun.argv.slice(2));
+    await writeStdout((typeof result==='string'?result:JSON.stringify(result,null,2))+'\n');
   } catch (error) {
     console.error(
       error instanceof Error
