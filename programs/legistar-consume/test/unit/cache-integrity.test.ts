@@ -161,6 +161,26 @@ test("nonmissing filesystem errors do not authorize reacquisition", async () => 
   expect(f.state()).toEqual(before);
 });
 
+test("missing cached bytes never authorize writes through a symlink ancestor", async () => {
+  for (const dangling of [false, true]) {
+    const f = cached();
+    const target = join(f.root, "target");
+    if (!dangling) mkdirSync(target);
+    const alias = join(f.config.documentStorePath, "alias");
+    symlinkSync(target, alias);
+    f.db.db
+      .query("UPDATE documents SET storage_path = ?")
+      .run(join(alias, "missing", "agenda.pdf"));
+    const before = f.state();
+    const result = await f.run();
+    expect(result.status).toBe("failed");
+    if (result.status === "failed")
+      expect(result.error).toContain("symlink ancestor");
+    expect(f.requests()).toBe(0);
+    expect(f.state()).toEqual(before);
+  }
+});
+
 test("all cached ancestors are checked even beneath ordinary directories", async () => {
   const f = cached();
   const real = join(f.config.documentStorePath, "real");

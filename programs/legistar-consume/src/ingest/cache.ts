@@ -31,9 +31,19 @@ async function regularOriginal(path: string): Promise<boolean> {
   }
 }
 
+async function symlinkAncestor(path: string): Promise<boolean> {
+  try {
+    return (await lstat(path)).isSymbolicLink();
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT")
+      return false;
+    throw error;
+  }
+}
+
 async function rejectSymlinkAncestors(path: string): Promise<void> {
   for (let current = dirname(resolve(path)); ; current = dirname(current)) {
-    if ((await lstat(current)).isSymbolicLink()) {
+    if (await symlinkAncestor(current)) {
       throw new Error("cached document integrity: symlink ancestor");
     }
     if (dirname(current) === current) return;
@@ -65,8 +75,8 @@ export async function cachedDocumentBytes(
   if (document?.downloadStatus !== "downloaded" || !document.storagePath)
     return;
   inside(root, document.storagePath);
-  if (!(await regularOriginal(document.storagePath))) return;
   await rejectSymlinkAncestors(document.storagePath);
+  if (!(await regularOriginal(document.storagePath))) return;
   const original = await digest(document.storagePath);
   if (
     original.sha256 !== document.sha256 ||
