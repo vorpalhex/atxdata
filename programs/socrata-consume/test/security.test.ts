@@ -57,7 +57,7 @@ test("versioned operation identity cannot be downgraded while reusing intact ori
     )
     .get()!;
   const options = JSON.parse(row.options);
-  expect(options.format).toBe("socrata-v1");
+  expect(options.format).toBe("socrata-v2-datahub");
   expect(options.representation).toBe("fetch-decoded-body");
   options.format = "foreign-v0";
   db.query("UPDATE acquisition_options SET options=? WHERE run=?").run(

@@ -13,7 +13,14 @@ import { Archive, type Dependencies } from "../../arcgis-consume/src/archive";
 import { archiveLock } from "../../civicclerk-consume/src/archive";
 import { validateSourceSchema } from "../../financial-transparency-consume/src/source-schema";
 import { validateTiming } from "../../arcgis-consume/src/timing";
-import { origin, catalogOrigin, ensure, positive } from "./source";
+import {
+  origin,
+  catalogOrigin,
+  ensure,
+  positive,
+  operationFormat,
+  validateIdentity,
+} from "./source";
 export type Budget = {
   requests: number;
   responseBytes: number;
@@ -171,9 +178,9 @@ function verifyOptions(db: Database) {
     .query<{ options: string }, []>("SELECT options FROM acquisition_options")
     .all()) {
     const options = JSON.parse(row.options);
+    validateIdentity(options?.format);
     ensure(
-      options?.format === "socrata-v1" &&
-        options?.representation === "fetch-decoded-body",
+      options?.representation === "fetch-decoded-body",
       "unsupported operation identity/representation",
     );
     positive(options.timeoutMs, "operation timeoutMs");
@@ -328,7 +335,7 @@ export class Session {
     const run = this.archive.store.start(source, command);
     this.archive.store.saveOptions(run, {
       ...options,
-      format: "socrata-v1",
+      format: operationFormat,
       representation: "fetch-decoded-body",
       timeoutMs: this.timeoutMs,
       budget: validated,

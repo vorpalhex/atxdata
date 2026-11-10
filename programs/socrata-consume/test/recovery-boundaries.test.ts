@@ -47,6 +47,43 @@ export function state(root: string) {
   walk(root);
   return { logical, files };
 }
+test("old-source archive requires explicit review without writer, traffic or rewriting evidence", async () => {
+  const root = mkdtempSync(join(base, "old-source-")),
+    f = fixture();
+  await collect(options(root), f.deps);
+  const db = new Database(join(root, "transport", "state.sqlite"));
+  db.exec(
+    "UPDATE sources SET original_url='https://data.austintexas.gov'; UPDATE acquisition_options SET options=json_set(options,'$.format','socrata-v1')",
+  );
+  db.close();
+  const before = state(root),
+    count = f.calls.length,
+    open = Session.open;
+  let writers = 0;
+  Session.open = async (...args: Parameters<typeof open>) => {
+    writers++;
+    return open(...args);
+  };
+  try {
+    await expect(verify(root)).rejects.toThrow(
+      "unsupported old source identity; reviewed migration required",
+    );
+    await expect(status(root)).rejects.toThrow(
+      "unsupported old source identity; reviewed migration required",
+    );
+    await expect(
+      collect({ ...options(root), refresh: true }, f.deps),
+    ).rejects.toThrow(
+      "unsupported old source identity; reviewed migration required",
+    );
+  } finally {
+    Session.open = open;
+  }
+  expect(writers).toBe(0);
+  expect(f.calls.length).toBe(count);
+  expect(state(root)).toEqual(before);
+});
+
 test("explicit resumed budget and timeout conflicts reject unchanged before writer or transport", async () => {
   const root = mkdtempSync(join(base, "limits-")),
     f = fixture();

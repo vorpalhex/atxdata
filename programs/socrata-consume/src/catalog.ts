@@ -17,7 +17,7 @@ export function catalogURL(options: {
 }) {
   const url = new URL(catalogOrigin + "/api/catalog/v1");
   const params = new URLSearchParams({
-    domains: "data.austintexas.gov",
+    domains: new URL(origin).hostname,
     limit: String(positive(options.limit, "catalog limit")),
     offset: String(positive(options.offset, "catalog offset", 0)),
     only: "datasets",
@@ -48,14 +48,21 @@ export function decodeCatalog(
       resource = object(item.resource),
       metadata = object(item.metadata);
     ensure(
-      metadata.domain === "data.austintexas.gov",
+      metadata.domain === new URL(origin).hostname,
       "catalog domain mismatch",
     );
     ensure(resource.type === "dataset", "unsupported catalog asset type");
     const id = assetID(resource.id);
     ensure(typeof resource.name === "string", "missing catalog name");
+    ensure(typeof item.link === "string", "catalog link mismatch");
+    const link = new URL(item.link);
     ensure(
-      typeof item.link === "string" && new URL(item.link).origin === origin,
+      link.origin === origin &&
+        !link.username &&
+        !link.password &&
+        !link.search &&
+        !link.hash &&
+        link.pathname.endsWith("/" + id),
       "catalog link mismatch",
     );
     return { id, name: resource.name, link: item.link };

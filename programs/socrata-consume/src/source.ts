@@ -1,5 +1,16 @@
-export const origin = "https://data.austintexas.gov";
-export const catalogOrigin = "https://api.us.socrata.com";
+export const origin = "https://datahub.austintexas.gov";
+export const catalogOrigin = origin;
+export const operationFormat = "socrata-v2-datahub";
+export function validateIdentity(value: unknown) {
+  ensure(
+    value !== "socrata-v1",
+    "unsupported old source identity; reviewed migration required",
+  );
+  ensure(
+    value === operationFormat,
+    "unsupported operation identity/representation",
+  );
+}
 export function ensure(value: unknown, message: string): asserts value {
   if (!value) throw Error(message);
 }

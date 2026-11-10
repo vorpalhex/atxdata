@@ -2,6 +2,12 @@
 
 Bun/SQLite collector for explicitly selected, public tabular Austin Socrata datasets. eCheckbook (`8c6z-qnmj`) is a convenience preset, not an asset allowlist. Other compatible datasets are selected through retained Austin catalog membership and schema. This program does not authenticate, register identities, acquire tokens, mutate the publisher, enrich people, or enumerate all city holdings.
 
+## Source identity and old archives
+
+The canonical publisher and catalog authority is `https://datahub.austintexas.gov`; catalog queries filter that exact domain. Published catalog links must use that authority and name the matching asset. Source and catalog share one retained robots observation, without a separate api.us policy dependency. Asset IDs are preserved literally.
+
+Fresh operations use `socrata-v2-datahub`. Earlier `socrata-v1` archives used the old publisher/catalog identity and are unsupported by this initial candidate: status, verification and collection reject with `unsupported old source identity; reviewed migration required` before opening writers or making requests. No automatic migration or rewriting of original URLs, options, bodies or aliases is performed. Preserve the old archive for explicit operator review; do not clear cooldowns or create another archive to evade an unresolved request. This is a deliberate version boundary, not a claim that retained old observations came from the new authority.
+
 ## Run
 
 Requires Bun 1.3.14 or a compatible later Bun runtime. Install the exact dependencies from this program directory:

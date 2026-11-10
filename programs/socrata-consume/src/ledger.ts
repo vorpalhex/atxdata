@@ -7,6 +7,7 @@ import {
   origin,
   catalogOrigin,
   positive,
+  validateIdentity,
 } from "./source";
 import { catalogURL, schemaURL, countURL } from "./catalog";
 import { budget } from "./transport";
@@ -34,8 +35,9 @@ function selected(value: unknown) {
 function options(command: string, value: unknown) {
   const o = object(value),
     common = ["format", "representation", "timeoutMs", "budget"];
+  validateIdentity(o.format);
   ensure(
-    o.format === "socrata-v1" && o.representation === "fetch-decoded-body",
+    o.representation === "fetch-decoded-body",
     "operation version mismatch",
   );
   positive(o.timeoutMs, "operation timeout");
@@ -116,9 +118,8 @@ function pageURL(s: Record<string, unknown>, label: string, actual: string) {
   return filtered(expected.href, s.where);
 }
 function expectedURL(run: Row, o: Row, label: string, actual: string): string {
-  if (label === "robots:data.austintexas.gov") return origin + "/robots.txt";
-  if (label === "robots:api.us.socrata.com")
-    return catalogOrigin + "/robots.txt";
+  if (label === `robots:${new URL(origin).hostname}`)
+    return origin + "/robots.txt";
   if (run.command === "collect") return collectURL(o, label, actual);
   if (run.command === "discover") {
     ensure(label === "catalog-search", "operation discovery label mismatch");

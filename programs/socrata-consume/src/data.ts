@@ -280,6 +280,31 @@ function verifyDomain(root: string, hasSource: boolean) {
     db.close();
   }
 }
+function verifyPageInventory(
+  db: Database,
+  snapshot: Snapshot,
+  originals: { label: string }[],
+  status: string,
+) {
+  const pages = db
+    .query<Page, [string]>(
+      "SELECT * FROM pages WHERE snapshot=? ORDER BY offset",
+    )
+    .all(snapshot.id);
+  const offset = pages.reduce((n, p) => n + p.count, 0);
+  const unindexed = originals.filter(
+    (o) => o.label !== "page:end" && !pages.some((p) => p.label === o.label),
+  );
+  // One next-page receipt may precede its atomic derived-page commit after interruption.
+  ensure(
+    unindexed.length === 0 ||
+      (snapshot.status === "partial" &&
+        status !== "succeeded" &&
+        unindexed.length === 1 &&
+        unindexed[0]!.label === `page:${offset}`),
+    "page inventory missing retained collection",
+  );
+}
 function verifyInventory(
   db: Database,
   transport: Database,
@@ -305,24 +330,7 @@ function verifyInventory(
       run.status !== "succeeded" || snapshot.status === "complete",
       "snapshot inventory completion mismatch",
     );
-    const pages = db
-      .query<Page, [string]>(
-        "SELECT * FROM pages WHERE snapshot=? ORDER BY offset",
-      )
-      .all(run.id);
-    const offset = pages.reduce((n, p) => n + p.count, 0);
-    const unindexed = originals.filter(
-      (o) => o.label !== "page:end" && !pages.some((p) => p.label === o.label),
-    );
-    // One next-page receipt may precede its atomic derived-page commit after interruption.
-    ensure(
-      unindexed.length === 0 ||
-        (snapshot.status === "partial" &&
-          run.status !== "succeeded" &&
-          unindexed.length === 1 &&
-          unindexed[0]!.label === `page:${offset}`),
-      "page inventory missing retained collection",
-    );
+    verifyPageInventory(db, snapshot, originals, run.status);
   }
 }
 function rootInventory(root: string) {

@@ -9,12 +9,12 @@ import {
 
 test("catalog bounds return source-linked Austin datasets and explicit non-exhaustiveness", () => {
   const url = new URL(catalogURL({ asset: "8c6z-qnmj", limit: 2, offset: 0 }));
-  expect(url.searchParams.get("domains")).toBe("data.austintexas.gov");
+  expect(url.searchParams.get("domains")).toBe("datahub.austintexas.gov");
   expect(url.searchParams.get("ids")).toBe("8c6z-qnmj");
   const item = {
     resource: { id: "8c6z-qnmj", name: "Payments", type: "dataset" },
-    metadata: { domain: "data.austintexas.gov" },
-    link: "https://data.austintexas.gov/d/8c6z-qnmj",
+    metadata: { domain: "datahub.austintexas.gov" },
+    link: "https://datahub.austintexas.gov/d/8c6z-qnmj",
   };
   expect(
     decodeCatalog(JSON.stringify({ results: [item], resultSetSize: 1 }), 2)

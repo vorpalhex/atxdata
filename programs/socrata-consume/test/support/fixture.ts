@@ -26,12 +26,12 @@ export function fixture(
         return new Response(
           "User-agent: *\nDisallow: /browse\nCrawl-delay: 3\n",
         );
-      if (url.origin === catalogOrigin)
+      if (url.origin === catalogOrigin && path === "/api/catalog/v1")
         return Response.json({
           results: [
             {
               resource: { id: asset, name: "Payments", type: "dataset" },
-              metadata: { domain: "data.austintexas.gov" },
+              metadata: { domain: new URL(origin).hostname },
               link: origin + "/d/" + asset,
             },
           ],
