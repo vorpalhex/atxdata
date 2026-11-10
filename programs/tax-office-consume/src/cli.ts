@@ -1,5 +1,5 @@
 import {Collector} from './collector';
-import {information,writeOutput,failure,parseOptions,tokenLabel} from './frontend';
+import {information,writeOutput,nativeFailure as failure,parseOptions,tokenLabel} from './frontend';
 import {commandHelp,EXAMPLES} from './cli-help';
 import {collect} from './live';
 import {discover,collectExport} from './export-live';

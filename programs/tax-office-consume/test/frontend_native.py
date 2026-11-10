@@ -222,6 +222,78 @@ class Frontend(unittest.TestCase):
         args=["import-export","--output",root,"--selection","/voterdata/fixture.csv","--file",file]
         self.interrupt_when_checkpoint_started(args,root,"SELECT id FROM snapshots WHERE status='collecting'")
 
+    def blocking_output(self, command, drain=False):
+        import threading, time
+        rfd,wfd=os.pipe()
+        self.assertTrue(os.get_blocking(wfd))  # Ordinary inherited pipe; never O_NONBLOCK.
+        chunks=[]
+        def reader():
+            time.sleep(.15)
+            with os.fdopen(rfd,"rb") as stream:
+                while True:
+                    data=stream.read(8192)
+                    if not data: break
+                    chunks.append(data);time.sleep(.001)
+        thread=threading.Thread(target=reader) if drain else None
+        if thread:thread.start()
+        started=time.monotonic();killed=False
+        with os.fdopen(wfd,"wb") as stream:
+            p=subprocess.Popen(command,cwd=self.cwd,env=self.env,stdin=subprocess.DEVNULL,stdout=stream,stderr=subprocess.PIPE)
+            try:p.wait(timeout=12)
+            except subprocess.TimeoutExpired:
+                killed=True;p.kill();p.wait(timeout=2)
+        elapsed=time.monotonic()-started
+        assert p.stderr is not None
+        err=p.stderr.read();p.stderr.close()
+        if thread:
+            thread.join(2);self.assertFalse(thread.is_alive())
+        else:
+            with os.fdopen(rfd,"rb") as stream:chunks.append(stream.read())
+        out=b"".join(chunks)
+        self.receipts.append(dict(argv=command,mode="blocking-drain" if drain else "blocking-undrained",status=p.returncode,
+                                 seconds=elapsed,watchdogKilled=killed,stdoutBytes=len(out),stdoutSha256=hashlib.sha256(out).hexdigest(),stderr=err.decode()))
+        self.assertFalse(killed,"external watchdog killed writer; native deadline failed")
+        self.assertLess(elapsed,11.5)
+        return p.returncode,out,err
+
+    def test_blocking_pipe_deadline_and_exact_utf8(self):
+        html=self.root/"blocking.html";root=self.root/"blocking-catalog"
+        label="Unicode 雪🙂é "*30
+        href="/wp-content/largefiles/f%d.zip" if PROGRAM=="tcad-consume" else "/voterdata/f%d.csv"
+        html.write_text("".join('<a href="'+(href%i)+'">'+label+str(i)+'</a>' for i in range(1000)))
+        imported=self.cli("catalog-import","--output",root,"--html",html)
+        self.assertEqual((imported["status"],imported["stderr"]),(0,""))
+        args=["catalog" if PROGRAM=="tcad-consume" else "list","--output",str(root)]
+        expected=self.cli(*args)["stdout"].encode()
+        self.assertGreater(len(expected),65536)
+        before=self.state()
+        status,out,err=self.blocking_output([BUN,str(CLI),*args])
+        self.assertEqual(status,1);self.assertIn(b"ETIMEDOUT",err);self.assertNotIn(b"Bun v",err)
+        self.assertEqual(before,self.state())  # Completed catalogs/checkpoints survive output timeout.
+        status,out,err=self.blocking_output([BUN,str(CLI),*args],drain=True)
+        self.assertEqual((status,err),(0,b""));self.assertEqual(out,expected)
+        module=CLI.with_name("frontend.ts")
+        text="雪🙂é"*300000
+        code='import {writeOutput,nativeFailure as failure} from '+json.dumps(str(module))+'; await writeOutput("雪🙂é".repeat(300000)).catch(failure);'
+        command=[BUN,"-e",code]
+        status,out,err=self.blocking_output(command)
+        self.assertEqual(status,1);self.assertIn(b"ETIMEDOUT",err);self.assertNotIn(b" | ",err)
+        status,out,err=self.blocking_output(command,drain=True)
+        self.assertEqual((status,err),(0,b""));self.assertEqual(out,text.encode())
+
+    def test_readonly_stderr_controls(self):
+        import errno
+        f=self.root/"readonly-stderr";f.write_bytes(b"unchanged")
+        for command,both,expected in [(["list"],False,0),(["unknown"],False,1),(["list"],True,1)]:
+            with f.open("rb") as fd:
+                with self.assertRaises(OSError) as fault:os.write(fd.fileno(),b"calibration")
+                self.assertEqual(fault.exception.errno,errno.EBADF)
+                p=subprocess.run([BUN,str(CLI),*command],cwd=self.cwd,env=self.env,stdin=subprocess.DEVNULL,
+                                 stdout=fd if both else subprocess.PIPE,stderr=fd,timeout=12)
+            self.assertEqual(p.returncode,expected);self.assertEqual(f.read_bytes(),b"unchanged")
+            self.receipts.append(dict(argv=[BUN,str(CLI),*command],status=p.returncode,mode="both-readonly" if both else "stderr-readonly",stdout=(p.stdout or b"").decode()))
+            if expected==0:json.loads(p.stdout)
+
     def test_checked_output(self):
         r=self.cli("list",mode="readonly")
         self.assertEqual(r["status"],1,r)

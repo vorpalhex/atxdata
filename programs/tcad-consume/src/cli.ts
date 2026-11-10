@@ -1,6 +1,6 @@
 import {Store} from './store';import {SELECTION,ARCHIVE_HASH,selected} from './source';import {withZip,inventory,serialized,integrity,digest,LIMITS} from './archive';
 import {generalCommand,runGeneral,REQUIRED,OPTIONAL} from './general-cli';
-import {information,writeOutput,failure,parseOptions,tokenLabel} from './frontend';
+import {information,writeOutput,nativeFailure as failure,parseOptions,tokenLabel} from './frontend';
 import {commandHelp,EXAMPLES} from './cli-help';
 const OPTIONS:Record<string,string[]>={list:[],import:['--archive','--layout','--selection','--rows','--output'],inventory:['--archive','--selection'],integrity:['--archive','--selection','--max-expanded','--max-seconds'],status:['--output'],verify:['--output']};
 function options(command:string,args:string[]){

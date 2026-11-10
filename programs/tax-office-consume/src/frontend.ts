@@ -1,4 +1,4 @@
-import {writeSync} from 'node:fs';
+import {write} from 'node:fs';
 import metadata from '../package.json';
 
 type Command = {usage:string; description:string; options:string[]; flags?:string[]; notes?:string};
@@ -55,20 +55,39 @@ export function parseOptions(args:string[],allowed:string[],required:string[],fl
  return values;
 }
 
-// Bounded writes preserve partial-write/backpressure handling; no console buffering.
+// Asynchronous descriptor writes keep the event loop free even for a blocking pipe.
+// One monotonic deadline covers all partial writes/retries, not each chunk.
 export async function writeOutput(text:string){
- const data=Buffer.from(text),deadline=Date.now()+10000;let offset=0;
- while(offset<data.length){
-  try{
-   const written=writeSync(1,data,offset,Math.min(16384,data.length-offset));
-   if(written===0)throw new Error('stdout made no write progress');offset+=written;
-  }catch(e){
-   if((e as NodeJS.ErrnoException).code==='EAGAIN'&&Date.now()<deadline){await new Promise(r=>setTimeout(r,1));continue;}
-   const code=(e as NodeJS.ErrnoException).code;
-   const error=new Error(`stdout delivery failed${code?' ('+code+')':''}; completed archive work is retained`);
-   Object.assign(error,{code,outputFailure:true});throw error;
+ const deadline=performance.now()+10000,data=Buffer.from(text);let offset=0;
+ let timer:ReturnType<typeof setTimeout>|undefined;
+ const timeout=()=>Object.assign(new Error('stdout deadline'),{code:'ETIMEDOUT',outputPending:true});
+ const expired=new Promise<never>((_,reject)=>{timer=setTimeout(()=>reject(timeout()),Math.max(0,deadline-performance.now()));});
+ try{
+  while(offset<data.length){
+   if(performance.now()>=deadline)throw timeout();
+   try{
+    const written=await Promise.race([new Promise<number>((resolve,reject)=>{
+     write(1,data,offset,Math.min(16384,data.length-offset),(error,written)=>error?reject(error):resolve(written));
+    }),expired]);
+    if(performance.now()>=deadline)throw timeout();
+    if(written===0)throw new Error('stdout made no write progress');
+    offset+=written;
+   }catch(error){
+    if((error as NodeJS.ErrnoException).code!=='EAGAIN')throw error;
+    await Promise.race([new Promise(r=>setTimeout(r,1)),expired]);
+   }
   }
- }
+ }catch(cause){
+  const code=(cause as NodeJS.ErrnoException).code;
+  throw Object.assign(new Error(`stdout delivery failed${code?' ('+code+')':''}; completed archive work is retained`),
+   {code,outputFailure:true,outputPending:(cause as {outputPending?:boolean}).outputPending===true});
+ }finally{clearTimeout(timer);}
+}
+// A timed-out OS write cannot be canceled portably. Domain work is already closed;
+// terminate the native process rather than waiting forever for its writer thread.
+export function nativeFailure(error:unknown){
+ failure(error);
+ if((error as {outputPending?:boolean})?.outputPending===true)process.exit(1);
 }
 export function failure(error:unknown){
  if((error as NodeJS.ErrnoException)?.code==='EPIPE'&&(error as {outputFailure?:boolean}).outputFailure===true)return;
