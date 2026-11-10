@@ -27,3 +27,17 @@ test('checked writer handles partial bytes, backpressure, safe errors and domain
  }
  await expect(writeOutput('x',()=>0)).rejects.toThrow(OutputFailure);
 });
+
+test('writer attempts preserve transient classification and reject every invalid progress shape', async () => {
+ for (const code of ['EAGAIN','EWOULDBLOCK','EINTR']) {
+  let attempts=0;const chunks:Buffer[]=[];
+  await writeOutput('é',bytes=>{if(attempts++===0)throw Object.assign(new Error('private'),{code});chunks.push(Buffer.from(bytes));return bytes.length;});
+  expect(attempts).toBe(2);expect(Buffer.concat(chunks).toString()).toBe('é\n');
+ }
+ for (const count of [0,-1,0.5,NaN,Infinity,3]) {
+  let attempts=0;await expect(writeOutput('x',()=>{attempts++;return count;})).rejects.toBeInstanceOf(OutputFailure);expect(attempts).toBe(1);
+ }
+ const failure=new OutputFailure(false,true);
+ await expect(writeOutput('x',()=>{throw failure;})).rejects.toBe(failure);
+ await expect(writeOutput('x',()=>{throw null;})).rejects.toBeInstanceOf(OutputFailure);
+});

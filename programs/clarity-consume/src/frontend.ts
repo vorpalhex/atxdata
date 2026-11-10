@@ -2,10 +2,14 @@ import { parseArgs } from 'node:util';
 import { version } from '../package.json';
 export const commands=['list','discover','collect','sync','status','verify'];
 export const cliOptions={archive:{type:'string' as const},election:{type:'string' as const},date:{type:'string' as const},refresh:{type:'boolean' as const,default:false}};
-export function information(args:string[]):string|undefined {
+function informationInput(args:string[]) {
  const {values,tokens}=parseArgs({args,strict:false,allowPositionals:true,tokens:true,options:{...cliOptions,help:{type:'boolean',short:'h'},version:{type:'boolean'}}});
  const boundary=tokens.find(t=>t.kind==='option-terminator')?.index??Infinity;
  const words=tokens.flatMap(t=>t.kind==='positional' && t.index<boundary?[t.value]:[]);
+ return {values,words};
+}
+export function information(args:string[]):string|undefined {
+ const {values,words}=informationInput(args);
  if(values.version===true)return `clarity-consume ${version}`;
  if(values.help!==true && words[0]!=='help')return;
  const command=words[0]==='help'?words[1]:words[0];
