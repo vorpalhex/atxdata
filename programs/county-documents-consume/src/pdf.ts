@@ -1,4 +1,6 @@
-import {readFile,unlink} from "node:fs/promises";
+import {DEFAULT_PDF_BYTES,positiveBudget} from "./budgets";
+import {readFile,mkdtemp,rm} from "node:fs/promises";
+import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {statFile} from "../../civicclerk-consume/src/archive";
 import {sha} from "./engine";
@@ -36,8 +38,9 @@ export function bodyEvidence(text:string) {
  const chapter=matched(text,/Chapter\s+\d+\s+was\s+amended\s+([A-Za-z]+\s+\d{1,2},?\s+\d{4})/i);
  return {...legacyBodyEvidence(text),amendmentThroughOriginal:amendment,amendmentThrough:namedDate(amendment),chapterAmendmentOriginal:chapter,chapterAmendmentDate:namedDate(chapter)};
 }
-export function requirePdf(bytes:Uint8Array,mime:string):void {
- const checks=[mime.split(";")[0]?.trim().toLowerCase()==="application/pdf",bytes.length<=5*1024*1024,Buffer.from(bytes).subarray(0,5).equals(Buffer.from("%PDF-"))];
+export function requirePdf(bytes:Uint8Array,mime:string,maxBytes=DEFAULT_PDF_BYTES):void {
+ positiveBudget(maxBytes,"PDF byte");
+ const checks=[mime.split(";")[0]?.trim().toLowerCase()==="application/pdf",bytes.length<=maxBytes,Buffer.from(bytes.buffer,bytes.byteOffset,Math.min(5,bytes.length)).equals(Buffer.from("%PDF-"))];
  if(!checks.every(Boolean)) throw new Error("invalid PDF MIME/magic/size");
 }
 export async function inspectPdf(path:string) {
@@ -74,7 +77,7 @@ function minutesIdentity(text:string,row:Evidence):boolean {
 }
 function scopedIdentity(text:string,row:Evidence):boolean {
  switch(row.source) {
-  case 'county-code': return /^\s*(?:Travis County\s+)?Chapter\s+(\d+)[.\s]/i.exec(text)?.[1]===row.chapter;
+  case 'county-code': return row.role==='title-30'?/^\s*(?:Travis County\s+)?Title\s+30\b/i.test(text):/^\s*(?:Travis County\s+)?Chapter\s+(\d+)[.\s]/i.exec(text)?.[1]===row.chapter;
   case 'meeting-archives': return minutesIdentity(text,row);
   case 'budgets': return /(?:\bFISCAL YEAR|\bFY)\s*(\d{4})\b/i.exec(text.slice(0,512))?.[1]===row.year;
   case 'election-documents': return Boolean(row.year && text.includes(row.year));
@@ -83,20 +86,44 @@ function scopedIdentity(text:string,row:Evidence):boolean {
 export function requireTextIdentity(text:string,row:Evidence):void {
  if(!/Travis/i.test(text) || !scopedIdentity(text,row) || !publicationIdentity(text,row)) throw new Error("PDF body identity unresolved; private rendered inspection required");
 }
-/** Only a small one-page identity review; not an OCR or corpus-render service. */
-export async function renderIdentity(path:string,root:string):Promise<Buffer> {
- const prefix=join(root,crypto.randomUUID()+"-review"),output=prefix+".png";
- if(await statFile(output)) throw new Error("render output already exists");
- const result=await Bun.$`pdftoppm -f 1 -l 1 -singlefile -scale-to 1400 -png ${path} ${prefix}`.quiet().nothrow();
- if(result.exitCode!==0) throw new Error("render failed");
+/** Render one explicitly selected physical page; not OCR or corpus interpretation. */
+export async function renderIdentity(path:string,root:string,page=1):Promise<Buffer> {
+ positiveBudget(page,'render page');
+ const directory=await mkdtemp(join(tmpdir(),"county-documents-review-")),prefix=join(directory,"page"),output=prefix+".png";
  try {
+  const result=await Bun.$`pdftoppm -f ${page} -l ${page} -singlefile -scale-to 1400 -png ${path} ${prefix}`.quiet().nothrow();
+  if(result.exitCode!==0) throw new Error("render failed");
   await statFile(output);
   const image=await readFile(output);
   if(image.length>5*1024*1024) throw new Error("render size limit");
   return image;
- } finally {await unlink(output);}
+ } finally {await rm(directory,{recursive:true,force:true});}
 }
 export type RenderedReview={documentSha256:string;imageSha256:string;county:string;date:string;role:string;state:string;originalAttestationDate:string|null;attestationDate:string|null;note:string};
+export type PageReview={schema:1;documentSha256:string;selectionSha256:string;county:string;pages:{page:number;imageSha256:string;note:string}[];originalAttestationDate:string|null;attestationDate:string|null;note:string};
+export function reviewSelectionHash(row:Evidence):string {
+ const {source,url,chapter,year,date,originalDate,role,state,fiscalYear,taxYear,session}=row;
+ return sha(JSON.stringify({source,url,chapter,year,date,originalDate,role,state,fiscalYear,taxYear,session}));
+}
+function nonempty(value:unknown):boolean {return typeof value==='string' && value.trim().length>0;}
+export function requirePageReview(review:PageReview,row:Evidence,bytes:Uint8Array,images:Uint8Array[],pages:number):void {
+ const checks=[review.schema===1,review.documentSha256===sha(bytes),review.selectionSha256===reviewSelectionHash(row),review.county==='Travis',nonempty(review.note),Array.isArray(review.pages),review.pages?.length>0,review.pages?.length===images.length];
+ if(!checks.every(Boolean)) throw Error('rendered pages selection/document mismatch');
+ const selected=new Set<number>();
+ for(const [index,entry] of review.pages.entries()) {
+  requireReviewedPage(entry,images[index]!,pages,selected);
+  selected.add(entry.page);
+ }
+ requireAttestation(review);
+}
+function requireReviewedPage(entry:PageReview['pages'][number],image:Uint8Array,pages:number,selected:Set<number>):void {
+ const checks=[Number.isSafeInteger(entry.page),entry.page>=1,entry.page<=pages,!selected.has(entry.page),entry.imageSha256===sha(image),nonempty(entry.note)];
+ if(!checks.every(Boolean)) throw Error('rendered page/image mismatch');
+}
+function requireAttestation(review:PageReview):void {
+ if(review.attestationDate!==null && exactDate(...review.attestationDate.split('-') as [string,string,string])!==review.attestationDate) throw Error('invalid reviewed attestation date');
+ if(review.originalAttestationDate!==null && !nonempty(review.originalAttestationDate)) throw Error('invalid original attestation date');
+}
 export function requireReview(review:RenderedReview,row:Evidence,bytes:Uint8Array,image:Uint8Array):void {
  const checks=[review.documentSha256===sha(bytes),review.imageSha256===sha(image),review.county==="Travis",review.date===row.date,review.role===row.role,review.state===row.state,typeof review.note==="string" && review.note.trim().length>0,row.source==="election-documents"];
  if(!checks.every(Boolean)) throw new Error("rendered review identity mismatch");

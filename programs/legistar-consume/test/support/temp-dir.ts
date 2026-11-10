@@ -1,9 +1,10 @@
 import { mkdirSync, mkdtempSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 
-/** Isolated test state stays inside this program's ignored scratch directory. */
+/** Isolated state follows TMPDIR; never create generated data in the checkout. */
 export function makeTestDirectory(prefix: string): string {
-  const root = resolve(import.meta.dir, "../.scratch");
+  const root = tmpdir();
   mkdirSync(root, { recursive: true });
   return mkdtempSync(join(root, prefix));
 }

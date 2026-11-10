@@ -1,8 +1,22 @@
 {
   "name": "clarity-consume",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
-  "scripts": { "test": "bun test", "typecheck": "tsc --noEmit", "clarity": "bun src/cli.ts" },
-  "dependencies": { "fast-xml-parser": "5.3.6" },
-  "devDependencies": { "@types/bun": "1.3.13", "typescript": "6.0.3" }
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "tsc --noEmit",
+    "clarity": "bun src/cli.ts",
+    "format": "bun ./node_modules/prettier/bin/prettier.cjs --write src/cli.ts src/frontend.ts src/output.ts test/cli.test.ts test/frontend.test.ts test/frontend-contract.test.ts test/output.test.ts test/selection-native.test.ts test/commander.test.ts package.json README.md",
+    "format:check": "bun ./node_modules/prettier/bin/prettier.cjs --check src/cli.ts src/frontend.ts src/output.ts test/cli.test.ts test/frontend.test.ts test/frontend-contract.test.ts test/output.test.ts test/selection-native.test.ts test/commander.test.ts package.json README.md"
+  },
+  "dependencies": {
+    "commander": "14.0.3",
+    "fast-xml-parser": "5.3.6"
+  },
+  "devDependencies": {
+    "@types/bun": "1.3.13",
+    "prettier": "3.9.10",
+    "typescript": "6.0.3"
+  }
 }

@@ -80,41 +80,51 @@ test("dead child retains partial provenance and a conservative durable byte char
     >("SELECT id,run,bytes,finished FROM attempts")
     .get()!;
   expect(interrupted.finished).toBeNull();
-  db.close();
-  let now = 0,
-    calls = 0;
-  const a = await Archive.open(root, {
-    now: () => now,
-    sleep: async (ms) => {
-      now += ms;
-    },
-    fetch: async () => {
-      calls++;
-      return new Response("resumed");
-    },
-  });
-  try {
-    expect(a.store.budget(interrupted.run).bytes).toBe(limits.responseBytes);
-    a.store.resume(interrupted.run, "fixture", "collect");
-    await a.request(
-      interrupted.run,
-      "partial",
-      "https://example.invalid",
-      "text",
+  const tables = db
+    .query<{ name: string }, []>(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
+    )
+    .all();
+  const snapshot = () =>
+    JSON.stringify(
+      tables.map(({ name }) => [
+        name,
+        db.query(`SELECT * FROM ${name} ORDER BY rowid`).all(),
+      ]),
     );
-    expect(a.store.budget(interrupted.run)).toEqual({
-      requests: 2,
-      bytes: limits.responseBytes + 7,
-    });
-    expect(calls).toBe(1);
-    expect((await stat(join(root, parts[0]!))).size).toBe(4_000_000);
+  const before = snapshot();
+  db.close();
+  let calls = 0;
+  await expect(
+    Archive.open(root, {
+      fetch: async () => {
+        calls++;
+        return new Response("forbidden");
+      },
+    }),
+  ).rejects.toThrow("unfinished transport timing: operator review required");
+  const after = new Database(join(root, "state.sqlite"), { readonly: true });
+  try {
     expect(
-      a.store.db
-        .query("SELECT finished FROM attempts WHERE id=?")
-        .get(interrupted.id),
-    ).toEqual({ finished: null });
+      JSON.stringify(
+        tables.map(({ name }) => [
+          name,
+          after.query(`SELECT * FROM ${name} ORDER BY rowid`).all(),
+        ]),
+      ),
+    ).toBe(before);
+    const retained = after
+      .query<{ bytes: number; finished: null }, [string]>(
+        "SELECT bytes,finished FROM attempts WHERE id=?",
+      )
+      .get(interrupted.id)!;
+    expect(retained.bytes).toBe(limits.responseBytes);
+    expect(retained.finished).toBeNull();
+    expect(calls).toBe(0);
+    expect((await stat(join(root, parts[0]!))).size).toBe(4_000_000);
   } finally {
-    await a.close();
+    after.close();
   }
-  // Keep this private interrupted archive and its abandoned original partial.
+  // No completion timing exists: retain the partial/reservation for review,
+  // rather than inventing a completion timestamp to authorize a retry.
 }, 15000);

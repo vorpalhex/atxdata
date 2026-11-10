@@ -1,3 +1,4 @@
+import { readCatalog, verifySelection } from "./selection";
 import { Archive } from "./archive";
 import { ensure, object, array, integer, same } from "./check";
 import {
@@ -146,50 +147,7 @@ export class Adapter {
     );
   }
   private async discover(run: string, source: Source) {
-    const config = configs[source];
-    await this.archive.request(
-      run,
-      "site-item",
-      itemUrl(config.site),
-      "json",
-      (v) => validateItem(v, config.site),
-    );
-    const data = await this.archive.request(
-      run,
-      "site-data",
-      itemUrl(config.site, true),
-      "json",
-    );
-    const q = catalogQuery(source, data);
-    const search = await this.archive.request(
-      run,
-      "catalog",
-      queryUrl(sharing + "/search", {
-        q,
-        num: "100",
-        start: "1",
-        sortField: "title",
-        sortOrder: "asc",
-      }),
-      "json",
-      validateCatalog,
-    );
-    const results = validateCatalog(search);
-    return {
-      source,
-      catalogItems: results.length,
-      query: q,
-      items: results.map((v) => {
-        const item = object(v);
-        return {
-          id: item.id,
-          title: item.title,
-          type: item.type,
-          url: item.url ?? null,
-        };
-      }),
-      scope: "one catalog page; metadata only, no adjacent feature acquisition",
-    };
+    return readCatalog(this.archive, run, source, 1000);
   }
   private async features(run: string, itemValue: unknown) {
     const c = configs.tnr,
@@ -366,7 +324,9 @@ export class Adapter {
     const result = await this.archive.verify();
     const completed = this.archive.store.completed();
     for (const run of completed) {
-      const summary = await this.verifyCollection(run.id, source(run.source));
+      const summary = this.archive.store.options(run.id)
+        ? await verifySelection(this.archive, run.id)
+        : await this.verifyCollection(run.id, source(run.source));
       ensure(
         same(summary, JSON.parse(run.summary)),
         "stored summary differs from original content",

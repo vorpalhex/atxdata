@@ -1,11 +1,16 @@
-import { parseArgs } from "node:util";
+import { runAcquisitionCli } from "./acquisition-cli";
+import {
+  information,
+  guidance,
+  help,
+  commandOf,
+  sourceCommands,
+} from "./frontend";
+import { writeOutput, OutputFailure, outputStatus } from "./output";
+import { parseCommand, importOptions } from "./frontend";
 import { importCsv } from "./importer";
 import { verifyArchive } from "./verify";
-import { positiveInteger } from "./model";
-function integer(value: string): number {
-  if (!/^[1-9]\d*$/.test(value)) throw new Error("invalid_integer");
-  return positiveInteger(Number(value));
-}
+import { decimalInteger as integer } from "./model";
 type Values = Partial<
   Record<"file" | "output" | "fiscal-year" | "max-bytes" | "max-rows", string>
 >;
@@ -46,27 +51,13 @@ function importCommand(
   };
 }
 function execute(args: string[]): { result: object; exit: number } {
-  const { positionals, values, tokens } = parseArgs({
-    args,
-    tokens: true,
-    allowPositionals: true,
-    strict: true,
-    options: {
-      file: { type: "string" },
-      output: { type: "string" },
-      "fiscal-year": { type: "string" },
-      "max-bytes": { type: "string" },
-      "max-rows": { type: "string" },
-    },
-  });
-  const names = tokens
-    .filter((token) => token.kind === "option")
-    .map((token) => token.name);
-  if (new Set(names).size !== names.length) throw new Error("duplicate_option");
-  if (positionals.length !== 1 || !values.output) throw new Error("usage");
-  if (positionals[0] === "import") return importCommand(values, values.output);
+  const parsed = parseCommand(args, importOptions);
+  const values = parsed.values as Values;
+  const command = parsed.command;
+  if (!values.output) throw new Error("usage");
+  if (command === "import") return importCommand(values, values.output);
   if (
-    !["verify", "status"].includes(positionals[0]) ||
+    !["verify", "status"].includes(command) ||
     Object.keys(values).some((key) => key !== "output")
   )
     throw new Error("usage");
@@ -75,20 +66,53 @@ function execute(args: string[]): { result: object; exit: number } {
 export function runCli(
   args: string[],
   write: (text: string) => void = console.log,
+  diagnose: (text: string) => void = console.error,
 ): number {
-  if (args.length === 1 && args[0] === "--help") {
-    write(
-      "Offline fiscal-year CSV importer. Browser download is separate.\nimport --file CSV --fiscal-year YEAR --output PRIVATE_ARCHIVE [--max-bytes N] [--max-rows N]\nverify --output PRIVATE_ARCHIVE\nstatus --output PRIVATE_ARCHIVE\nImport exits: 0 clean/reused clean; 2 imported_with_rejections (also reused); 1 failure. Verify/status: 0 locally verified, 1 failure. No financial census completeness claim. seed/collect are unsupported.",
-    );
-    return 0;
-  }
+  let text: string, exit: number;
   try {
-    const { result, exit } = execute(args);
-    write(JSON.stringify(result));
-    return exit;
+    const info = information(args);
+    if (info !== undefined) {
+      text = info;
+      exit = 0;
+    } else {
+      const outcome = execute(args);
+      text = JSON.stringify(outcome.result);
+      exit = outcome.exit;
+    }
   } catch {
-    write(JSON.stringify({ error: "operation_failed" }));
-    return 1;
+    if (!args.length) diagnose(help());
+    guidance(diagnose);
+    text = JSON.stringify({ error: "operation_failed" });
+    exit = 1;
+  }
+  write(text);
+  return exit;
+}
+if (import.meta.main) {
+  const args = process.argv.slice(2);
+  let command: string | undefined;
+  try {
+    command = commandOf(args);
+  } catch {
+    /* normal parser renders safe failure */
+  }
+  let rendered = "";
+  const capture = (text: string) => {
+    rendered = text;
+  };
+  const exit = sourceCommands.includes(command ?? "")
+    ? await runAcquisitionCli(args, capture)
+    : runCli(args, capture);
+  try {
+    await writeOutput(rendered);
+    process.exitCode = exit;
+  } catch (error) {
+    if (error instanceof OutputFailure) {
+      process.exitCode = outputStatus(error, exit);
+      if (error.timedOut) process.exit(1);
+    } else {
+      console.error("financial-transparency-consume: output delivery failed.");
+      process.exitCode = 1;
+    }
   }
 }
-if (import.meta.main) process.exitCode = runCli(process.argv.slice(2));

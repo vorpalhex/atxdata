@@ -73,7 +73,7 @@ function groups(data: unknown): string[] {
     return id;
   });
 }
-export function catalogQuery(source: Source, data: unknown) {
+export function catalogQuery(source: Source, data: unknown, allTypes = false) {
   const ids = groups(data);
   ensure(new Set(ids).size === ids.length, "duplicate catalog groups");
   if (source === "voter") {
@@ -84,7 +84,7 @@ export function catalogQuery(source: Source, data: unknown) {
     );
     return `group:${ids[0]}`;
   }
-  return `(${ids.map((id) => `group:${id}`).join(" OR ")}) AND type:"Feature Service"`;
+  return `(${ids.map((id) => `group:${id}`).join(" OR ")})${allTypes ? "" : ' AND type:"Feature Service"'}`;
 }
 export function validateCatalog(value: unknown) {
   const data = object(value),

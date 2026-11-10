@@ -40,17 +40,17 @@ export async function inventory(zip:yauzl.ZipFile):Promise<Member[]>{
   zip.on('entry',entry);zip.once('end',end);zip.once('error',fail);zip.readEntry();
  });
 }
-async function selectedStream(zip:yauzl.ZipFile,m:Member){
+export async function selectedStream(zip:yauzl.ZipFile,m:Member){
  if(!m.entry)throw new Error('member handle required');return new Promise<import('node:stream').Readable>((yes,no)=>zip.openReadStream(m.entry!,(e,s)=>e?no(e):yes(s)));
 }
-function consumeChunks(stream:import('node:stream').Readable,onChunk:(b:Buffer)=>boolean,timeout:number){
+export function consumeChunks(stream:import('node:stream').Readable,onChunk:(b:Buffer)=>boolean,timeout:number){
  // fd-slicer's stored-member stream marks itself destroyed at EOF before
  // Bun's async iterator drains its buffer. Data/end events own this stream.
  return new Promise<void>((yes,no)=>{
   let done=false;const timer=setTimeout(()=>finish(new Error('member time ceiling')),Math.max(1,timeout));
-  const finish=(error?:Error)=>{if(done)return;done=true;clearTimeout(timer);stream.removeListener('data',data);stream.removeListener('end',end);stream.removeListener('error',fail);stream.removeListener('close',close);stream.destroy();if(error)no(error);else yes();};
+  const finish=(error?:Error)=>{if(done)return;done=true;clearTimeout(timer);stream.removeListener('data',data);stream.removeListener('end',end);stream.removeListener('error',fail);stream.removeListener('close',close);stream.once('error',()=>{});stream.destroy();if(error)no(error);else yes();};
   const fail=(e:Error)=>finish(e),end=()=>finish(),close=()=>finish(new Error('member stream interrupted'));
-  const data=(value:Buffer)=>{try{if(!onChunk(Buffer.from(value)))finish();}catch(e){finish(e instanceof Error?e:new Error(String(e)));}};
+  const data=(value:Buffer)=>{try{if(!onChunk(Buffer.from(value))){stream.pause();queueMicrotask(()=>finish());}}catch(e){finish(e instanceof Error?e:new Error(String(e)));}};
   stream.once('error',fail);stream.once('end',end);stream.once('close',close);stream.on('data',data);
  });
 }

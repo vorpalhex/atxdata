@@ -13,7 +13,7 @@ test('rejects money disagreement, bad IDs, row bounds and changed schema',()=>{
 });
 test('numeric signs, bounds, ordinals and noninvented years are observable',()=>{
  expect(cents('12.34')).toBe(1234n);expect(cents('-12.34')).toBe(-1234n);expect(cents('12')).toBe(1200n);
- for(const bound of [-1,0,0.5,NaN,CAPS.rows+1])expect(()=>parseCsv(csv(),bound)).toThrow('row');
+ for(const bound of [-1,0,0.5,NaN,Infinity,Number.MAX_SAFE_INTEGER+1])expect(()=>parseCsv(csv(),bound)).toThrow('row');
  expect(parseCsv(csv(),CAPS.rows)).toHaveLength(1);
  expect(parseCsv(csv({14:'1999'}),1)[0]).toMatchObject({ordinal:1,firstDelinquentYear:'1999'});expect(parseCsv(csv({14:''}),1)[0]!.firstDelinquentYear).toBeNull();
  expect(()=>parseCsv(csv({14:'oops'}),1)).toThrow('first year');expect(()=>parseCsv(csv({1:'nope'}),1)).toThrow('roll year');expect(()=>parseCsv(csv({13:'one'}),1)).toThrow('sequence');

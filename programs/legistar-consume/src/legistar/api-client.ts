@@ -1,4 +1,6 @@
 import type { AppConfig } from "../config";
+import { calendarRange, listingState, positiveLimit, type EventListingOptions, type EventContinuation } from "./listing";
+export type { EventListingOptions, EventContinuation } from "./listing";
 import type { DocumentManifestEntry, NormalizedItem, NormalizedMeeting } from "../types";
 import type { HttpClient } from "../util/http";
 
@@ -34,6 +36,8 @@ export type ApiEventItem = {
   EventItemMinutesSequence?: number | null;
   EventItemAgendaNumber?: string | null;
   EventItemTitle?: string | null;
+  EventItemAgendaNote?: string | null;
+  EventItemMinutesNote?: string | null;
   EventItemMatterId?: number | null;
   EventItemMatterGuid?: string | null;
   EventItemMatterFile?: string | null;
@@ -49,14 +53,52 @@ export class LegistarApiClient {
     private readonly http: HttpClient,
   ) {}
 
-  async listEvents(from: string, to: string, bodyName?: string): Promise<NormalizedMeeting[]> {
-    const filter = `EventDate ge datetime'${from}' and EventDate lt datetime'${addOneDay(to)}'`;
-    const url = this.apiUrl(`/Events?$filter=${encodeURIComponent(filter)}&$orderby=EventDate asc`);
-    const events = await this.http.getJson<ApiEvent[]>(url);
-    const normalizedBodyName = bodyName?.trim().toLowerCase();
-    return events
-      .map((event) => this.normalizeEvent(event))
-      .filter((event) => !normalizedBodyName || event.bodyName.toLowerCase() === normalizedBodyName);
+  async listEvents(from: string, to: string, bodyName?: string, options: Pick<EventListingOptions,"maxPages" | "pageSize"> = {}): Promise<NormalizedMeeting[]> {
+    const result = await this.listEventsPage(from, to, bodyName, {maxPages:options.maxPages,pageSize:options.pageSize});
+    if (!result.complete) throw new Error("incomplete event range; raise maxPages or use listEventsPage continuation");
+    return result.meetings.sort((a,b)=>a.meetingDate === "unknown-date" || b.meetingDate === "unknown-date" ? 0 : a.meetingDate.localeCompare(b.meetingDate));
+  }
+
+  validateListing(from: string, to: string, bodyName?: string, options: EventListingOptions = {}): void {
+    this.listingRequest(from,to,bodyName,options);
+  }
+  private listingRequest(from: string, to: string, bodyName: string | undefined, options: EventListingOptions) {
+    const end = calendarRange(from,to);
+    const pageSize = positiveLimit(options.pageSize, 100);
+    const maxPages = positiveLimit(options.maxPages, 100);
+    const body = bodyName?.trim().toLowerCase() ?? "";
+    const url = new URL(this.apiUrl("/Events"));
+    url.searchParams.set("$filter", `EventDate ge datetime'${from}' and EventDate lt datetime'${end}'`);
+    url.searchParams.set("$orderby", "EventId asc");
+    url.searchParams.set("$top", String(pageSize));
+    const query = JSON.stringify([url.href,body]);
+    const state = listingState(query,pageSize,options.continuation);
+    return {url,state,body,maxPages,pageSize};
+  }
+  async listEventsPage(from: string, to: string, bodyName?: string, options: EventListingOptions = {}): Promise<{ meetings: NormalizedMeeting[]; complete: boolean; continuation?: EventContinuation }> {
+    const {url,state,body,maxPages,pageSize}=this.listingRequest(from,to,bodyName,options);
+    const query=JSON.stringify([url.href,body]);
+    const meetings: NormalizedMeeting[] = [];
+    for (let page=0; page<maxPages; page++) {
+      url.searchParams.set("$skip",String(state.offset));
+      const events = await this.http.getJson<ApiEvent[]>(url.href);
+      if (!Array.isArray(events) || events.length>pageSize) throw new Error("invalid event collection page");
+      if (!events.length) return {meetings,complete:true};
+      for (const meeting of this.normalizePage(events,state.ids,from,to,body)) meetings.push(meeting);
+      state.offset+=events.length;
+    }
+    return {meetings,complete:false,continuation:{version:1,query,pageSize,offset:state.offset,ids:[...state.ids]}};
+  }
+
+  private normalizePage(events: ApiEvent[], ids: Set<number>, from: string, to: string, body: string): NormalizedMeeting[] {
+    const meetings: NormalizedMeeting[] = [];
+    for (const event of events) {
+      validateListedEvent(event,ids,from,to);
+      ids.add(event.EventId);
+      const meeting = this.normalizeEvent(event);
+      if (!body || meeting.bodyName.toLowerCase() === body) meetings.push(meeting);
+    }
+    return meetings;
   }
 
   async getEvent(eventId: number): Promise<NormalizedMeeting> {
@@ -133,6 +175,11 @@ export class LegistarApiClient {
   }
 }
 
+function validateListedEvent(event: ApiEvent, ids: Set<number>, from: string, to: string): void {
+  if (!Number.isSafeInteger(event.EventId) || event.EventId <= 0 || ids.has(event.EventId)) throw new Error("duplicate or invalid event ID; collection paging did not advance");
+  if (event.EventDate && (event.EventDate.slice(0,10) < from || event.EventDate.slice(0,10) > to)) throw new Error("event outside requested range");
+}
+
 function eventIdentity(event: ApiEvent) {
   return {
     eventId: event.EventId,
@@ -175,6 +222,8 @@ function itemAgenda(item: ApiEventItem) {
     minutesSequence: item.EventItemMinutesSequence ?? null,
     agendaNumber: item.EventItemAgendaNumber ?? null,
     title: item.EventItemTitle ?? null,
+    ...(item.EventItemAgendaNote !== undefined ? { agendaNote: item.EventItemAgendaNote } : {}),
+    ...(item.EventItemMinutesNote !== undefined ? { minutesNote: item.EventItemMinutesNote } : {}),
   };
 }
 
@@ -187,10 +236,4 @@ function itemMatter(item: ApiEventItem) {
     matterType: item.EventItemMatterType ?? null,
     matterStatus: item.EventItemMatterStatus ?? null,
   };
-}
-
-function addOneDay(date: string): string {
-  const parsed = new Date(`${date}T00:00:00Z`);
-  parsed.setUTCDate(parsed.getUTCDate() + 1);
-  return parsed.toISOString().slice(0, 10);
 }

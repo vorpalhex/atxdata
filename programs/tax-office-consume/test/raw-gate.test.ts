@@ -1,0 +1,6 @@
+import {test,expect} from 'bun:test';import {Collector} from '../src/collector';import {discover,collectExport} from '../src/export-live';import {exportLimits} from '../src/exports';import {temp} from './collector.test';import {join} from 'node:path';import {readFile,rm} from 'node:fs/promises';
+test('a HTTP200 HTML access wrapper is retained as failed receipt, never a successful raw CSV export',async()=>{
+ const base=await temp();let now=100000;const page='<a href="/voterdata/new.csv">New CSV export</a>',gate='<html><title>Access denied</title>login challenge</html>';
+ const c=await Collector.open(join(base,'archive'),{now:()=>now,sleep:async n=>{now+=n;},fetch:async url=>url.endsWith('robots.txt')?new Response('',{status:404}):url.endsWith('property.php')?new Response(page):new Response(gate,{headers:{'Content-Type':'text/html'}})});
+ try{const limits=exportLimits({maxBytes:1024,maxTotalBytes:8*1024**2});await discover(c,limits);await expect(collectExport(c,'/voterdata/new.csv',{limits})).rejects.toThrow('HTML');expect(c.status().complete).toBe(0);const receipt=c.db.query<{path:string;status:string},[]>('SELECT path,status FROM attempts ORDER BY rowid DESC LIMIT 1').get()!;expect(receipt.status).toBe('failed');expect(await readFile(join(c.root,receipt.path),'utf8')).toBe(gate);}finally{await c.close();await rm(base,{recursive:true,force:true});}
+});

@@ -89,6 +89,11 @@ export class AppDatabase {
       )
     `);
 
+    const columns = this.db.query<{ name: string }, []>("PRAGMA table_info(meeting_items)").all();
+    for (const name of ["agenda_note", "minutes_note"]) {
+      if (!columns.some(column => column.name === name)) this.db.run(`ALTER TABLE meeting_items ADD COLUMN ${name} TEXT`);
+    }
+
     this.db.run(`
       CREATE TABLE IF NOT EXISTS documents (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -200,8 +205,8 @@ export class AppDatabase {
         `
         INSERT INTO meeting_items (
           event_item_id, event_item_guid, event_id, agenda_sequence, minutes_sequence, agenda_number,
-          title, matter_id, matter_guid, matter_file, matter_name, matter_type, matter_status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          title, matter_id, matter_guid, matter_file, matter_name, matter_type, matter_status, agenda_note, minutes_note
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(event_item_id) DO UPDATE SET
           event_item_guid = excluded.event_item_guid,
           event_id = excluded.event_id,
@@ -214,7 +219,9 @@ export class AppDatabase {
           matter_file = excluded.matter_file,
           matter_name = excluded.matter_name,
           matter_type = excluded.matter_type,
-          matter_status = excluded.matter_status
+          matter_status = excluded.matter_status,
+          agenda_note = CASE WHEN ? THEN excluded.agenda_note ELSE meeting_items.agenda_note END,
+          minutes_note = CASE WHEN ? THEN excluded.minutes_note ELSE meeting_items.minutes_note END
       `,
       )
       .run(
@@ -231,6 +238,10 @@ export class AppDatabase {
         item.matterName,
         item.matterType,
         item.matterStatus,
+        item.agendaNote ?? null,
+        item.minutesNote ?? null,
+        item.agendaNote !== undefined ? 1 : 0,
+        item.minutesNote !== undefined ? 1 : 0,
       );
   }
 

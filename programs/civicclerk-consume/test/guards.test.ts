@@ -8,8 +8,9 @@ test("invalid page counts stop before next discovery; consistent counts remain a
     await expect(new CivicClerkClient(http).listEvents("2021-01-05", "2021-01-05")).rejects.toThrow("count"); expect(calls).toBe(1);
   }
   let calls = 0;
-  const http = new PoliteHttpClient({ minIntervalMs: 0 }, { fetch: async () => Response.json(++calls === 1 ? { value: [], "@odata.count": 0, "@odata.nextLink": "?$skip=1" } : { value: [], "@odata.count": 0 }) });
-  expect(await new CivicClerkClient(http).listEvents("2021-01-05", "2021-01-05")).toEqual([]); expect(calls).toBe(2);
+  const event={id:1,eventName:"Fixture",eventDate:"2021-01-05T00:00:00.000Z",publishedFiles:[]};
+  const http = new PoliteHttpClient({ minIntervalMs: 0 }, { fetch: async () => Response.json(++calls === 1 ? { value: [event], "@odata.count": 1, "@odata.nextLink": "?$skip=1" } : { value: [], "@odata.count": 1 }) });
+  expect(await new CivicClerkClient(http).listEvents("2021-01-05", "2021-01-05")).toEqual([event]); expect(calls).toBe(2);
 });
 test("permanent HTTP statuses never retry even when a retry budget was explicitly enabled", async () => {
   for (const status of [400, 401, 403, 404]) {

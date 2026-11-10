@@ -12,6 +12,7 @@ import { PoliteHttpClient } from "../../civicclerk-consume/src/http";
 import { Store, type Observation } from "./store";
 import { ensure, object } from "./check";
 import { cooldown } from "./cooldown";
+import { validateRunOptions } from "./policy";
 export const limits = {
   requests: 25,
   responseBytes: 5_000_000,
@@ -24,12 +25,13 @@ export const limits = {
   expandedBytes: 2_000_000,
   zipMembers: 6,
 };
-export type Kind = "json" | "text" | "zip" | "redirect";
+export type Kind = "json" | "text" | "zip" | "redirect" | "file";
 export type Dependencies = {
   fetch: (url: string, init: RequestInit) => Promise<Response>;
   now: () => number;
   sleep: (ms: number) => Promise<void>;
   random: () => number;
+  clockDomain?: string;
 };
 async function digest(path: string) {
   const hash = createHash("sha256");
@@ -103,16 +105,22 @@ export class Archive {
   private busy = false;
   private spacingMs = limits.spacingMs;
   setSpacing(ms: number) {
-    ensure(Number.isFinite(ms) && ms >= 2000, "invalid spacing");
+    this.store.preflight();
+    ensure(Number.isSafeInteger(ms) && ms >= 2000, "invalid spacing");
     this.spacingMs = Math.max(this.spacingMs, ms);
-    this.store.defer(this.deps.now() + this.spacingMs);
+    this.store.recordSpacing(this.spacingMs);
   }
   private constructor(
     readonly root: string,
     private release: () => Promise<void>,
     private deps: Dependencies,
   ) {
-    this.store = new Store(join(root, "state.sqlite"));
+    this.store = new Store(join(root, "state.sqlite"), {
+      now: deps.now,
+      domain: deps.clockDomain ?? "unix-epoch-ms",
+      spacingMs: limits.spacingMs,
+    });
+    this.spacingMs = this.store.minimumSpacing();
   }
   static async open(root: string, dependencies: Partial<Dependencies> = {}) {
     const repo = resolve(import.meta.dir, "../../..");
@@ -133,6 +141,9 @@ export class Archive {
         sleep: Bun.sleep,
         random: Math.random,
         ...dependencies,
+        clockDomain:
+          dependencies.clockDomain ??
+          (dependencies.now ? "injected-epoch-ms" : "unix-epoch-ms"),
       });
     } catch (error) {
       await release();
@@ -153,6 +164,7 @@ export class Archive {
     return join(this.root, path);
   }
   private async recovered(row: Observation) {
+    this.store.preflight();
     const path = this.path(row.path);
     for (const suffix of ["", ".pending", ".part"])
       await statFile(path + suffix);
@@ -170,6 +182,7 @@ export class Archive {
     return readFile(path);
   }
   async read(run: string, label: string) {
+    this.policy(run);
     const row = this.store.observation(run, label);
     ensure(row, "missing offline checkpoint");
     const raw = await this.recovered(row);
@@ -180,6 +193,11 @@ export class Archive {
         : raw;
   }
   async verify() {
+    this.store.preflight();
+    for (const row of this.store.db
+      .query<{ options: string }, []>("SELECT options FROM acquisition_options")
+      .all())
+      validateRunOptions(JSON.parse(row.options));
     const integrity = this.store.integrity();
     ensure(
       integrity.integrity === "ok" && integrity.foreignKeys.length === 0,
@@ -190,6 +208,38 @@ export class Archive {
     for (const row of rows) await this.recovered(row);
     this.store.verifyHistory();
     return { ...integrity, files: rows.length, httpRequests: 0 };
+  }
+  async readExpected(run: string, label: string, url: string, kind: Kind) {
+    const row = this.store.observation(run, label);
+    ensure(
+      row && row.url === url && row.kind === kind,
+      "checkpoint identity mismatch",
+    );
+    const id = row.path.replace(/\.body$/, "");
+    const attempt = this.store.db
+      .query<{ run: string; label: string; url: string }, [string]>(
+        "SELECT run,label,url FROM attempts WHERE id=?",
+      )
+      .get(id);
+    ensure(
+      attempt &&
+        attempt.run === run &&
+        attempt.label === label &&
+        attempt.url === url,
+      "checkpoint attempt identity mismatch",
+    );
+    ensure(
+      !this.store.db
+        .query(
+          "SELECT 1 FROM attempts WHERE run=? AND label=? AND url<>? LIMIT 1",
+        )
+        .get(run, label, url),
+      "checkpoint attempt identity mismatch",
+    );
+    return this.read(run, label);
+  }
+  private policy(run: string) {
+    return { ...limits, ...this.store.options(run)?.budget };
   }
   private async wait() {
     while (this.store.notBefore() > this.deps.now()) {
@@ -212,6 +262,7 @@ export class Archive {
     ensure(!this.busy, "one in-flight request required");
     this.busy = true;
     try {
+      const policy = this.policy(run);
       const old = this.store.observation(run, label);
       if (old) {
         ensure(
@@ -228,7 +279,7 @@ export class Archive {
         await this.wait();
         const used = this.store.budget(run);
         ensure(
-          used.requests < limits.requests && used.bytes < limits.totalBytes,
+          used.requests < policy.requests && used.bytes < policy.totalBytes,
           "run request/byte ceiling exceeded",
         );
         try {
@@ -237,17 +288,19 @@ export class Archive {
             label,
             url,
             kind,
-            limits.totalBytes - used.bytes,
+            policy.totalBytes - used.bytes,
             validate,
           );
         } catch (error) {
-          if (attempt >= limits.retries || !retryable(error)) throw error;
+          if (attempt >= policy.retries || !retryable(error)) throw error;
           this.store.defer(
-            this.deps.now() +
-              Math.max(
-                limits.spacingMs,
-                2 ** attempt * 1000 + this.deps.random() * 1000,
-              ),
+            Math.ceil(
+              this.deps.now() +
+                Math.max(
+                  limits.spacingMs,
+                  2 ** attempt * 1000 + this.deps.random() * 1000,
+                ),
+            ),
           );
         }
       }
@@ -285,7 +338,9 @@ export class Archive {
       );
     const cap = Math.min(
       remaining,
-      kind === "zip" ? limits.zipBytes : limits.responseBytes,
+      kind === "zip" || kind === "file"
+        ? this.policy(run).zipBytes
+        : this.policy(run).responseBytes,
     );
     const declared = response.headers.get("content-length");
     if (declared !== null)
@@ -342,6 +397,24 @@ export class Archive {
     this.store.ready(row);
     return value;
   }
+  private async recordHeaders(
+    id: string,
+    response: Response,
+    headers: Record<string, string>,
+  ) {
+    try {
+      this.store.headers(
+        id,
+        response.status,
+        headers,
+        cooldown(response.headers, this.deps.now()),
+      );
+    } catch (error) {
+      this.store.headers(id, response.status, headers, Number.MAX_SAFE_INTEGER);
+      await response.body?.cancel();
+      throw error;
+    }
+  }
   private async transfer(
     run: string,
     label: string,
@@ -352,7 +425,9 @@ export class Archive {
   ) {
     const allowance = Math.min(
       remaining,
-      kind === "zip" ? limits.zipBytes : limits.responseBytes,
+      kind === "zip" || kind === "file"
+        ? this.policy(run).zipBytes
+        : this.policy(run).responseBytes,
     );
     const id = this.store.attempt(run, label, url, allowance),
       path = join(this.root, id + ".body");
@@ -370,21 +445,11 @@ export class Archive {
       {
         ...this.deps,
         fetch: async (u, init) => {
+          this.store.dispatch(id, this.spacingMs);
           const response = await this.deps.fetch(u, init);
           status = response.status;
           headers = Object.fromEntries(response.headers);
-          try {
-            this.store.headers(
-              id,
-              status,
-              headers,
-              cooldown(response.headers, this.deps.now()),
-            );
-          } catch (error) {
-            this.store.headers(id, status, headers, Number.MAX_SAFE_INTEGER);
-            await response.body?.cancel();
-            throw error;
-          }
+          await this.recordHeaders(id, response, headers);
           return response;
         },
       },
@@ -406,7 +471,7 @@ export class Archive {
         ),
       );
     } catch (error) {
-      if (kind === "redirect" && status === 302) {
+      if ((kind === "redirect" || kind === "file") && status === 302) {
         ensure(
           typeof headers.location === "string",
           "missing redirect Location",

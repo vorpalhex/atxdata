@@ -24,6 +24,8 @@ export type NormalizedItem = {
   minutesSequence: number | null;
   agendaNumber: string | null;
   title: string | null;
+  agendaNote?: string | null;
+  minutesNote?: string | null;
   matterId: number | null;
   matterGuid: string | null;
   matterFile: string | null;

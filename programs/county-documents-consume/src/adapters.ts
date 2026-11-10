@@ -1,7 +1,8 @@
 import {load} from "cheerio";
+import {pageUrl} from "./discovery";
 
 export const sources={
-    "county-code":{pages:["https://www.traviscountytx.gov/commissioners-court/county-code"],disclaimer:"Current reference-only online code; not the Clerk's official paper record. Historical bodies and Title 30 excluded."},
+    "county-code":{pages:["https://www.traviscountytx.gov/commissioners-court/county-code"],disclaimer:"Reference-only online code, not the Clerk's official paper record. Historical/Title30 availability requires actual supported source links; blocked external links remain explicit."},
     budgets:{pages:["https://www.traviscountytx.gov/planning-budget/current-year","https://www.traviscountytx.gov/planning-budget","https://www.traviscountytx.gov/planning-budget/archives"],disclaimer:"Document acquisition only, not structured financial interpretation."},
     "meeting-archives":{pages:["https://countyclerk.traviscountytx.gov/departments/commissioners-court/cc-archives/"],disclaimer:"Historical static minutes only. No CivicClerk IDs or boundary completeness; originals private, no public cache/index."},
     "election-documents":{pages:["https://votetravis.gov/current-election-information/election-results-and-reconciliation-forms/"],disclaimer:"Publication acquisition only, not structured election results, certification or discrepancy analysis."},
@@ -19,9 +20,16 @@ export function sourceName(value:string):Source {
     if(!Object.hasOwn(sources,value)) throw new Error("unsupported source");
     return value as Source;
 }
+export function transportUrl(source:Source,raw:string,kind:string):string {
+ const url=new URL(raw),host=new URL(sources[source].pages[0]).hostname;
+ if(kind==='robots' && url.href===`https://${url.hostname}/robots.txt` && (url.hostname===host || source==='county-code' && url.hostname==='online.encodeplus.com')) return url.href;
+ if(url.pathname==='/robots.txt') throw Error('robots URL requires exact robots operation');
+ return officialUrl(source,raw,sources[source].pages[0]);
+}
 export function officialUrl(source:Source,raw:string,base:string):string {
     const url=new URL(raw,base),host=new URL(sources[source].pages[0]).hostname;
-    if(url.protocol!=="https:" || url.hostname!==host || url.username || url.password || url.port) throw new Error("not an official HTTPS link");
+    const encode=source==="county-code" && url.hostname==="online.encodeplus.com" && url.pathname.startsWith("/regs/traviscounty-tx/");
+    if(url.protocol!=="https:" || (url.hostname!==host && !encode) || url.username || url.password || url.port) throw new Error("not an official HTTPS link");
     return url.href;
 }
 function baseEvidence(source:Source,pageUrl:string,href:string,label:string,headings:string[]):Evidence {
@@ -116,16 +124,19 @@ function recordHeading(tag:string,text:string,headings:string[]):void {
     if(/^h[1-6]$/.test(tag)) headings.splice(Number(tag[1])-1);
     if(text.trim()) headings.push(text);
 }
-function parseCandidate(source:Source,pageUrl:string,candidate:Candidate):Evidence|null {
+function parseCandidate(source:Source,pageUrl:string,candidate:Candidate,schema:number):Evidence|null {
     let row:Evidence;
     try {row=baseEvidence(source,pageUrl,candidate.href,candidate.label,candidate.headings);}
     catch {return null;}
+    if(schema<3 && new URL(row.url).hostname!==new URL(sources[source].pages[0]).hostname) return null;
+    if(schema>=3 && source==="county-code" && /^Title\s+30\b/i.test(row.label)) return {...row,role:"title-30"};
     return adapters[source](row);
 }
-export function discover(source:Source,pageUrl:string,html:string):Evidence[] {
-    if(!(sources[source].pages as readonly string[]).includes(pageUrl)) throw new Error("unapproved discovery page");
+export function discover(source:Source,page:string,html:string,schema=3):Evidence[] {
+    if(schema<3 && !(sources[source].pages as readonly string[]).includes(page)) throw new Error("unapproved discovery page");
+    if(schema>=3) pageUrl(source,page,page);
     if(Buffer.byteLength(html)>3*1024*1024) throw new Error("metadata byte limit");
-    return pageCandidates(html).map(candidate=>parseCandidate(source,pageUrl,candidate)).filter((row):row is Evidence=>row!==null);
+    return pageCandidates(html).map(candidate=>parseCandidate(source,page,candidate,schema)).filter((row):row is Evidence=>row!==null);
 }
 export function select(rows:Evidence[],selection:Selection):Evidence[] {
     if(!Number.isSafeInteger(selection.limit) || selection.limit<1 || selection.limit>2000) throw new Error("invalid selection limit");

@@ -2,6 +2,8 @@
 
 Bun CLI job system for downloading public Austin Legistar meeting documents to local disk.
 
+Resume integrity: an explicitly supplied resume must be a non-null, non-array JSON object with complete=false and a valid source/query/page-size/offset/ID continuation. Invalid state is rejected before reserving output or creating HTTP transport. Outputs remain exclusive private synced direct writes, not atomic publication.
+
 The app currently uses the unauthenticated Legistar API client key `austintexas`, writes metadata to SQLite, writes documents to a human-readable folder layout, and emits JSON logs suitable for cron.
 
 ## Requirements
@@ -64,6 +66,32 @@ Run checks:
 ```bash
 just verify
 ```
+
+## Collection contract and bounded continuation
+
+The authoritative Events documentation describes “Gets all Events” and a bare JSON array, not a `value`/`@odata.nextLink` envelope.[1] EventItems documentation exposes `AgendaNote`, `MinutesNote` and `Attachments` selectors.[2] A bounded contract check observed two one-record Events responses: `$top=1` ordered by EventId, then the same query with `$skip=1`, returned distinct EventIds 1068 and 1069.[3][4] This proves those query controls for that tiny observation, not a default server cap or a previously demonstrated live truncation defect. No public PDF or broad event history was acquired for this repair.
+
+Event selection still accepts arbitrary date ranges, body names and event IDs. `listEvents(from,to,body?,{maxPages?,pageSize?})` preserves its array return, now fetching serial pages in stable EventId order and returning complete results or an explicit incomplete-range error. Defaults are 100 requests and requested page size 100; both are caller controls, not hard maximums. Returned arrays are date-sorted as before (missing legacy dates retain relative ordering). The shipped `list-meetings` and `backfill` commands accept `--max-pages N --page-size N`. Backfill does not start document acquisition after incomplete discovery.
+
+A short page does NOT imply completion: a server may cap `$top`. The collector advances `$skip` by the actual raw row count, filters bodies only after advancing, and requires a terminal empty array before declaring the range complete. Ignored offsets/repeated IDs, malformed/oversized pages, out-of-range dated events and invalid budgets reject rather than silently truncate. A successful response is still a mutable source observation: deletions/insertions between offset pages can shift the collection, and the API supplies no snapshot/completeness count here. Reconcile/restart the explicit range when source changes matter.
+
+For finite work across processes, use the new page API `listEventsPage(from,to,body?,{maxPages,pageSize,continuation})`, or the shipped CLI:
+
+```sh
+bun run src/cli.ts list-meetings-page --from "$FROM" --to "$TO" --max-pages "$PAGE_BUDGET" --page-size "$PAGE_SIZE" --checkpoint "$PRIVATE_OUTPUT/batch-1.json"
+bun run src/cli.ts list-meetings-page --from "$FROM" --to "$TO" --max-pages "$PAGE_BUDGET" --page-size "$PAGE_SIZE" --resume "$PRIVATE_OUTPUT/batch-1.json" --checkpoint "$PRIVATE_OUTPUT/batch-2.json"
+```
+
+Batch JSON contains `meetings`, `complete`, and only when incomplete a `continuation`; combine meetings from each batch. Checkpoints bind the exact tenant/range/body/page-size and cumulative unique ID history; URLs are reconstructed locally, not accepted from a checkpoint. New checkpoint paths are exclusively created private files, synced and never overwritten. Preserve failed batch outputs and retry from the last valid batch into a different file. Each batch holds only bounded meeting bodies, plus cumulative ID history for duplicate detection. Legacy complete-array callers retain the full selected range in memory. Local authored fixtures cover a server cap smaller than `$top`, explicit incomplete work and native CLI process continuation. These are not claims of live multi-page completeness.
+
+Requested agenda/minutes notes are retained, including empty strings and source markup, in optional normalized `agendaNote`/`minutesNote` fields and additive `meeting_items.agenda_note`/`minutes_note` columns. Existing databases migrate without deleting original rows or changing document/checkpoint identities. Note HTML is data, not rendered or executed. Vote and media ingestion are not implemented; documented fields/endpoints alone do not establish downloadable content.
+
+Sources:
+
+[1] https://webapi.legistar.com/Help/Api/GET-v1-Client-Events
+[2] https://webapi.legistar.com/Help/Api/GET-v1-Client-Events-EventId-EventItems_AgendaNote_MinutesNote_Attachments
+[3] https://webapi.legistar.com/v1/austintexas/events?$top=1&$orderby=EventId%20asc&$select=EventId,EventDate
+[4] https://webapi.legistar.com/v1/austintexas/events?$top=1&$skip=1&$orderby=EventId%20asc&$select=EventId,EventDate
 
 ## Cron
 
@@ -166,3 +194,94 @@ These contact Legistar and may download substantial data. They were not run duri
 - job locking to prevent overlapping cron runs
 - broader live-service verification beyond the two smoke meetings
 
+## CLI frontend compatibility (initial package version 0.1.0)
+
+The product CLI and the standalone diagnostic both use pinned Commander 14.0.3.
+Each invocation builds fresh command definitions; Commander output is captured
+before delivery through the checked stdout/stderr queues. The diagnostic's help
+layout is generated by Commander, while its report and transport budgets remain
+unchanged. `bun run format` and `bun run format:check` use pinned Prettier 3.9.10
+on explicit CLI/frontend/helper/test paths, not every collector file or lockfile.
+
+The five product commands remain `list-meetings`, `list-meetings-page`,
+`ingest-meeting`, `backfill`, and `retry-failed`. Top-level `-h`/`--help`,
+`--version` (`-V`), `help COMMAND`, and every local `-h`/`--help` bypass runtime
+configuration and network initialization. Plain invocation retains help on
+stderr/status 1. Examples: `bun run src/cli.ts help ingest-meeting` and
+`bun run src/cli.ts list-meetings --from=2021-01-05 --to=2021-01-05`.
+
+Commander retains command-local value options: put `--from`, `--date`, etc.
+after their subcommand. Global help/version work before or after commands.
+Required values support equals and split forms. Repeated value options retain
+last-value-wins; numeric values still use the existing positive-safe-integer
+parser (no newly tightened numeric spellings). `--` shields subsequent operands,
+which these commands reject rather than reinterpret as help. Bun consumes its
+own first delimiter: when forwarding an application delimiter, use e.g.
+`bun run src/cli.ts list-meetings -- -- --help`. Help-like required values do not
+trigger informational paths. Parser failures remain stderr text/status 1;
+domain/preflight failures remain the structured stderr `cli.failed` envelope.
+A token-aware boundary guard also reports protected root command/help selectors
+with `cli.failed`, rather than letting Commander execute those operands.
+
+Selection/date preflight now precedes runtime directories/database creation.
+Missing `ingest-meeting` target and invalid date-only input intentionally return
+`cli.failed` on stderr/status 1 without creating a run. This is the narrow
+malformed-usage exception to the former persisted failed `run.summary` on stdout;
+valid job failures retain their summaries, schemas and domain status. The
+unimplemented `retry-failed` rejects before initialization.
+
+Combined `--event-id` and `--date` remain accepted: ID takes precedence and the
+date is ignored (even when not a valid date), with a structured stderr
+`cli.selector-precedence` warning before initialization. No user-provided target
+or date is echoed by that warning. Date-only selectors and listing/backfill
+ranges require valid inclusive calendar dates. The library guards are retained.
+
+Default listing NDJSON, batch JSON, `run.summary`, and cron JSON log stdout
+streams are preserved; logs were not globally moved to stderr. All native stdout
+paths now observe writes, including logger records and summary/checkpoint
+delivery. Non-EPIPE output failures return safe `cli.failed`/status 1; a five-second
+per-record deadline bounds backpressure and queued logger output is bounded.
+Logging failure is reported after the job lifecycle, not thrown into its domain
+work: completed run/acquisition facts and synced checkpoints are not erased or
+relabeled for failed delivery. EPIPE is intentionally quiet and preserves the
+domain status. Commander stderr (including parser errors and no-argument help),
+selector warnings, and terminal `cli.failed` diagnostics use the same checked fd
+writer on stderr. Both sinks are observed and flushed on success and parser-error
+paths. A non-EPIPE stderr delivery failure returns status 1 without recursively
+reporting to the failed sink or emitting an uncaught stack; healthy parser/noarg
+bytes are unchanged.
+The shipped `test/unit/stderr.test.ts` exercises the absolute native entrypoint
+with OS-calibrated read-only descriptors and an observation-only, positively
+calibrated `uncaughtExceptionMonitor` backchannel. No cross-process job lock or
+new interruption recovery is claimed.
+
+The separately documented `bun run scripts/check-legistar-api.ts` (also
+`bun run check:api` / `just check-api`) retains plain-invocation prose, nine target
+checks and the existing verdict classification. `-h`/`--help` and `--version`
+perform zero checks; invalid arguments/operands fail on stderr/status 1 before
+transport. Requests are serial (one in flight), each deadline is 10 seconds
+including body consumption, and each decoded response is capped at 64 KiB before
+its 220-character preview. Redirects are now reported rather than followed: this
+intentional safety limitation bounds requests and prevents hidden target checks.
+Transport/body/size failures are safe diagnostic error records; no successful
+status is inferred from headers alone. Completed diagnostic reports intentionally
+retain status 0 even when the verdict is inconclusive or checks fail. Invocation,
+delivery failures and SIGINT/SIGTERM use 1, 130 and 143 respectively. Signals abort
+the active request, stop further checks and flush the partial report before a
+bounded exit; cleanup is best-effort, not an unbounded wait. This diagnostic is
+not proof of provider access or authorization; tests only use authored fixtures.
+
+For offline verification use existing private directories outside checkouts:
+`TMPDIR=/private/fixture/tmp DATA_PATH=/private/fixture/data bun test` and
+`bun run typecheck`, with locked dependencies and OS public networking denied
+except loopback fixtures. `HOME` and XDG directories may also be isolated there.
+Tests no longer create `.scratch` under the source checkout. Do not run live
+smoke recipes or public diagnostic checks as part of these frontend gates.
+
+Frontend quality tests also import the real token guard, Commander entrypoint,
+shared checked writer and diagnostic report path. These complement, not replace,
+native sink/monitor/signal fixtures: Bun parent-process LCOV does not measure
+subprocess CLI execution. Importing the product entrypoint does not execute it;
+CLI invocation still uses the same checked stdout/stderr queues. The diagnostic
+keeps request deadline/cleanup, bounded body preview and report classification
+as local operations, without changing its nine checks or request policy.

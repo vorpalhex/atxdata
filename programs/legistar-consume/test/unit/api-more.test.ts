@@ -5,7 +5,7 @@ import type { HttpClient } from "../../src/util/http";
 
 function client(data: unknown) {
   const urls: string[] = [];
-  const http: HttpClient = { getJson: async <T>(url: string) => { urls.push(url); return data as T; }, fetchWithRetry: async () => { throw new Error("unexpected download"); } };
+  const http: HttpClient = { getJson: async <T>(url: string) => { urls.push(url); return (Array.isArray(data) && new URL(url).pathname.endsWith("/Events") ? data.slice(Number(new URL(url).searchParams.get("$skip") ?? 0)) : data) as T; }, fetchWithRetry: async () => { throw new Error("unexpected download"); } };
   return { api: new LegistarApiClient({ apiBase: "http://local/v1/", legistarClient: "city" } as AppConfig, http), urls };
 }
 
@@ -73,6 +73,9 @@ test("event publication preserves explicit empty statuses and URLs", async () =>
 test("event listing uses inclusive leap-day end and case insensitive trimmed body matching", async () => {
   const { api, urls } = client([{ EventId: 1, EventBodyName: " Council " }, { EventId: 2 }]);
   expect((await api.listEvents("2024-02-28", "2024-02-29", " COUNCIL ")).map((event) => event.eventId)).toEqual([1]);
-  expect(decodeURIComponent(urls[0]!)).toBe("http://local/v1/city/Events?$filter=EventDate ge datetime'2024-02-28' and EventDate lt datetime'2024-03-01'&$orderby=EventDate asc");
+  const query = new URL(urls[0]!).searchParams;
+  expect(query.get("$filter")).toBe("EventDate ge datetime'2024-02-28' and EventDate lt datetime'2024-03-01'");
+  expect(query.get("$orderby")).toBe("EventId asc");
+  expect(query.get("$skip")).toBe("0");
   expect(await api.listEvents("2024-02-28", "2024-02-29", " ")).toHaveLength(2);
 });

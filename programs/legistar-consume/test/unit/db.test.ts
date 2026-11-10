@@ -38,7 +38,7 @@ test("schema migration and meeting/item upserts are repeatable and update persis
     { body_name: "Updated Council", agenda_url: null },
   ]);
   expect(db.db.query("SELECT * FROM meeting_items").all()).toEqual([{
-    event_item_id: 4, event_item_guid: "item-guid", event_id: 7, agenda_sequence: 0, minutes_sequence: 2,
+    agenda_note: null, minutes_note: null, event_item_id: 4, event_item_guid: "item-guid", event_id: 7, agenda_sequence: 0, minutes_sequence: 2,
     agenda_number: "1", title: "Amended budget", matter_id: 5, matter_guid: "matter-guid", matter_file: "26-100",
     matter_name: "Budget matter", matter_type: "Resolution", matter_status: null,
   }]);

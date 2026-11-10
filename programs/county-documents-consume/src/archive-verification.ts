@@ -1,7 +1,7 @@
 import type {Engine} from "./engine";
 import {sha} from "./engine";
 import {consumeEncoded} from "./encoding";
-import {officialUrl,sources,type Source} from "./adapters";
+import {transportUrl,sources,type Source} from "./adapters";
 import {verifyTransportLedger,type Representation} from "./transport-integrity";
 export async function verifyArtifacts(engine:Engine):Promise<void> {
  const rows=engine.db.query<{path:string;sha:string;bytes:number;status:string},[]>("SELECT * FROM artifact_checkpoints").all();
@@ -12,9 +12,9 @@ export async function verifyArtifacts(engine:Engine):Promise<void> {
  }
 }
 function representationAttempt(engine:Engine,row:Representation) {
- const attempt=engine.db.query<{url:string;kind:string;headers:string;error:string|null;source:Source},[string]>("SELECT a.*,r.source FROM attempts a JOIN runs r ON a.run=r.id WHERE a.id=?").get(row.attempt);
+ const attempt=engine.db.query<{url:string;kind:string;reservation:number;headers:string;error:string|null;source:Source},[string]>("SELECT a.*,r.source FROM attempts a JOIN runs r ON a.run=r.id WHERE a.id=?").get(row.attempt);
  if(!attempt) throw new Error("representation attempt missing");
- officialUrl(attempt.source,attempt.url,sources[attempt.source].pages[0]);
+ transportUrl(attempt.source,attempt.url,attempt.kind);
  return attempt;
 }
 async function verifyLegacy(engine:Engine,row:Representation):Promise<void> {
@@ -29,13 +29,13 @@ async function verifyWire(engine:Engine,row:Representation,headers:Headers,limit
  const decoded=await consumeEncoded(new Response(new Uint8Array(wire),{headers}),limit);
  if(decoded.encoding!==row.encoding || !decoded.body.equals(body)) throw new Error("decoded representation mismatch");
 }
-export async function verifyRepresentations(engine:Engine):Promise<void> {
- verifyTransportLedger(engine);
+export async function verifyRepresentations(engine:Engine,pendingClassifier?:string):Promise<void> {
+ verifyTransportLedger(engine,pendingClassifier);
  const rows=engine.db.query<Representation,[]>("SELECT * FROM representations").all();
  for(const row of rows) {
   const attempt=representationAttempt(engine,row),body=await engine.readArtifact(row.decoded_path);
   if(body.length!==row.decoded_bytes || sha(body)!==row.decoded_hash) throw new Error("decoded representation hash/size mismatch");
   if(row.representation==="legacy-decoded-only") await verifyLegacy(engine,row);
-  else await verifyWire(engine,row,new Headers(JSON.parse(attempt.headers)),attempt.kind==="pdf"?5*1024*1024:3*1024*1024,body);
+  else await verifyWire(engine,row,new Headers(JSON.parse(attempt.headers)),attempt.reservation,body);
  }
 }

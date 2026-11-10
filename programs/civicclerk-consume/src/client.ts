@@ -18,6 +18,7 @@ async function checksum(path: string): Promise<{ byteSize: number; sha256: strin
 }
 const rejectSymlink = statFile;
 export type DownloadOptions = { offline?: boolean; fileTypes?: number[]; maxDocuments?: number; maxBytes?: number; expectedDate?: string };
+export type DownloadResult = { downloaded: number; skipped: number; unsupportedFiles?: PublishedFile[] };
 type BudgetedOptions = DownloadOptions & { maxDocuments: number; maxBytes: number };
 function budget(value: number | undefined, fallback: number): number {
   const result = value === undefined ? fallback : value;
@@ -25,7 +26,8 @@ function budget(value: number | undefined, fallback: number): number {
   return result;
 }
 function downloadOptions(options: DownloadOptions): BudgetedOptions {
-  return { ...options, maxDocuments: budget(options.maxDocuments, 100), maxBytes: budget(options.maxBytes, 12 * 1024 * 1024) };
+  if (options.fileTypes && (!Array.isArray(options.fileTypes) || options.fileTypes.some(type => ![1,2,4,5].includes(type)))) throw new Error("unsupported file types: supported PDF classes are 1,2,4,5");
+  return { ...options, fileTypes: options.fileTypes?.slice(), maxDocuments: budget(options.maxDocuments, 100), maxBytes: budget(options.maxBytes, 12 * 1024 * 1024) };
 }
 async function verifiedFile(path: string, old?: StoredDocument): Promise<{ byteSize: number; sha256: string } | undefined> {
   if (old?.downloadStatus !== "downloaded") return undefined;
@@ -88,12 +90,12 @@ function pageCount(page: Record<string, unknown>, previous?: number): number | u
   if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0 || (previous !== undefined && value !== previous)) throw new Error("invalid event count");
   return value;
 }
-function appendEvents(events: CivicEvent[], page: Record<string, unknown>, from: string, to: string) {
+function appendEvents(events: CivicEvent[], page: Record<string, unknown>, from: string, to: string, ids: Set<number>) {
   if (!Array.isArray(page.value)) throw new Error("invalid event page");
   if (page.value.length > 25) throw new Error("event page ceiling exceeded");
   for (const event of page.value.map(normalizeEvent)) {
-    if (event.eventDate.slice(0, 10) < from || event.eventDate.slice(0, 10) > to || events.some(old => old.id === event.id)) throw new Error("duplicate or out-of-range event");
-    events.push(event);
+    if (event.eventDate.slice(0, 10) < from || event.eventDate.slice(0, 10) > to || ids.has(event.id)) throw new Error("duplicate or out-of-range event");
+    ids.add(event.id); events.push(event);
   }
 }
 function nextPage(page: Record<string, unknown>, target: URL): string | undefined {
@@ -106,6 +108,39 @@ function nextPage(page: Record<string, unknown>, target: URL): string | undefine
   return next.href;
 }
 
+type Traversal = { ids: Set<number>; visited: Set<string>; count?: number; next?: string };
+function listingUrl(base: URL, from: string, to: string): URL {
+  calendarDate(from); calendarDate(to);
+  if (from > to) throw new Error("reversed date range");
+  const end = new Date(`${to}T00:00:00Z`); end.setUTCDate(end.getUTCDate() + 1);
+  const url = new URL("Events", base);
+  url.searchParams.set("$filter", `eventDate ge ${from}T00:00:00Z and eventDate lt ${end.toISOString().replace(".000", "")} and isPublished eq 'Published'`);
+  url.searchParams.set("$top", "25"); url.searchParams.set("$count", "true");
+  return url;
+}
+function validateContinuation(state: ListingContinuation, url: URL): void {
+  if (state.version !== 1 || state.query !== url.href || !Array.isArray(state.visited) || !Array.isArray(state.ids) || typeof state.next !== "string") throw new Error("invalid listing continuation");
+}
+function restoredIds(ids: number[]): Set<number> {
+  const unique = new Set(ids.map(positiveId));
+  if (unique.size !== ids.length) throw new Error("duplicate continuation IDs");
+  return unique;
+}
+function checkOffset(target: URL, ids: Set<number>): void {
+  const offset=target.searchParams.get("$skip");
+  if (offset !== null && Number(offset) !== ids.size) throw new Error("pagination offset/history mismatch");
+}
+function checkTotal(state: Traversal): void {
+  if (state.count === undefined) return;
+  if (state.ids.size > state.count || (!state.next && state.ids.size !== state.count)) throw new Error("event count mismatch");
+}
+function listingResult(events: CivicEvent[], state: Traversal, url: URL): ListingPage {
+  if (!state.next) return {events, complete:true};
+  return {events, complete:false, continuation:{version:1,query:url.href,next:state.next,visited:[...state.visited],ids:[...state.ids],count:state.count}};
+}
+export type ListingContinuation = { version: 1; query: string; next: string; visited: string[]; ids: number[]; count?: number };
+export type ListingOptions = { maxPages?: number; continuation?: ListingContinuation };
+export type ListingPage = { events: CivicEvent[]; complete: boolean; continuation?: ListingContinuation };
 export const DEFAULT_API_BASE = "https://traviscotx.api.civicclerk.com/v1/";
 
 function object(value: unknown): Record<string, unknown> {
@@ -142,7 +177,7 @@ export class CivicClerkClient {
     this.base = new URL(base.endsWith("/") ? base : `${base}/`);
   }
 
-  async downloadEvent(id: number, output: string, options: DownloadOptions = {}): Promise<{ downloaded: number; skipped: number }> {
+  async downloadEvent(id: number, output: string, options: DownloadOptions = {}): Promise<DownloadResult> {
     positiveId(id);
     const bounded = downloadOptions(options);
     const release = await archiveLock(output);
@@ -164,7 +199,7 @@ export class CivicClerkClient {
     } finally { store.close(); }
   }
 
-  private async ingest(event: CivicEvent, folder: string, store: CivicDatabase, options: BudgetedOptions): Promise<{ downloaded: number; skipped: number }> {
+  private async ingest(event: CivicEvent, folder: string, store: CivicDatabase, options: BudgetedOptions): Promise<DownloadResult> {
     store.upsertMeeting(event);
     const run = store.startRun(event.id);
     let downloaded = 0, skipped = 0;
@@ -178,7 +213,8 @@ export class CivicClerkClient {
         if (result.skipped) skipped++; else downloaded++;
       }
       store.finishRun(run, "succeeded");
-      return { downloaded, skipped };
+      const unsupportedFiles = event.publishedFiles.filter(file => ![1,2,4,5].includes(file.fileType));
+      return { downloaded, skipped, ...(unsupportedFiles.length ? { unsupportedFiles } : {}) };
     } catch (error) {
       store.finishRun(run, "failed", String(error));
       throw error;
@@ -217,32 +253,57 @@ export class CivicClerkClient {
     if (target.origin !== this.base.origin || target.pathname !== new URL("Events", this.base).pathname || target.username || target.password || target.hash || visited.has(target.href)) throw new Error("unsafe or cyclic pagination");
   }
 
-  async listEvents(from: string, to: string): Promise<CivicEvent[]> {
-    calendarDate(from);
-    calendarDate(to);
-    if (from > to) throw new Error("reversed date range");
-    const end = new Date(`${to}T00:00:00Z`);
-    end.setUTCDate(end.getUTCDate() + 1);
-    const url = new URL("Events", this.base);
-    url.searchParams.set("$filter", `eventDate ge ${from}T00:00:00Z and eventDate lt ${end.toISOString().replace(".000", "")} and isPublished eq 'Published'`);
-    url.searchParams.set("$top", "25");
-    url.searchParams.set("$count", "true");
-    const events: CivicEvent[] = [];
-    let count: number | undefined;
-    let next: string | undefined = url.href;
-    const visited = new Set<string>();
-    while (next) {
-      const target: URL = new URL(next, this.base);
-      boundPage(target, url);
-      if (visited.size >= 20) throw new Error("pagination page ceiling exceeded");
-      this.validatePage(target, visited);
-      visited.add(target.href);
-      const page = object(await this.http.getJson(target.href));
-      count = pageCount(page, count);
-      appendEvents(events, page, from, to);
-      next = nextPage(page, target);
+  async listEvents(from: string, to: string, options: Pick<ListingOptions, "maxPages"> = {}): Promise<CivicEvent[]> {
+    const page = await this.listEventsPage(from, to, {maxPages:options.maxPages});
+    if (!page.complete) throw new Error("pagination page ceiling exceeded; raise maxPages or use listEventsPage continuation");
+    return page.events;
+  }
+
+  private restoreListing(url: URL, saved?: ListingContinuation): Traversal {
+    if (!saved) return {ids:new Set(),visited:new Set(),next:url.href};
+    validateContinuation(saved,url);
+    const state: Traversal = {ids:restoredIds(saved.ids),visited:new Set(),count:pageCount({"@odata.count":saved.count}),next:saved.next};
+    for (const value of saved.visited) {
+      const target = this.checkedTarget(value,url,state.visited);
+      state.visited.add(target.href);
     }
-    if (count !== undefined && events.length !== count) throw new Error("event count mismatch");
-    return events;
+    const target=this.checkedTarget(saved.next,url,state.visited);
+    continuation(target,new URL(saved.visited.at(-1) ?? url.href));
+    checkOffset(target,state.ids);
+    checkTotal(state);
+    return state;
+  }
+  private checkedTarget(value: string, url: URL, visited: Set<string>): URL {
+    continuationPath(value);
+    const target=new URL(value,this.base);
+    continuationKeys(target);
+    boundPage(target,url); this.validatePage(target,visited);
+    return target;
+  }
+  private checkedNext(page: Record<string,unknown>, target: URL, original: URL, visited: Set<string>): string | undefined {
+    const next=nextPage(page,target);
+    if (next) this.checkedTarget(next,original,visited);
+    return next;
+  }
+  validateListing(from: string, to: string, saved?: ListingContinuation): void {
+    this.restoreListing(listingUrl(this.base,from,to),saved);
+  }
+  async listEventsPage(from: string, to: string, options: ListingOptions = {}): Promise<ListingPage> {
+    const maxPages = budget(options.maxPages,20);
+    if (!maxPages) throw new Error("invalid page budget");
+    const url=listingUrl(this.base,from,to);
+    const state=this.restoreListing(url,options.continuation);
+    const events:CivicEvent[]=[];
+    for(let pages=0;state.next && pages<maxPages;pages++) {
+      const target=this.checkedTarget(state.next,url,state.visited);
+      checkOffset(target,state.ids);
+      state.visited.add(target.href);
+      const page=object(await this.http.getJson(target.href));
+      state.count=pageCount(page,state.count);
+      appendEvents(events,page,from,to,state.ids);
+      state.next=this.checkedNext(page,target,url,state.visited);
+      checkTotal(state);
+    }
+    return listingResult(events,state,url);
   }
 }

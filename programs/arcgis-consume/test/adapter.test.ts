@@ -1,8 +1,9 @@
 import { test, expect } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { Archive } from "../src/archive";
 import { Adapter } from "../src/adapter";
+import { main } from "../src/cli";
 import { configs } from "../src/sources";
 import { terms } from "../src/rules";
 import { layer, page } from "./geometry.test";
@@ -101,5 +102,31 @@ test("headless TNR collection reconciles rows and reruns/offline verification se
   expect(calls).toBe(before);
   expect(a.store.integrity().foreignKeys).toEqual([]);
   await a.close();
+  const legacy: any = await main(
+    [
+      "collect",
+      "--source",
+      "tnr",
+      "--archive",
+      root,
+      "--terms-sha256",
+      terms(item).sha256,
+    ],
+    {
+      fetch: async () => {
+        throw new Error("legacy reuse attempted network");
+      },
+    },
+  );
+  expect(legacy.run).toBe(result.run);
+  expect(legacy.reused).toBe(true);
+  if (process.env.ARCGIS_COMPAT_EVIDENCE) {
+    await mkdir(process.env.ARCGIS_COMPAT_EVIDENCE, { recursive: true });
+    await cp(
+      root,
+      join(process.env.ARCGIS_COMPAT_EVIDENCE, "legacy-tnr-synthetic"),
+      { recursive: true, errorOnExist: true, force: false },
+    );
+  }
   await rm(root, { recursive: true });
 });

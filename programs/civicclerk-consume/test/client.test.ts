@@ -137,7 +137,7 @@ test("rejects a second tenant before it can overwrite archived PDFs", async () =
 });
 
 test("resolves query-only next links against the current page", async () => {
-  const { api, urls } = client([{ value: [], "@odata.nextLink": "?$skip=1" }, { value: [] }]);
+  const { api, urls } = client([{ value: [{...event,eventDate:"2021-01-01T00:00:00Z"}], "@odata.nextLink": "?$skip=1" }, { value: [] }]);
   await api.listEvents("2021-01-01", "2021-01-01");
   expect(new URL(urls[1]!).searchParams.get("$skip")).toBe("1");
 });
@@ -148,8 +148,8 @@ test("rejects unsafe or cyclic pagination before fetching the next page", async 
     await expect(api.listEvents("2021-01-01", "2021-01-31")).rejects.toThrow("pagination");
     expect(urls).toHaveLength(1);
   }
-  const { api } = client([{ value: [], "@odata.nextLink": "Events?$skip=1" }, { value: [], "@odata.nextLink": "Events?$skip=1" }]);
-  await expect(api.listEvents("2021-01-01", "2021-01-31")).rejects.toThrow("pagination");
+  const { api, urls } = client([{ value: [event], "@odata.nextLink": "Events?$skip=1" }, { value: [], "@odata.nextLink": "Events?$skip=1" }]);
+  await expect(api.listEvents("2021-01-01", "2021-01-31")).rejects.toThrow("pagination");expect(urls).toHaveLength(2);
 });
 
 test("validates calendar ranges before making requests", async () => {

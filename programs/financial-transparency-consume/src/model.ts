@@ -22,3 +22,7 @@ export function positiveInteger(value: number): number {
     throw new Error("invalid_integer");
   return value;
 }
+export function decimalInteger(value: string): number {
+  if (!/^[1-9]\d*$/.test(value)) throw new Error("invalid_integer");
+  return positiveInteger(Number(value));
+}

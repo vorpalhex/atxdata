@@ -128,7 +128,7 @@ test("checkpoint-before-promotion interruption recovers offline without clobberi
       path,
       status: "pending",
       kind: "json",
-      retrieved: new Date().toISOString(),
+      retrieved: new Date(0).toISOString(), // fixture archive uses controlled epoch0
     });
     expect(
       await f.a.request(f.run, "checkpoint", "https://example.invalid", "json"),
