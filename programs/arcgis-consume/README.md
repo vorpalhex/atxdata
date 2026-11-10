@@ -1,6 +1,47 @@
 # arcgis-consume
 
-Read-only Bun/SQLite acquisition from the TNR and Voter Maps hub catalogs. `tnr` and `voter` are convenience presets, not the item allowlist. The shipped CLI accepts catalog-backed `--item`, explicit `--layer`, an optional matching `--service`, selected metadata fields, and configurable finite operation budgets.
+Read-only Bun/SQLite acquisition from the TNR, Voter Maps and Austin GeoHub catalogs, plus explicitly item-linked public layers discovered through the official Austin Water dashboard. Sources are `tnr`, `voter`, `austin` and `water`. County presets remain compatible; city collect/sync requires an explicit catalog-backed `--item` and advertised `--layer`. `--service` is only a matching assertion, not arbitrary URL permission. Fields and finite operating budgets are configurable; proof budgets are not production caps.
+
+## Austin and Water source scope
+
+`austin` derives its catalog groups from the published GeoHub site configuration. Compatible selected services are scoped to `maps.austintexas.gov/arcgis/rest/services/` or hosted city tenant `services.arcgis.com/0L95CJ0VTaxqcmED/arcgis/rest/services/`. Catalog/item agreement, advertised layer membership, native schema/CRS, complete before/after counts and IDs remain required. Catalog membership does not authorize personal records or every listed dataset. Select only approved public data and safe attributes.
+
+`water` retains the official water-leaks page's dashboard association, the dashboard's explicit map widgets, public Web Map definitions and their item-linked numeric layer endpoints, including grouped layers. Repeated aliases for the same item/layer are deduplicated; distinct publisher item identities remain distinct. Unlinked layers and dashboard chart expressions are not collected. Hosted service access is scoped to `services1.arcgis.com/PuB3FWUAxkScvfQy/`. No account, owner, service-address or private-infrastructure enrichment occurs. Original metadata remains private even when a safe attribute projection is selected.
+
+Water real acquisition remains pending. Reconnaissance observed a 7,775-record outage polygon layer but stopped at count-only under the approved proof budget; its map-linked item was inaccessible, and the differing serviceItemId was not substituted. An 11-record pending-repair point layer was inspected only as metadata/count: incident points with address-capable fields are not anonymous aggregate areas. No Water prefix is certified complete. PropertyProfile/FloodPro wrappers are catalogued but their underlying acquisition routes remain unresolved; this release does not claim wrapper traversal. City evidence is one complete ten-boundary observation, not all city GIS or historical coverage.
+
+For these two hosted city/Water authorities only, a completed HTTP403 at the exact `/robots.txt` route can be recorded as an explicitly approved RFC9309 unavailable-policy outcome. The original failed status, headers and provider timing remain unchanged; no successful robots body is synthesized. Error bodies are not retained by the shared provider, so `bodyRetained:false` is explicit; retained reconnaissance bodies are separate evidence. Actual-resource403,429,5xx, unknown transfers, malformed holds and manual stops do not gain permission. The separate maps-authority robots redirect to HTML remains unresolved. Operator-owned `rules.ts` and its two inherited Disallow failures are unchanged.
+
+Native source-run examples (Bun and the sibling modules described below are required):
+
+```sh
+cd programs/arcgis-consume
+bun src/cli.ts list
+: "${ARCHIVE:?Choose an absolute private archive outside every checkout}"
+bun src/cli.ts rules --source austin --archive "$ARCHIVE"
+: "${CATALOG_TERMS_SHA256:?Review catalogTerms.sha256 from rules}"
+bun src/cli.ts discover --source austin --archive "$ARCHIVE" \
+  --terms-sha256 "$CATALOG_TERMS_SHA256" --max-pages 1000
+: "${ITEM_ID:?Choose an approved item returned by discover}"
+bun src/cli.ts rules --source austin --item "$ITEM_ID" --archive "$ARCHIVE"
+: "${LAYER_ID:?Choose an actual advertised layer ID}"
+: "${FIELDS:?Choose safe actual attributes including the native OID}"
+: "${ITEM_TERMS_SHA256:?Review the selected item terms.sha256}"
+bun src/cli.ts collect --source austin --item "$ITEM_ID" --layer "$LAYER_ID" \
+  --fields "$FIELDS" --archive "$ARCHIVE" --terms-sha256 "$ITEM_TERMS_SHA256" \
+  --max-records 1000000 --page-size 1000 --max-requests 1000 --max-bytes 268435456
+# Repeat collect for verified offline reuse; use sync explicitly for freshness.
+bun src/cli.ts verify --archive "$ARCHIVE"
+
+# Water metadata discovery only; this is not approval to collect the large layer.
+bun src/cli.ts rules --source water --archive "$ARCHIVE"
+# Review the Water dashboard catalogTerms separately, then:
+: "${WATER_CATALOG_TERMS_SHA256:?Review Water catalogTerms.sha256}"
+bun src/cli.ts discover --source water --archive "$ARCHIVE" \
+  --terms-sha256 "$WATER_CATALOG_TERMS_SHA256" --max-pages 1000
+```
+
+Use one designated serial archive/request owner per source authority. Independent roots do not coordinate cooldowns. The examples expose the shipped interface; no fresh public requests were made during quality repair. Native fixture tests exercise the selection/reuse path, and retained city/county bytes are replayed into NEW ledgers under public-network denial, not represented as recovered old timing history or a fully-live CLI run. Optional `ARCGIS_CITY_INPUTS` enables the retained-city regression alongside `ARCGIS_ORIGINAL_INPUTS` for county originals.
 
 ## CLI frontend contract
 
@@ -27,7 +68,7 @@ Plain invocation intentionally retains status 1/stderr, now with useful full usa
 - Ordered pagination is used only when the layer advertises pagination and ordering. Page size is capped by `maxRecordCount`. Otherwise the complete authoritative ID set is queried in bounded batches, independent of response order. Truncated/missing/duplicate batches fail. A service that cannot supply complete count/ID evidence is unsupported rather than silently sampled.
 - Published item downloads use the selected item's actual advertised name, size, identity and timestamps. Direct bodies and manually validated `www.arcgis.com/itemdata/.../<advertised-name>` redirects are supported. Signed access URLs remain private provenance, never permanent source identities.
 - Shapefile interpretation supports one flat, matching-basename polygon SHP/SHX/DBF/PRJ group, optional encoding/metadata files and additional safe members. It validates all member CRCs, bounded declared/actual expansion, dynamic DBF fields/record lengths/counts, sequential SHP/SHX identities and polygon geometry. Records are identified by their native record ordinals, not an assumed unique Precinct column. Original DBF/PRJ/CPG and other components remain inside the unchanged ZIP; native PRJ text is retained, not transformed. Complete nonpolygon, Z/M or multiple-shapefile groups can be retained raw with `semanticStatus: unsupported`, `records: null`: only the ZIP container/CRC, component presence and basic SHP/SHX headers are checked, not their geometry, DBF records or CRS semantics. Invalid containers, unsafe members, CRC failures, missing components and invalid/mismatched headers still fail; corrupt supported polygon semantics are not downgraded to unsupported. Unsupported encodings and incompatible interpreted schemas fail explicitly. This is not a general shapefile/WKT topology parser.
-- Other advertised file formats may be retained with `semanticStatus: opaque-unsupported`, `records: null`; this is byte acquisition, not validated geometry. Missing/unsafe filenames or incompatible metadata fail. HTML challenge bodies are not accepted as data. Web maps/apps are not traversed to acquire referenced personal datasets.
+- Other advertised file formats may be retained with `semanticStatus: opaque-unsupported`, `records: null`; this is byte acquisition, not validated geometry. Missing/unsafe filenames or incompatible metadata fail. HTML challenge bodies are not accepted as data. Web maps/apps are not generally traversed: only the explicitly scoped Water dashboard-to-Web-Map discovery described above is implemented, without personal-dataset enrichment.
 
 Catalog inclusion is not authorization to collect address points, owners, forms or individual voters. Review the subject, fields, current usage terms and operational permission before collecting. There is no authentication, cookie import, challenge bypass, arbitrary URL scraping, editing, scheduler, service or historical backfill.
 

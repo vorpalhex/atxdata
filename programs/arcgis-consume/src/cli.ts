@@ -126,7 +126,10 @@ Workflow (review terms before authorization):
   bun src/cli.ts discover --source tnr --archive ABSOLUTE_PRIVATE_DIRECTORY --terms-sha256 CATALOG_TERMS_SHA256
   bun src/cli.ts rules --source tnr --item CATALOG_ITEM_ID --archive ABSOLUTE_PRIVATE_DIRECTORY
   bun src/cli.ts collect --source tnr --item CATALOG_ITEM_ID --layer ADVERTISED_LAYER_ID --archive ABSOLUTE_PRIVATE_DIRECTORY --terms-sha256 ITEM_TERMS_SHA256
-Sources: tnr, voter. list returns preset IDs, defaults and legacyArchiveLimits.
+Sources: tnr, voter, austin, water. list returns source IDs, defaults and legacyArchiveLimits.
+City workflow: rules --source austin -> discover --source austin -> rules --source austin --item CATALOG_ITEM_ID -> collect with explicit --item/--layer/--fields.
+Water discovery: rules --source water -> discover --source water; follows only the official dashboard's item-linked Web Map layers. No arbitrary URL or guessed layer0.
+Water real acquisition remains pending: the observed outage polygon layer exceeds the approved proof scope and its map-linked item is inaccessible. Point incidents are not aggregate areas. PropertyProfile/FloodPro wrappers remain unresolved.
 --archive is required except list: canonical absolute private directory outside source.
 --item selects a catalog-backed ID. --layer selects an advertised layer (zero allowed).
 --service asserts the matching service, never arbitrary URL permission.
@@ -164,6 +167,22 @@ function presetSelection(
     ...flags,
   });
 }
+function validateSourceSelection(
+  selected: Source | undefined,
+  command: string,
+  flags: Record<string, string>,
+) {
+  if (
+    (selected === "austin" || selected === "water") &&
+    ["collect", "sync"].includes(command)
+  )
+    ensure(
+      flags["--item"],
+      "city collection requires explicit --item from discover",
+    );
+  if (selected && flags["--service"])
+    sourceService(flags["--service"], selected);
+}
 export function parseArgs(args: string[]) {
   const parsed = parseCLI(args);
   const command = parsed.command ?? "";
@@ -189,9 +208,7 @@ export function parseArgs(args: string[]) {
   let selected: Source | undefined;
   if (!["list", "status", "verify"].includes(command))
     selected = source(flags["--source"]);
-  if ((selected === "austin" || selected === "water") && ["collect", "sync"].includes(command))
-    ensure(flags["--item"], "city collection requires explicit --item from discover");
-  if(selected && flags["--service"]) sourceService(flags["--service"],selected);
+  validateSourceSelection(selected, command, flags);
   const termsSha256 = flags["--terms-sha256"];
   if (["discover", "collect", "sync"].includes(command))
     ensure(

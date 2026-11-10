@@ -1,6 +1,6 @@
 import { acquirePublished, verifyPublished } from "./published";
-import {waterCatalog} from "./water";
-import {unavailablePolicy,sourcePolicy} from "./profile-policy";
+import { waterCatalog } from "./water";
+import { unavailablePolicy, sourcePolicy } from "./profile-policy";
 import { Archive } from "./archive";
 import { array, ensure, integer, object, same } from "./check";
 import {
@@ -14,7 +14,13 @@ import {
   source as validateSource,
   type Source,
 } from "./sources";
-import { validateCatalogPage, serviceUrl, serviceRoute, sourceService, catalogEntry } from "./catalog";
+import {
+  validateCatalogPage,
+  serviceUrl,
+  serviceRoute,
+  sourceService,
+  catalogEntry,
+} from "./catalog";
 import { allowed, terms } from "./rules";
 import { layerSchema, featurePage, featureIds } from "./schema";
 import { validateBudget } from "./policy";
@@ -151,9 +157,12 @@ export async function readCatalog(
     itemUrl(config.site, true),
     "json",
   );
-  if(source === "water") {
-    ensure(object(await a.read(run,"site-item")).type === "Dashboard", "Water root is not a dashboard");
-    return waterCatalog(request,run,data,maxPages);
+  if (source === "water") {
+    ensure(
+      object(await a.read(run, "site-item")).type === "Dashboard",
+      "Water root is not a dashboard",
+    );
+    return waterCatalog(request, run, data, maxPages);
   }
   const q = catalogQuery(source, data, true),
     seen = new Set<string>(),
@@ -191,35 +200,48 @@ export async function readCatalog(
     "catalog page budget exhausted; resume same run with unchanged budget or start an explicitly larger operation; not complete",
   );
 }
-async function gate(a: Archive, run: string, origins = ["https://www.arcgis.com", "https://gis.traviscountytx.gov"]) {
+function httpStatus(error: unknown, status: number) {
+  return error instanceof Error && "status" in error && error.status === status;
+}
+async function robotsPolicy(a: Archive, run: string, origin: string) {
+  const policyUrl = origin + "/robots.txt";
+  if (unavailablePolicy(a, run, policyUrl)) return undefined;
+  try {
+    return String(
+      await a.request(
+        run,
+        "robots-" + new URL(origin).hostname,
+        policyUrl,
+        "text",
+      ),
+    );
+  } catch (e) {
+    if (httpStatus(e, 403) && unavailablePolicy(a, run, policyUrl))
+      return undefined;
+    if (httpStatus(e, 404)) return "";
+    throw e;
+  }
+}
+async function gate(
+  a: Archive,
+  run: string,
+  origins = ["https://www.arcgis.com", "https://gis.traviscountytx.gov"],
+) {
   a.guard = undefined;
   a.setSpacing(3000);
   const rules: Record<string, string | undefined> = {};
   for (const origin of origins) {
-    const policyUrl=origin+"/robots.txt";
-    if(unavailablePolicy(a,run,policyUrl)) { rules[origin]=undefined; continue; }
-    let text = "";
-    try {
-      text = String(
-        await a.request(
-          run,
-          "robots-" + new URL(origin).hostname,
-          origin + "/robots.txt",
-          "text",
-        ),
-      );
-    } catch (e) {
-      if(e instanceof Error && "status" in e && e.status===403 && unavailablePolicy(a,run,policyUrl)) { rules[origin]=undefined; continue; }
-      if (!(e instanceof Error && "status" in e && e.status === 404)) throw e;
-    }
+    const text = await robotsPolicy(a, run, origin);
     rules[origin] = text;
-    a.setSpacing(allowed(origin + "/robots.txt", text, origin + "/"));
+    if (text !== undefined)
+      a.setSpacing(allowed(origin + "/robots.txt", text, origin + "/"));
   }
   a.guard = (url) => {
     const origin = new URL(url).origin;
     ensure(origin in rules, "authority missing robots gate");
-    const text=rules[origin];
-    if(text!==undefined) a.setSpacing(allowed(origin + "/robots.txt", text, url));
+    const text = rules[origin];
+    if (text !== undefined)
+      a.setSpacing(allowed(origin + "/robots.txt", text, url));
   };
 }
 function validateInvocation(
@@ -229,7 +251,7 @@ function validateInvocation(
 ) {
   validateSelection(options);
   validateSource(source);
-  if(options.service) sourceService(options.service,source);
+  if (options.service) sourceService(options.service, source);
   ensure(
     ["collect", "sync", "rules", "discover"].includes(command),
     "unsupported selection command",
@@ -277,6 +299,12 @@ async function inspectRules(
     "json",
   );
 }
+function sourceOrigins(source: Source) {
+  if (source === "water")
+    return ["https://www.arcgis.com", "https://www.austintexas.gov"];
+  if (source === "austin") return ["https://www.arcgis.com"];
+  return ["https://www.arcgis.com", "https://gis.traviscountytx.gov"];
+}
 async function performSelection(
   a: Archive,
   run: string,
@@ -286,7 +314,7 @@ async function performSelection(
   selected: Selection,
   termsSha256?: string,
 ) {
-  const origins = source === "water" ? ["https://www.arcgis.com", "https://www.austintexas.gov"] : source === "austin" ? ["https://www.arcgis.com"] : ["https://www.arcgis.com", "https://gis.traviscountytx.gov"];
+  const origins = sourceOrigins(source);
   await gate(a, run, origins);
   const catalog = await readCatalog(a, run, source, selected.maxPages);
   const catalogTerms = terms(await a.read(run, "site-item"));
@@ -297,7 +325,7 @@ async function performSelection(
     );
     return catalog;
   }
-  const entry = catalogEntry(catalog.items,selected.item,selected.layer);
+  const entry = catalogEntry(catalog.items, selected.item, selected.layer);
   if (command === "rules" && !entry)
     return {
       source,
@@ -314,10 +342,11 @@ async function performSelection(
     "json",
     (v) => validateItem(v, selected.item),
   );
-  if(featureItem(item)) sourceService(object(item).url,source);
+  if (featureItem(item)) sourceService(object(item).url, source);
   const original = originalSource(item, entry, selected);
   const serviceOrigin = new URL(original).origin;
-  if (!origins.includes(serviceOrigin)) await gate(a, run, [...origins, serviceOrigin]);
+  if (!origins.includes(serviceOrigin))
+    await gate(a, run, [...origins, serviceOrigin]);
   a.store.source(key, String(object(item).title), original);
   if (command === "rules")
     return {
@@ -335,6 +364,17 @@ async function performSelection(
   if (featureItem(item)) await acquireFeatures(a, run, selected, item, entry);
   else await acquirePublished(a, run, selected, item);
   return verifySelection(a, run);
+}
+function validateCachedRecords(
+  summary: Record<string, unknown>,
+  maxRecords: number,
+) {
+  ensure(
+    !("records" in summary) ||
+      summary.records === null ||
+      integer(summary.records, 0, Number.MAX_SAFE_INTEGER) <= maxRecords,
+    "cached selection exceeds current record bound",
+  );
 }
 export async function executeSelection(
   a: Archive,
@@ -373,7 +413,7 @@ export async function executeSelection(
         same(summary, JSON.parse(prior.summary)),
         "stored summary differs from original content",
       );
-      ensure(!("records" in summary) || summary.records === null || integer(summary.records,0,Number.MAX_SAFE_INTEGER) <= selected.maxRecords,"cached selection exceeds current record bound");
+      validateCachedRecords(summary, selected.maxRecords);
       await validateCachedAssertion(a, prior.id, selected);
       return { run: prior.id, reused: true, summary };
     }
@@ -411,9 +451,12 @@ function queries(base: string) {
     queryUrl(base + "/query", { where: "1=1", ...params });
 }
 async function validateCachedAssertion(a: Archive, run: string, s: Selection) {
-  for(const row of a.store.observations().filter(v=>v.run===run)) {
-    const cap=row.kind==="zip" || row.kind==="file" ? s.budget.zipBytes : s.budget.responseBytes;
-    ensure(row.bytes<=cap,"cached selection exceeds current response bound");
+  for (const row of a.store.observations().filter((v) => v.run === run)) {
+    const cap =
+      row.kind === "zip" || row.kind === "file"
+        ? s.budget.zipBytes
+        : s.budget.responseBytes;
+    ensure(row.bytes <= cap, "cached selection exceeds current response bound");
   }
   if (!s.service) return;
   const item = object(
@@ -427,9 +470,16 @@ function selectedService(
   s: Selection,
 ) {
   const route = serviceRoute(object(item).url);
-  ensure(s.layer === undefined || serviceRoute(entry.url).layer === undefined || serviceRoute(entry.url).layer === s.layer, "caller/advertised layer mismatch");
   ensure(
-    (entry.map ? serviceRoute(entry.url).root === route.root : entry.url === route.original) &&
+    s.layer === undefined ||
+      serviceRoute(entry.url).layer === undefined ||
+      serviceRoute(entry.url).layer === s.layer,
+    "caller/advertised layer mismatch",
+  );
+  ensure(
+    (entry.map
+      ? serviceRoute(entry.url).root === route.root
+      : entry.url === route.original) &&
       (!s.service || s.service === route.root || s.service === route.original),
     "catalog/item/service identity mismatch",
   );
@@ -558,12 +608,15 @@ export async function verifySelection(a: Archive, run: string) {
   };
   const item = validateItem(await read("item-before"), s.item),
     after = validateItem(await read("item-after"), s.item);
-  ensure(stableItem(item, after, s.source), "item metadata changed during observation");
+  ensure(
+    stableItem(item, after, s.source),
+    "item metadata changed during observation",
+  );
   const catalog = await readCatalog(a, run, s.source, s.maxPages, true);
-  const entry = catalogEntry(catalog.items,s.item,s.layer);
+  const entry = catalogEntry(catalog.items, s.item, s.layer);
   ensure(entry, "item missing from retained catalog");
   if (["Feature Service", "Map Service"].includes(String(item.type))) {
-    sourceService(item.url,s.source);
+    sourceService(item.url, s.source);
     const base = selectedService(item, entry, s).root;
     ensure(s.layer !== undefined, "missing selected layer");
     const layer = base + "/" + s.layer,
@@ -586,7 +639,11 @@ export async function verifySelection(a: Archive, run: string) {
     );
   }
   if (!["Feature Service", "Map Service"].includes(String(item.type)))
-    return { source: s.source, ...sourcePolicy(a,run), ...(await verifyPublished(a, run, s, item)) };
+    return {
+      source: s.source,
+      ...sourcePolicy(a, run),
+      ...(await verifyPublished(a, run, s, item)),
+    };
   ensure(
     same(await read("service"), await read("service-after")),
     "service identity/version changed during observation",
@@ -634,7 +691,7 @@ export async function verifySelection(a: Archive, run: string) {
   }
   return {
     source: s.source,
-    ...sourcePolicy(a,run),
+    ...sourcePolicy(a, run),
     strategy: "catalog-feature-query",
     catalogItem: s.item,
     layer: s.layer,

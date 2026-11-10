@@ -43,7 +43,10 @@ export const configs = {
 export type Source = keyof typeof configs;
 export function source(value: unknown): Source {
   ensure(
-    value === "tnr" || value === "voter" || value === "austin" || value === "water",
+    value === "tnr" ||
+      value === "voter" ||
+      value === "austin" ||
+      value === "water",
     "supported source is tnr, voter, austin or water",
   );
   return value;
@@ -131,16 +134,19 @@ export function validateItem(value: unknown, id: string) {
   ensure(typeof item.title === "string", "item title missing");
   return item;
 }
-export function stableItem(before:unknown,after:unknown,source:Source) {
-  if(source!=="austin" && source!=="water") return same(before,after);
-  const normalize=(value:unknown)=>{
-    const item=object(value);
-    if(item.categories===undefined) return item;
-    const categories=array(item.categories);
-    ensure(categories.every(c=>typeof c==="string"),"invalid item categories");
-    return {...item,categories:[...categories].sort()};
+export function stableItem(before: unknown, after: unknown, source: Source) {
+  if (source !== "austin" && source !== "water") return same(before, after);
+  const normalize = (value: unknown) => {
+    const item = object(value);
+    if (item.categories === undefined) return item;
+    const categories = array(item.categories);
+    ensure(
+      categories.every((c) => typeof c === "string"),
+      "invalid item categories",
+    );
+    return { ...item, categories: [...categories].sort() };
   };
-  return same(normalize(before),normalize(after));
+  return same(normalize(before), normalize(after));
 }
 
 export function validatePublishedItem(value: unknown) {

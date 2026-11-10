@@ -36,5 +36,7 @@ test("CLI has explicit supported scope and fails closed on missing budgets/appro
   expect(() =>
     parseArgs(["sync", "--archive", "relative", "--source", "tnr"]),
   ).toThrow();
-  expect((await main(["list"]) as Array<{id:string}>).map(v=>v.id)).toEqual(["tnr","austin","water","voter"]);
+  expect(
+    ((await main(["list"])) as Array<{ id: string }>).map((v) => v.id),
+  ).toEqual(["tnr", "austin", "water", "voter"]);
 });

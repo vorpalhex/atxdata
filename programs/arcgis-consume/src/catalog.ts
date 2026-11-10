@@ -1,17 +1,36 @@
 import { array, ensure, integer, object } from "./check";
-import type {Source} from "./sources";
+import type { Source } from "./sources";
 
-export function sourceService(value:unknown, source:Source) {
-  const route=serviceUrl(value), url=new URL(route);
-  const city=(url.hostname==="maps.austintexas.gov" || (url.hostname==="services.arcgis.com" && url.pathname.startsWith("/0L95CJ0VTaxqcmED/")));
-  const water=url.hostname==="services1.arcgis.com" && url.pathname.startsWith("/PuB3FWUAxkScvfQy/");
-  const county=url.hostname==="gis.traviscountytx.gov" || url.hostname==="services1.arcgis.com";
-  ensure(source==="austin" ? city : source==="water" ? water : county,"source service authority/tenant mismatch");
+export function sourceService(value: unknown, source: Source) {
+  const route = serviceUrl(value),
+    url = new URL(route);
+  const city =
+    url.hostname === "maps.austintexas.gov" ||
+    (url.hostname === "services.arcgis.com" &&
+      url.pathname.startsWith("/0L95CJ0VTaxqcmED/"));
+  const water =
+    url.hostname === "services1.arcgis.com" &&
+    url.pathname.startsWith("/PuB3FWUAxkScvfQy/");
+  const county =
+    url.hostname === "gis.traviscountytx.gov" ||
+    url.hostname === "services1.arcgis.com";
+  ensure(
+    source === "austin" ? city : source === "water" ? water : county,
+    "source service authority/tenant mismatch",
+  );
   return route;
 }
 
-export function catalogEntry(items:unknown[],id:string,layer?:number) {
-  return items.map(object).find(entry=>entry.id===id && (!entry.map || layer===undefined || serviceRoute(entry.url).layer===layer));
+export function catalogEntry(items: unknown[], id: string, layer?: number) {
+  return items
+    .map(object)
+    .find(
+      (entry) =>
+        entry.id === id &&
+        (!entry.map ||
+          layer === undefined ||
+          serviceRoute(entry.url).layer === layer),
+    );
 }
 
 export function validateCatalogPage(
@@ -57,8 +76,10 @@ function validateContinuation(
 function serviceAuthority(url: URL) {
   return (
     url.hostname === "gis.traviscountytx.gov" ||
-    (url.hostname === "maps.austintexas.gov" && url.pathname.startsWith("/arcgis/rest/services/")) ||
-    (url.hostname === "services.arcgis.com" && url.pathname.startsWith("/0L95CJ0VTaxqcmED/arcgis/rest/services/")) ||
+    (url.hostname === "maps.austintexas.gov" &&
+      url.pathname.startsWith("/arcgis/rest/services/")) ||
+    (url.hostname === "services.arcgis.com" &&
+      url.pathname.startsWith("/0L95CJ0VTaxqcmED/arcgis/rest/services/")) ||
     (url.hostname === "services1.arcgis.com" &&
       /^\/[A-Za-z0-9]+\/arcgis\/rest\/services\//i.test(url.pathname))
   );
