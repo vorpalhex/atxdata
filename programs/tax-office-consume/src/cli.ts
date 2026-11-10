@@ -1,4 +1,6 @@
 import {Collector} from './collector';
+import {information,writeOutput,failure,parseOptions,tokenLabel} from './frontend';
+import {commandHelp,EXAMPLES} from './cli-help';
 import {collect} from './live';
 import {discover,collectExport} from './export-live';
 import {CAPS,positive} from './source';
@@ -7,12 +9,9 @@ const BUDGETS=['--max-bytes','--max-rows','--max-requests','--max-total-bytes'];
 const OPTIONS:Record<string,string[]>={list:['--output'],import:['--output','--selection','--max-rows','--csv','--layout','--max-bytes'],collect:['--output','--selection',...BUDGETS,'--catalog-version','--version'],status:['--output'],verify:['--output'],discover:['--output',...BUDGETS],'catalog-import':['--output','--html'],'import-export':['--output','--selection','--file','--layout','--catalog-version',...BUDGETS]};
 const REQUIRED:Record<string,string[]>={list:[],'catalog-import':['--output','--html'],import:['--output','--selection','--max-rows','--csv','--layout'],'import-export':['--output','--selection','--file'],collect:['--output','--selection']};
 function argumentsFor(command:string,args:string[],allowed:string[]){
- const values=new Map<string,string>();let refresh=false;
- for(let i=0;i<args.length;i++){
-  const key=args[i]!;if(key==='--refresh'&&['collect','import'].includes(command)&&!refresh){refresh=true;continue;}
-  const value=args[++i];if(!allowed.includes(key)||values.has(key)||!value||value.startsWith('--'))throw new Error('invalid arguments');values.set(key,value);
- }
- return {values,refresh};
+ const flags=['collect','import'].includes(command)?['--refresh']:[];
+ const values=parseOptions(args,[...allowed,...flags],[],flags);
+ return {values,refresh:values.get('--refresh')==='true'};
 }
 function validateBudgets(values:Map<string,string>){
  for(const key of BUDGETS)if(values.has(key)){const raw=values.get(key)!;if(!/^\d+$/.test(raw))throw new Error(key+' ceiling');positive(Number(raw),key);}
@@ -21,13 +20,17 @@ function validateSelection(command:string,values:Map<string,string>){
  if(['import','collect'].includes(command)){
   const selected=values.get('--selection')!;if(selected!=='delinquency'&&(command==='import'||!selected.startsWith('/')))throw new Error('explicit supported selection required');
   if(selected==='delinquency'&&!values.has('--max-rows'))throw new Error('required --max-rows');
+  if(selected==='delinquency'&&(values.has('--catalog-version')||values.has('--version')))throw new Error('catalog/version selectors require catalog item selection');
  }
 }
 function options(command:string,args:string[]){
- const allowed=OPTIONS[command];if(!allowed)throw new Error('commands: list | discover | catalog-import | import-export | import | collect | status | verify');
+ const allowed=Object.hasOwn(OPTIONS,command)?OPTIONS[command]:undefined;
+ if(!allowed)throw new Error(command?`unknown command ${tokenLabel(command)}; try --help`:'command required; try --help');
  const result=argumentsFor(command,args,allowed);
  for(const key of REQUIRED[command]??['--output'])if(!result.values.has(key))throw new Error('required '+key);
- validateBudgets(result.values);validateSelection(command,result.values);return result;
+ validateBudgets(result.values);validateSelection(command,result.values);
+ if(result.refresh&&result.values.has('--version'))throw new Error('retained version selector cannot request refresh');
+ return result;
 }
 function budgets(values:Map<string,string>){
  const out:Record<string,number>={};for(const [option,name] of [['--max-bytes','maxBytes'],['--max-rows','maxRows'],['--max-requests','maxRequests'],['--max-total-bytes','maxTotalBytes']])if(values.has(option!))out[name!]=Number(values.get(option!));return out;
@@ -51,4 +54,9 @@ export async function run(args:string[]){
  if(command==='list'&&!values.has('--output'))return [{selection:'delinquency',csvBytes:CAPS.csv,layoutBytes:CAPS.layout,history:false}];
  const c=await Collector.open(values.get('--output')!);try{return await dispatch(c,command!,values,refresh);}finally{await c.close();}
 }
-if(import.meta.main)run(process.argv.slice(2)).then(result=>console.log(JSON.stringify(result)),e=>{console.error(String(e));process.exitCode=1;});
+const HELP=commandHelp(Object.fromEntries(Object.entries(OPTIONS).map(([k,v])=>[k,['collect','import'].includes(k)?[...v,'--refresh']:v])));
+async function main(args:string[]){
+ const text=information(args,HELP,EXAMPLES);
+ await writeOutput(text??JSON.stringify(await run(args))+'\n');
+}
+if(import.meta.main)main(process.argv.slice(2)).catch(failure);

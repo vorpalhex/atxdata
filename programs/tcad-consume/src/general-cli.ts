@@ -1,25 +1,21 @@
 import {Store} from './store';
+import {parseOptions} from './frontend';
 import {loadSchemas} from './layouts';
-import {discover,acquire,retainCatalog} from './live';
+import {discover,acquire,retainCatalog,validateBudgets} from './live';
+import {bounds as validateMemberOptions} from './members';
 import {withZip,inventory,serialized,LIMITS} from './archive';
 import {readFile} from 'node:fs/promises';
-const REQUIRED:Record<string,string[]>={
+export const REQUIRED:Record<string,string[]>={
  'import-member':['archive','snapshot','member','start','count','max-expanded','max-seconds','output'],
  'verify-members':['output'],'member-status':['output'],layouts:['layout'],'inventory-members':['archive'],
  discover:['output','max-requests','max-bytes'],acquire:['output','id','max-requests','max-bytes'],catalog:['output'],'catalog-import':['output','html']
 };
-const OPTIONAL:Record<string,string[]>={'import-member':['layout'],acquire:['refresh']};
-export function generalCommand(command:string){return command in REQUIRED;}
-function argumentPair(args:string[],i:number,allowed:string[],v:Map<string,string>){
- const key=args[i]!.replace(/^--/,''),value=args[i+1];
- if(!args[i]!.startsWith('--')||!allowed.includes(key)||v.has(key)||!value||value.startsWith('--'))throw new Error('invalid arguments');
- v.set(key,value);
-}
+export const OPTIONAL:Record<string,string[]>={'import-member':['layout'],acquire:['refresh']};
+export function generalCommand(command:string){return Object.hasOwn(REQUIRED,command);}
 function argumentsFor(command:string,args:string[]){
  const required=REQUIRED[command];if(!required)throw new Error('unknown general command');
- const allowed=[...required,...(OPTIONAL[command]??[])],v=new Map<string,string>();
- for(let i=0;i<args.length;i+=2)argumentPair(args,i,allowed,v);
- for(const k of required)if(!v.has(k))throw new Error(`required --${k}`);
+ const allowed=[...required,...(OPTIONAL[command]??[])];
+ const v=new Map([...parseOptions(args,allowed.map(k=>'--'+k),required.map(k=>'--'+k))].map(([k,value])=>[k.slice(2),value]));
  if(v.has('refresh')&&!['true','false'].includes(v.get('refresh')!))throw new Error('refresh must be true or false');
  return v;
 }
@@ -38,6 +34,9 @@ function remote(command:string,s:Store,v:Map<string,string>){
 }
 export async function runGeneral(command:string,args:string[]){
  const v=argumentsFor(command,args);
+ // Pure validation must precede Store.open (which initializes/reconciles durable state).
+ if(command==='import-member')validateMemberOptions(memberOptions(v));
+ if(command==='discover'||command==='acquire')validateBudgets({maxRequests:Number(v.get('max-requests')),maxBytes:Number(v.get('max-bytes'))});
  if(command==='layouts')return loadSchemas(v.get('layout')!);
  if(command==='inventory-members')return withZip(v.get('archive')!,LIMITS.compressed,async z=>({members:serialized(await inventory(z)),coverage:'metadata only'}));
  const s=await Store.open(v.get('output')!);

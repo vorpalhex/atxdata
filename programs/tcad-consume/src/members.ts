@@ -18,9 +18,9 @@ const hash=(b:Buffer|string)=>createHash('sha256').update(b).digest('hex');
 function selectionNames(o:MemberOptions){
  if(typeof o.member!=='string'||!o.member||typeof o.snapshot!=='string'||!o.snapshot||o.snapshot.length>200)throw new Error('member and snapshot required');
 }
-function bounds(o:MemberOptions){
- for(const n of [o.start,o.maxExpanded,o.maxSeconds])if(!Number.isSafeInteger(n)||n<1)throw new Error('positive safe selection budgets required');
- if(o.count!=='all'&&(!Number.isSafeInteger(o.count)||o.count<1||!Number.isSafeInteger(o.start+o.count)))throw new Error('positive safe count required');
+export function bounds(o:MemberOptions){
+ for(const n of [o.start,o.maxExpanded,o.maxSeconds])if(!Number.isSafeInteger(n)||n<1)throw new Error('positive safe selection budgets required (--start, --max-expanded, --max-seconds)');
+ if(o.count!=='all'&&(!Number.isSafeInteger(o.count)||o.count<1||!Number.isSafeInteger(o.start+o.count)))throw new Error('positive safe count required (--count and --start+--count)');
  selectionNames(o);
 }
 class RecordSelection{

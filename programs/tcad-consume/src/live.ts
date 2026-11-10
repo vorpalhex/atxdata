@@ -81,7 +81,7 @@ function completedRequest(r:any){
 }
 function requestStatus(status:unknown){if(typeof status!=='number'||!Number.isSafeInteger(status)||status<100||status>599)throw new Error('corrupt request status ledger');}
 
-function validateBudgets(o:LiveOptions){for(const n of [o.maxRequests,o.maxBytes])if(!Number.isSafeInteger(n)||n<1)throw new Error('explicit positive request/byte budgets');}
+export function validateBudgets(o:LiveOptions){for(const n of [o.maxRequests,o.maxBytes])if(!Number.isSafeInteger(n)||n<1)throw new Error('explicit positive request/byte budgets (--max-requests, --max-bytes)');}
 export type LiveOptions={maxRequests:number;maxBytes:number;refresh?:boolean;transport?:(url:string)=>Promise<Response>;clock?:()=>number;sleep?:(ms:number)=>Promise<void>};
 function official(value:string){const u=new URL(value);if(u.origin!=='https://traviscad.org'||u.username||u.password||u.hash)throw new Error('TCAD authority required');return u;}
 export function catalogLinks(html:string){
