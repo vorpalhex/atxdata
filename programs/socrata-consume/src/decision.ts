@@ -1,7 +1,12 @@
 import { Database } from "bun:sqlite";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { catalogURL, decodeAssetCatalog } from "./catalog";
+import {
+  catalogURL,
+  decodeAssetCatalog,
+  schemaURL,
+  decodeSchema,
+} from "./catalog";
 import { assetID, ensure, object, origin, operationFormat } from "./source";
 type Row = Record<string, any>;
 function producer(db: Database, run: string, observation: Row, url: string) {
@@ -84,6 +89,7 @@ export function verifyDecision(
 ) {
   if (options.format !== operationFormat) {
     legacySummary(run);
+    legacyEvidence(db, root, run, options);
     return;
   }
   if (run.command === "discover") return;
@@ -110,6 +116,45 @@ export function verifyDecision(
   if (expected.outcome === "member-absent") {
     negativeTerminal(db, run, summary);
   }
+}
+function legacyEvidence(db: Database, root: string, run: Row, options: Row) {
+  if (run.command === "discover") return;
+  const present = db
+    .query("SELECT 1 FROM observations WHERE run=? AND label='catalog'")
+    .get(run.id);
+  if (present) {
+    const asset =
+      run.command === "inspect"
+        ? options.asset
+        : object(options.selection).asset;
+    ensure(
+      catalogDecision(db, root, run.id, asset).outcome === "member-present",
+      "legacy catalog membership mismatch",
+    );
+  }
+  if (run.command === "inspect" && run.status === "succeeded")
+    legacyInspection(db, root, run, options, present);
+}
+function legacyInspection(
+  db: Database,
+  root: string,
+  run: Row,
+  options: Row,
+  present: unknown,
+) {
+  ensure(present, "missing legacy inspection catalog");
+  const schema = db
+    .query<Row, [string]>(
+      "SELECT * FROM observations WHERE run=? AND label='schema'",
+    )
+    .get(run.id);
+  ensure(
+    schema &&
+      schema.status === "ready" &&
+      schema.url === schemaURL(options.asset),
+    "missing legacy inspection schema",
+  );
+  decodeSchema(readFileSync(join(root, schema.path), "utf8"), options.asset);
 }
 function legacySummary(run: Row) {
   if (run.summary === null) return;

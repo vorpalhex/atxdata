@@ -249,6 +249,9 @@ for (const damage of ["empty", "stale", "pages"] as const)
     await collect(options(root), f.deps);
     if (damage === "stale")
       await collect({ ...options(root), refresh: true }, f.deps);
+    // Bun/SQLite producer statements can defer last-writer retirement until GC.
+    // Settle that producer BEFORE corruption and the exact no-write baseline.
+    Bun.gc(true);
     const db = new Database(join(root, "data.sqlite"));
     db.exec("PRAGMA foreign_keys=ON");
     const id = (
@@ -281,5 +284,7 @@ for (const damage of ["empty", "stale", "pages"] as const)
     }
     expect(writers).toBe(0);
     expect(f.calls.length).toBe(count);
+    // Force deferred finalizers inside the protected interval too.
+    Bun.gc(true);
     expect(state(root)).toEqual(before);
   });

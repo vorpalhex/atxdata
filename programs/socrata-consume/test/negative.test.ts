@@ -8,6 +8,7 @@ if (!base) throw Error("set SOCRATA_TEST_ROOT");
 const cli = resolve(import.meta.dir, "../src/cli.ts");
 import { fixture } from "./support/fixture";
 import { inspect, verify } from "../src/collector";
+import { verifyDecision } from "../src/decision";
 
 test("library terminal negative has a durable decision and read-only offline replay", async () => {
   const root = mkdtempSync(join(base, "library-negative-")),
@@ -246,6 +247,17 @@ test("native negative replay binds every decision field and refuses missing or d
         JSON.stringify(o),
       );
     });
+    for (const fakeSuccess of [false, true]) {
+      mutations.push((db) => {
+        db.exec(
+          "UPDATE acquisition_options SET options=json_set(options,'$.format','socrata-v2-datahub'); UPDATE runs SET summary=NULL",
+        );
+        if (fakeSuccess)
+          db.exec(
+            `UPDATE runs SET status='succeeded',error=NULL,summary='{"id":"5uaf-hku2"}'`,
+          );
+      });
+    }
     for (const mutate of mutations) {
       const root = mkdtempSync(join(base, "negative-fault-"));
       cpSync(original, root, { recursive: true });
@@ -345,6 +357,48 @@ test("native current members and genuine v2 successful producers verify; genuine
       expect(verified.exit).toBe(0);
       expect(f.calls.length).toBe(n);
       expect(state(root)).toEqual(before);
+      expect((await verify(root)).httpRequests).toBe(0);
+      if (entry === old) {
+        for (const label of ["schema", "catalog"]) {
+          const fault = mkdtempSync(join(base, "legacy-success-fault-"));
+          cpSync(root, fault, { recursive: true });
+          const db = new Database(join(fault, "transport/state.sqlite"));
+          db.query("DELETE FROM observations WHERE label=?").run(label);
+          db.query("DELETE FROM versions WHERE label=?").run(label);
+          db.close();
+          await rejectsUnchanged(
+            fault,
+            server.url.href,
+            f.calls,
+            "timing evidence missing/mismatched",
+          );
+          // Shared timing integrity rejects deletion first. Exercise the consumer
+          // directly too, so that earlier guard cannot mask missing evidence.
+          const reader = new Database(join(fault, "transport/state.sqlite"), {
+            readonly: true,
+          });
+          try {
+            const run = reader
+              .query<Record<string, any>, []>("SELECT * FROM runs")
+              .get()!;
+            const stored = reader
+              .query<{ options: string }, []>(
+                "SELECT options FROM acquisition_options",
+              )
+              .get()!;
+            expect(() =>
+              verifyDecision(
+                reader,
+                join(fault, "transport"),
+                run,
+                JSON.parse(stored.options),
+              ),
+            ).toThrow(`missing legacy inspection ${label}`);
+          } finally {
+            reader.close();
+          }
+        }
+      }
     } finally {
       server.stop(true);
     }
@@ -362,6 +416,29 @@ test("native current members and genuine v2 successful producers verify; genuine
       ).exit,
     ).toBe(1);
     await rejectsUnchanged(root, s.server.url.href, s.calls, "unknown");
+    const discovery = mkdtempSync(join(base, "old-empty-discovery-"));
+    expect(
+      (
+        await native(
+          [
+            "discover",
+            "--query",
+            "authored",
+            "--limit",
+            "1",
+            "--archive",
+            discovery,
+          ],
+          s.server.url.href,
+          old,
+        )
+      ).exit,
+    ).toBe(0);
+    expect(
+      (await native(["verify", "--archive", discovery], s.server.url.href))
+        .exit,
+    ).toBe(0);
+    expect((await verify(discovery)).httpRequests).toBe(0);
   } finally {
     s.server.stop(true);
   }
