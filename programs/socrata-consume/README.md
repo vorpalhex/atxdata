@@ -57,6 +57,8 @@ Body originals are the exact response-body bytes exposed by fetch, which may alr
 
 Successful originals are immutable, private, SHA-256-checked files. Failed/pending bytes are retained privately where the provider leaves them. Rows, source identity, exact URLs/filter/order, options, producer attempts and before/after metadata are revalidated offline, not trusted merely because SQLite integrity and hashes pass. This detects inconsistent/corrupted evidence; it is not cryptographic authentication against an actor rewriting the entire archive.
 
+For in-process library use, an acquisition or `close()` return is not a guarantee that every SQLite statement finalizer has retired. On the exercised Bun 1.3.14 runtime, deferred producer retirement can later change main-database/WAL bytes without changing logical tables. Native producer-process exit is a separate stable artifact boundary; do not attribute unsettled producer finalization to a later read-only command or advertise synchronous byte immutability at a library return. This limit does not relax original-body hashes, unknown-transfer holds, or read-only verification checks.
+
 ## Budgets, resume and refresh
 
 Defaults are finite and support ordinary datasets rather than a proof-sample whitelist:
