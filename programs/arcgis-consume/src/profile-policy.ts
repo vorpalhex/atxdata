@@ -91,6 +91,58 @@ export function unavailablePolicy(a: Archive, run: string, url: string) {
     bodyRetained: false,
   };
 }
+async function retainedPolicy(a: Archive, run: string, origin: string) {
+  const url = origin + "/robots.txt";
+  const label = "robots-" + new URL(origin).hostname;
+  const row = a.store.observation(run, label);
+  if (!row) {
+    ensure(
+      unavailablePolicy(a, run, url),
+      "historical robots admission evidence missing; operator review required",
+    );
+    return;
+  }
+  ensure(
+    a.store.db
+      .query(
+        "SELECT 1 FROM attempts WHERE id=? AND run=? AND label=? AND url=? AND status=200 AND finished IS NOT NULL AND error IS NULL",
+      )
+      .get(row.path.replace(/\.body$/, ""), run, label, url),
+    "historical robots successful policy binding missing; operator review required",
+  );
+  const text = String(await a.readExpected(run, label, url, "text"));
+  allowed(url, text, url); // Content/delay validation, not self-admission.
+  return robotsParser(url, text);
+}
+
+/** Read-only certification using the producing run's own retained evidence. */
+export async function verifyProfilePolicy(a: Archive, run: string) {
+  const source = a.store.options(run)?.source;
+  if (source !== "austin" && source !== "water") return;
+  const policies = new Map<
+    string,
+    Awaited<ReturnType<typeof retainedPolicy>>
+  >();
+  const routes = a.store.db
+    .query<{ label: string; url: string }, [string]>(
+      "SELECT label,url FROM attempts WHERE run=? AND status IS NOT NULL ORDER BY started,id",
+    )
+    .all(run);
+  for (const route of routes) {
+    const origin = new URL(route.url).origin;
+    if (
+      route.url === origin + "/robots.txt" &&
+      route.label === "robots-" + new URL(origin).hostname
+    )
+      continue;
+    if (!policies.has(origin))
+      policies.set(origin, await retainedPolicy(a, run, origin));
+    ensure(
+      policies.get(origin)?.isAllowed(route.url, "atxdata-arcgis") !== false,
+      "historical robots disallows route; operator review required",
+    );
+  }
+}
 export function sourcePolicy(a: Archive, run: string) {
   const source = a.store.options(run)?.source;
   if (source !== "austin" && source !== "water") return {};

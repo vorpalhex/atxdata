@@ -4,6 +4,7 @@ import {
   unavailablePolicy,
   sourcePolicy,
   profileAllowed,
+  verifyProfilePolicy,
 } from "./profile-policy";
 import { Archive } from "./archive";
 import { array, ensure, integer, object, same } from "./check";
@@ -25,7 +26,7 @@ import {
   sourceService,
   catalogEntry,
 } from "./catalog";
-import { terms } from "./rules";
+import { allowed, terms } from "./rules";
 import { layerSchema, featurePage, featureIds } from "./schema";
 import { validateBudget } from "./policy";
 
@@ -240,7 +241,7 @@ async function gate(
     rules[origin] = text;
     if (text !== undefined)
       a.setSpacing(
-        profileAllowed(source, origin + "/robots.txt", text, origin + "/"),
+        allowed(origin + "/robots.txt", text, origin + "/robots.txt"),
       );
   }
   a.guard = (url) => {
@@ -630,6 +631,7 @@ export async function verifySelection(
   ensure(s, "missing selection checkpoint");
   validateSelection(s);
   validateSource(s.source);
+  await verifyProfilePolicy(a, run);
   const expected: Record<string, string> = {
     "item-before": itemUrl(s.item),
     "item-after": itemUrl(s.item),
