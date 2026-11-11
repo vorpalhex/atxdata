@@ -98,9 +98,18 @@ Official source: https://services.austintexas.gov/cityclerk/lobbyist/index.cfm.
 
 ## Council votes, permits and departmental operations
 
-- City of Austin Council Voting Record: `3c89-i35a`. Preserve member/item/vote
-  identities and the source's date coverage and approval lag. It is not all
-  historical roll-call voting, and Legistar attachments are a separate source.
+- City of Austin Council Voting Record: `3c89-i35a`. The retained publisher
+  metadata says January 6, 2023 onward; the Clerk page says new records are added
+  after each meeting's minutes are approved. That is an approval-dependent lag,
+  not a fixed daily or numerical deadline. The approved minutes are the official
+  record. Metadata also warns of non-daily publication, change without notice
+  and possible 2026 data-warehouse migration interruptions. Preserve `vote_id`,
+  `item_id`, meeting date/type/item number, member name/title/district, vote cast
+  and action taken as separate source fields. Here `voter_name` means a voting
+  Council official, not an individual registered voter. These keys are not
+  automatically Legistar meeting, matter or attachment IDs; no cross-source
+  join or pre-2023 roll-call completeness is asserted. See
+  https://www.austintexas.gov/clerk/council-voting-history.
 - Issued Construction Permits: `3syk-w9eu`. Issuance is not the same event as an
   application, inspection, zoning decision or enforcement case. Discover and
   inspect those separate assets instead of assigning them permit semantics.
