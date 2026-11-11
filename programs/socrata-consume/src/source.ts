@@ -1,13 +1,13 @@
 export const origin = "https://datahub.austintexas.gov";
 export const catalogOrigin = origin;
-export const operationFormat = "socrata-v2-datahub";
+export const operationFormat = "socrata-v3-catalog-decision";
 export function validateIdentity(value: unknown) {
   ensure(
     value !== "socrata-v1",
     "unsupported old source identity; reviewed migration required",
   );
   ensure(
-    value === operationFormat,
+    value === operationFormat || value === "socrata-v2-datahub",
     "unsupported operation identity/representation",
   );
 }

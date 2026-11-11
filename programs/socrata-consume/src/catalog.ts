@@ -71,10 +71,20 @@ export function decodeCatalog(
     new Set(assets.map((a) => a.id)).size === assets.length,
     "duplicate catalog asset",
   );
-  return { assets, total: decimal(body.resultSetSize) };
+  const total = decimal(body.resultSetSize);
+  ensure(BigInt(total) >= BigInt(assets.length), "catalog count mismatch");
+  return { assets, total };
 }
 function decimal(value: unknown): string {
   return sourceString(value, /^(0|[1-9]\d*)$/, "invalid decimal count");
+}
+export function decodeAssetCatalog(text: string) {
+  const catalog = decodeCatalog(text, 1);
+  ensure(
+    catalog.total === String(catalog.assets.length),
+    "catalog selection count mismatch",
+  );
+  return catalog;
 }
 export function decodeCount(text: string): string {
   const body = lossless(text);

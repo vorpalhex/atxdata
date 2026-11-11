@@ -1,4 +1,5 @@
 import robotsParser from "robots-parser";
+import { catalogDecision, saveDecision, finishResult } from "./decision";
 import { Database } from "bun:sqlite";
 import { type Dependencies } from "../../arcgis-consume/src/archive";
 import { readFileSync, existsSync } from "node:fs";
@@ -18,6 +19,7 @@ import {
 import {
   catalogURL,
   decodeCatalog,
+  decodeAssetCatalog,
   schemaURL,
   decodeSchema,
   revision,
@@ -132,13 +134,18 @@ async function request(
 }
 async function catalog(s: Session, run: string, id: string) {
   const url = catalogURL({ asset: id, limit: 1, offset: 0 });
-  const text = await request(s, run, "catalog", url, (t) => {
-    const c = decodeCatalog(t, 1);
-    ensure(
-      c.assets.length === 1 && c.assets[0]!.id === id,
+  const text = await request(s, run, "catalog", url, decodeAssetCatalog);
+  const decision = catalogDecision(s.archive.store.db, s.archive.root, run, id);
+  saveDecision(s.archive.store.db, run, decision);
+  if (decision.outcome === "member-absent") {
+    s.archive.store.finish(
+      run,
+      "failed",
       "asset absent from Austin dataset catalog",
+      { catalogDecision: decision },
     );
-  });
+    throw Error("asset absent from Austin dataset catalog");
+  }
   return decodeCatalog(text, 1).assets[0]!;
 }
 async function schema(s: Session, run: string, id: string, label: string) {
@@ -205,7 +212,12 @@ export async function inspect(
     const run = s.start("inspect", { asset: id }, options.budget);
     await catalog(s, run, id);
     const result = await schema(s, run, id, "schema");
-    s.archive.store.finish(run, "succeeded", undefined, { id });
+    s.archive.store.finish(
+      run,
+      "succeeded",
+      undefined,
+      finishResult(s.archive.store.db, run, { id }),
+    );
     return result;
   });
 }
@@ -404,7 +416,11 @@ async function pages(s: Session, snapshot: Snapshot, options: CollectOptions) {
     snapshot.id,
     "succeeded",
     undefined,
-    receipt(snapshot, offset, false),
+    finishResult(
+      s.archive.store.db,
+      snapshot.id,
+      receipt(snapshot, offset, false),
+    ),
   );
   return receipt(snapshot, offset, false);
 }

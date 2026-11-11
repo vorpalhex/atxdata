@@ -268,7 +268,7 @@ function verifyDomain(root: string, hasSource: boolean) {
   if (!existsSync(path)) return;
   const db = new Database(path, { readonly: true, strict: true });
   try {
-    verifyOperations(db);
+    verifyOperations(db, join(root, "transport"));
     if (!hasSource)
       ensure(
         !db

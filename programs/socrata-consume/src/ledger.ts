@@ -8,9 +8,11 @@ import {
   catalogOrigin,
   positive,
   validateIdentity,
+  operationFormat,
 } from "./source";
 import { catalogURL, schemaURL, countURL } from "./catalog";
 import { budget } from "./transport";
+import { verifyDecision } from "./decision";
 type Row = Record<string, any>;
 function keys(value: Row, required: string[], optional: string[] = []) {
   ensure(
@@ -159,7 +161,7 @@ function attempts(db: Database, run: Row, o: Row) {
       "operation aggregate byte budget mismatch",
     );
 }
-function runState(run: Row) {
+function runState(run: Row, o: Row) {
   ensure(
     run.source === "socrata:austin" &&
       ["running", "succeeded", "failed"].includes(run.status),
@@ -171,7 +173,9 @@ function runState(run: Row) {
   );
   if (run.status === "running")
     ensure(
-      run.finished === null && run.error === null && run.summary === null,
+      run.finished === null &&
+        run.error === null &&
+        (run.summary === null || o.format === operationFormat),
       "operation unfinished state mismatch",
     );
   else
@@ -181,7 +185,7 @@ function runState(run: Row) {
       "operation completion mismatch",
     );
 }
-export function verifyOperations(db: Database) {
+export function verifyOperations(db: Database, root: string) {
   for (const source of db.query<Row, []>("SELECT * FROM sources").all())
     ensure(
       source.id === "socrata:austin" && source.original_url === origin,
@@ -189,7 +193,6 @@ export function verifyOperations(db: Database) {
     );
   const runs = db.query<Row, []>("SELECT * FROM runs").all();
   for (const run of runs) {
-    runState(run);
     const stored = db
       .query<{ options: string }, [string]>(
         "SELECT options FROM acquisition_options WHERE run=?",
@@ -197,7 +200,9 @@ export function verifyOperations(db: Database) {
       .get(run.id);
     ensure(stored, "missing operation options");
     const o = options(run.command, JSON.parse(stored.options));
+    runState(run, o);
     attempts(db, run, o);
+    verifyDecision(db, root, run, o);
   }
   ensure(
     db
