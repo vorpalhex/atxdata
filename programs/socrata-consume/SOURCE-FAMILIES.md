@@ -61,12 +61,31 @@ them into one additive money table:
 | Direct Campaign Expenditures | `8p2b-ewep` |
 | Committee Purpose            | `u3cd-iecr` |
 
-Inspect each asset through the current catalog. Retain report identities,
-amendments, transaction types and source field names. An amount in a summary,
-loan, credit or transaction-detail table is not automatically another contribution.
-Structured records do not establish that all historical original filings survive
-or have been collected. The separate candidate filing-status asset and original
-filing documents are not silently merged into these tables.
+The Clerk also publishes a Covered Transfers link, `5uaf-hku2`.[1] A current
+catalog-backed native inspection refused it as absent from the Austin dataset
+catalog. Its acquisition is unresolved; do not substitute another asset or treat
+an old published link as current catalog membership.
+
+Inspect each asset through the current catalog. The published campaign data model
+links transaction `report_id` to report `report_id` and gives travel/direct-campaign
+records their own transaction/report relationships.[2] Preserve actual identifiers,
+`cor_flag` or `correction` fields and original observations without filtering away
+amendments, guessing identifier concatenations, or summing report totals together
+with their underlying transactions. Current schema inspection is required: the
+published dictionary is dated 2016 and does not guarantee unchanged field labels.[3]
+
+The Clerk describes this as self-reported, unverified data from 2016 onward.[1] Its
+current notice says contributor street addresses are redacted from online datasets
+following the 2023 law change.[1] Do not reconstruct those addresses from older
+copies or other records. Original filings remain a separate document surface.
+Structured records do not establish that every historical original filing survives
+or has been collected. Summary, loan, credit and transaction amounts are not
+additive contributions merely because they have amount fields.
+
+Published model and dictionary:
+
+- https://services.austintexas.gov/edims/document.cfm?id=301923
+- https://services.austintexas.gov/edims/document.cfm?id=247730
 
 Official source: https://services.austintexas.gov/cityclerk/cfdi/index.cfm.
 
@@ -88,11 +107,24 @@ Official source: https://services.austintexas.gov/cityclerk/cfdi/index.cfm.
 | City Officials                                    | `tnne-6nva` |
 | Municipal Question Subject Matter Key-Value Pairs | `tajf-gz53` |
 
+The official Clerk page additionally links Reports with Lobbyist Name,
+`f5dv-uwts`.[4] It is distinct from raw Reports `aahu-djdd`. The additional linked
+view has not yet passed native inspection in this workstream, so do not silently
+replace the raw table or claim that both representations have been acquired.
+
 The master view is not a substitute for every activity or relationship table.
-Preserve identifiers and lookup relationships without asserting that a contact,
-registration, question or expenditure proves improper influence. Departmental
-visitor logs returned by a keyword search are separate sources, not implicitly
-part of a lobbyist report.
+The published model identifies registrant and report keys separately, with
+report-linked clients, expenditures, employees, municipal questions, property
+and subject-matter relationships.[5] Keep published supersession/activity fields
+when present; the 2018 internal-model diagram does not prove that every internal
+field exists in the current public tables. Inspect each published schema and
+preserve string keys rather than joining people by names or concatenating
+lookup rows into additive spending records. Collection began in July 2017.[4]
+A contact, registration, question or expenditure does not prove improper
+influence. Departmental visitor logs are separate sources, not implicitly part
+of a lobbyist report.
+
+Published model: https://services.austintexas.gov/edims/document.cfm?id=293053.
 
 Official source: https://services.austintexas.gov/cityclerk/lobbyist/index.cfm.
 
@@ -128,3 +160,11 @@ Dataset-specific row acquisition, date coverage, missing records and semantic
 interpretation must be established independently. Keep public personal/contact
 fields private in the acquisition archive; do not publish fixture rows or enrich
 people to demonstrate collection.
+
+## Sources
+
+[1] https://services.austintexas.gov/cityclerk/cfdi/index.cfm
+[2] https://services.austintexas.gov/edims/document.cfm?id=301923
+[3] https://services.austintexas.gov/edims/document.cfm?id=247730
+[4] https://services.austintexas.gov/cityclerk/lobbyist/index.cfm
+[5] https://services.austintexas.gov/edims/document.cfm?id=293053
