@@ -4,6 +4,52 @@ import { join, resolve } from "node:path";
 import { state } from "./integrity-state";
 import { cityPdf } from "./austin-fixtures";
 
+import { admissionRequest } from "../src/cli";
+
+test("admission preparation preserves optional source and collect selection", () => {
+  expect(admissionRequest("status", { root: "archive" })).toEqual([
+    "archive",
+    "status",
+    undefined,
+    undefined,
+  ]);
+  expect(
+    admissionRequest("sync", {
+      root: "archive",
+      source: "budgets",
+      limit: "bad",
+    }),
+  ).toEqual(["archive", "sync", "budgets", undefined]);
+  expect(
+    admissionRequest("collect", {
+      root: "archive",
+      source: "budgets",
+      limit: "2",
+      year: "2031",
+      role: "adopted",
+    }),
+  ).toEqual([
+    "archive",
+    "collect",
+    "budgets",
+    {
+      limit: 2,
+      year: "2031",
+      chapter: undefined,
+      date: undefined,
+      role: "adopted",
+      url: undefined,
+    },
+  ]);
+  expect(() =>
+    admissionRequest("collect", {
+      root: "archive",
+      source: "budgets",
+      limit: "bad",
+    }),
+  ).toThrow("invalid --limit");
+});
+
 // Export the actual old producer: never synthesize a schema4 archive by editing SQL.
 test("genuine imported4 live admission precedes writer and fetch; imports and cache remain allowed", async () => {
   const base = await mkdtemp(join(process.env.TMPDIR!, "live-admission-"));

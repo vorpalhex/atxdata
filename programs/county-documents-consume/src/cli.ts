@@ -388,6 +388,18 @@ function validateReviewImages(opts: Options): void {
     throw Error("use either --image or --images, not both");
   if (!opts.image && !opts.images) throw Error("required --image or --images");
 }
+/** Prepare the validated CLI options for the prewriter admission boundary. */
+export function admissionRequest(
+  command: string,
+  opts: Options,
+): Parameters<typeof admitLive> {
+  return [
+    required(opts, "root"),
+    command,
+    opts.source ? sourceName(opts.source) : undefined,
+    command === "collect" ? selection(opts) : undefined,
+  ];
+}
 export async function run(args: string[]): Promise<unknown> {
   const parsed = parseCLI(args),
     command = parsed.command;
@@ -413,12 +425,7 @@ export async function run(args: string[]): Promise<unknown> {
       selection(opts),
       budget,
     );
-  await admitLive(
-    required(opts, "root"),
-    command,
-    opts.source ? sourceName(opts.source) : undefined,
-    command === "collect" ? selection(opts) : undefined,
-  );
+  await admitLive(...admissionRequest(command, opts));
   const engine = await Engine.open(required(opts, "root"), {
     maxPdfBytes: budget.maxPdfBytes,
   });
