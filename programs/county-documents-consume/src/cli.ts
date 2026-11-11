@@ -7,6 +7,7 @@ import { workBudget, type WorkBudget } from "./budgets";
 import { statFile } from "../../civicclerk-consume/src/archive";
 import { Engine } from "./engine";
 import { selectionBytes } from "./selection-budget";
+import { admitLive } from "./live-admission";
 import { pageUrl } from "./discovery";
 import { requireArchiveEndpoint } from "./historical";
 import { sourceName, type Selection } from "./adapters";
@@ -412,6 +413,12 @@ export async function run(args: string[]): Promise<unknown> {
       selection(opts),
       budget,
     );
+  await admitLive(
+    required(opts, "root"),
+    command,
+    opts.source ? sourceName(opts.source) : undefined,
+    command === "collect" ? selection(opts) : undefined,
+  );
   const engine = await Engine.open(required(opts, "root"), {
     maxPdfBytes: budget.maxPdfBytes,
   });

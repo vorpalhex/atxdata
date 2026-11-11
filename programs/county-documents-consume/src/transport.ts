@@ -1,4 +1,5 @@
 import { load } from "cheerio";
+import { requireLiveFormat } from "./producing-integrity";
 import { archiveForm, requireArchiveEndpoint } from "./historical";
 import {
   humanScope,
@@ -46,6 +47,7 @@ export class Transport {
     budget: Partial<WorkBudget> = {},
     options: { human?: boolean } = {},
   ) {
+    requireLiveFormat(engine.db, "live-http");
     this.human = humanOption(options.human);
     this.operation = new OperationBudget({
       maxPdfBytes: engine.maxPdfBytes,
@@ -135,6 +137,7 @@ export class Transport {
     return this.operation.reserve(kind);
   }
   private start(source: Source, url: string, kind: Kind): Attempt {
+    requireLiveFormat(this.engine.db, "live-http");
     // Recheck after the awaited pacing gate; another instance may have reserved the archive.
     this.gate();
     if (source.startsWith("austin-") && !hasRedirectSchema(this.engine))
