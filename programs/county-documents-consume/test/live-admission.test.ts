@@ -12,14 +12,28 @@ test("admission preparation preserves optional source and collect selection", ()
     "status",
     undefined,
     undefined,
+    undefined,
   ]);
   expect(
     admissionRequest("sync", {
       root: "archive",
       source: "budgets",
-      limit: "bad",
+      limit: "2",
     }),
-  ).toEqual(["archive", "sync", "budgets", undefined]);
+  ).toEqual([
+    "archive",
+    "sync",
+    "budgets",
+    {
+      limit: 2,
+      year: undefined,
+      chapter: undefined,
+      date: undefined,
+      role: undefined,
+      url: undefined,
+    },
+    undefined,
+  ]);
   expect(
     admissionRequest("collect", {
       root: "archive",
@@ -40,6 +54,7 @@ test("admission preparation preserves optional source and collect selection", ()
       role: "adopted",
       url: undefined,
     },
+    undefined,
   ]);
   expect(() =>
     admissionRequest("collect", {
@@ -157,7 +172,7 @@ test("genuine imported4 live admission precedes writer and fetch; imports and ca
   );
   expect(
     (
-      await invoke(cli, root, [
+      await invoke(oldCli, root, [
         "import-pdf",
         "--observation",
         rows[0].id,

@@ -5,6 +5,11 @@ import { join } from "node:path";
 import { statFile } from "../../civicclerk-consume/src/archive";
 import { sha } from "./engine";
 import { exactDate, type Evidence } from "./adapters";
+import {
+  financialBodyMatches,
+  explicitPeriod,
+  explicitQuarter,
+} from "./financial-period";
 
 const MONTHS = [
   "January",
@@ -76,6 +81,19 @@ export function bodyEvidence(text: string) {
     amendmentThrough: namedDate(amendment),
     chapterAmendmentOriginal: chapter,
     chapterAmendmentDate: namedDate(chapter),
+  };
+}
+export function financialBodyEvidence(text: string) {
+  const title = {
+    label: text.slice(0, 512).replace(/\s+/g, " ").trim(),
+    headings: [],
+  };
+  const fiscalPeriod = explicitPeriod(title);
+  return {
+    ...bodyEvidence(text),
+    fiscalYear: fiscalPeriod?.kind === "single-year" ? fiscalPeriod.year : null,
+    fiscalPeriod,
+    quarter: explicitQuarter(title),
   };
 }
 export function requirePdf(
@@ -210,8 +228,9 @@ function austinFinancialIdentity(text: string, row: Evidence): boolean {
     row.jurisdiction === "City of Austin",
     row.administeringCounty === null,
     /^City of Austin\b/i.test(title),
-    Boolean(row.fiscalYear),
-    fiscal === row.fiscalYear,
+    Object.hasOwn(row, "fiscalPeriod")
+      ? financialBodyMatches(title, row)
+      : Boolean(row.fiscalYear) && fiscal === row.fiscalYear,
     Boolean(roles[row.role]?.test(title)),
   ];
   return checks.every(Boolean);

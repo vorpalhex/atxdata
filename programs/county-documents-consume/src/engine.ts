@@ -1,5 +1,9 @@
 import { DEFAULT_PDF_BYTES, positiveBudget } from "./budgets";
 import {
+  financialSelection,
+  requireCurrentFinancial,
+} from "./financial-period";
+import {
   catalog,
   pageLinks,
   pageUrl,
@@ -38,6 +42,7 @@ import { requireArtifactReceipt } from "./artifact-receipts";
 import { verifyArtifacts, verifyRepresentations } from "./archive-verification";
 import {
   bodyEvidence,
+  financialBodyEvidence,
   legacyBodyEvidence,
   inspectPdf,
   requirePdf,
@@ -82,6 +87,7 @@ function selectedIdentity(row: Evidence) {
     year: row.year,
     date: row.date,
     role: row.role,
+    ...(Object.hasOwn(row, "fiscalPeriod") ? financialSelection(row) : {}),
   };
 }
 function knownReceiptSchema(receipt: {
@@ -92,7 +98,9 @@ function knownReceiptSchema(receipt: {
     ([2, 3, 4].includes(receipt.schema) &&
       (receipt.schema !== 4 || receipt.identityPolicy === "scoped-title-v1")) ||
     (receipt.schema === 5 &&
-      receipt.identityPolicy === "austin-fiscal-title-v1")
+      receipt.identityPolicy === "austin-fiscal-title-v1") ||
+    (receipt.schema === 6 &&
+      receipt.identityPolicy === "austin-period-quarter-title-v2")
   );
 }
 function requireSourceReceipt(
@@ -101,10 +109,17 @@ function requireSourceReceipt(
 ): void {
   if (
     row.source === "austin-financial-publications" &&
-    (receipt.schema !== 5 ||
-      receipt.identityPolicy !== "austin-fiscal-title-v1")
+    (Object.hasOwn(row, "fiscalPeriod")
+      ? receipt.schema !== 6 ||
+        receipt.identityPolicy !== "austin-period-quarter-title-v2"
+      : receipt.schema !== 5 ||
+        receipt.identityPolicy !== "austin-fiscal-title-v1")
   )
     throw Error("Austin PDF requires versioned city identity receipt");
+}
+function receiptBody(text: string, schema: number) {
+  if (schema === 2) return legacyBodyEvidence(text);
+  return schema === 6 ? financialBodyEvidence(text) : bodyEvidence(text);
 }
 export class Engine {
   readonly db: Database;
@@ -316,7 +331,7 @@ export class Engine {
         ]);
         this.db.run("INSERT INTO snapshot_metadata VALUES(?,?,?,?,?,?)", [
           id,
-          source === "austin-financial-publications" ? 4 : 3,
+          source === "austin-financial-publications" ? 5 : 3,
           rows.length,
           headers,
           headers === null ? null : sha(headers),
@@ -433,10 +448,10 @@ export class Engine {
     headers: string | null,
   ) {
     return {
-      schema: row.source === "austin-financial-publications" ? 5 : 4,
+      schema: row.source === "austin-financial-publications" ? 6 : 4,
       identityPolicy:
         row.source === "austin-financial-publications"
-          ? "austin-fiscal-title-v1"
+          ? "austin-period-quarter-title-v2"
           : "scoped-title-v1",
       parser: "Poppler",
       quality: "text-identity-only",
@@ -446,7 +461,10 @@ export class Engine {
       textHash: sha(parsed.text),
       info: parsed.info,
       pages: parsed.pages,
-      body: bodyEvidence(parsed.text),
+      body:
+        row.source === "austin-financial-publications"
+          ? financialBodyEvidence(parsed.text)
+          : bodyEvidence(parsed.text),
       headers,
       originalRetrievedAt: null as string | null,
     };
@@ -457,6 +475,7 @@ export class Engine {
     row: Evidence,
     headers: string | null = null,
   ): Promise<string> {
+    requireCurrentFinancial(row);
     const parsed = await this.parsedPdf(bytes, mime);
     requireTextIdentity(parsed.text, row);
     return JSON.stringify(this.receipt(row, bytes, parsed, headers));
@@ -522,6 +541,7 @@ export class Engine {
   ) {
     await this.preflight();
     const row = this.observation(id);
+    requireCurrentFinancial(row);
     const producing = producingReference(origin, attempt);
     requireLiveFormat(this.db, origin);
     requireProducing(
@@ -794,11 +814,7 @@ export class Engine {
     if (
       receipt.quality !== "text-identity-only" ||
       JSON.stringify(receipt.body) !==
-        JSON.stringify(
-          receipt.schema === 2
-            ? legacyBodyEvidence(parsed.text)
-            : bodyEvidence(parsed.text),
-        )
+        JSON.stringify(receiptBody(parsed.text, receipt.schema))
     )
       throw new Error("validation body receipt mismatch");
     requireTextIdentity(parsed.text, row);
@@ -909,7 +925,7 @@ export class Engine {
         "SELECT * FROM snapshot_metadata WHERE snapshot=?",
       )
       .get(id);
-    if (!meta || ![1, 2, 3, 4].includes(meta.adapter_schema))
+    if (!meta || ![1, 2, 3, 4, 5].includes(meta.adapter_schema))
       throw new Error("snapshot schema receipt missing");
     if (
       (meta.headers === null ? null : sha(meta.headers)) !== meta.headers_hash
@@ -923,7 +939,7 @@ export class Engine {
     const meta = this.snapshotMeta(snapshot.id);
     if (
       (snapshot.source === "austin-financial-publications") !==
-      (meta.adapter_schema === 4)
+      [4, 5].includes(meta.adapter_schema)
     )
       throw Error("source/adapter metadata version mismatch");
     const expected = discover(

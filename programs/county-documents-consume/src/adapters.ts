@@ -1,4 +1,9 @@
 import { load } from "cheerio";
+import {
+  currentFinancial,
+  type FiscalPeriod,
+  type Quarter,
+} from "./financial-period";
 import { pageUrl } from "./discovery";
 
 export const sources = {
@@ -62,6 +67,8 @@ export type Evidence = {
   taxYear: string | null;
   administeringCounty: "Travis" | null;
   publisher?: "City of Austin";
+  fiscalPeriod?: FiscalPeriod | null;
+  quarter?: Quarter | null;
 };
 export type Selection = {
   limit: number;
@@ -414,16 +421,26 @@ function parseCandidate(
     /^Title\s+30\b/i.test(row.label)
   )
     return { ...row, role: "title-30" };
-  return adapters[source](row);
+  return adaptedEvidence(source, schema, adapters[source](row));
+}
+function adaptedEvidence(
+  source: Source,
+  schema: number,
+  row: Evidence | null,
+): Evidence | null {
+  if (!row) return null;
+  return source === "austin-financial-publications" && schema === 5
+    ? currentFinancial(row)
+    : row;
 }
 export function discover(
   source: Source,
   page: string,
   html: string,
-  schema = source === "austin-financial-publications" ? 4 : 3,
+  schema = source === "austin-financial-publications" ? 5 : 3,
 ): Evidence[] {
-  if (source === "austin-financial-publications" && schema !== 4)
-    throw Error("Austin requires adapter metadata schema4");
+  if (source === "austin-financial-publications" && ![4, 5].includes(schema))
+    throw Error("Austin requires adapter metadata schema4 or schema5");
   if (
     schema < 3 &&
     !(sources[source].pages as readonly string[]).includes(page)

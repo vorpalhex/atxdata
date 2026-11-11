@@ -1,4 +1,5 @@
 import { load } from "cheerio";
+import { requireCurrentFinancial } from "./financial-period";
 import { requireLiveFormat } from "./producing-integrity";
 import { archiveForm, requireArchiveEndpoint } from "./historical";
 import {
@@ -597,6 +598,7 @@ export class Transport {
     return this.serial(async () => {
       await this.engine.preflight();
       const row = this.engine.observation(id);
+      requireCurrentFinancial(row);
       const delay = await this.robots(row.source, row.url);
       const result = await this.request(row.source, row.url, "pdf", delay);
       const imported = await this.engine.importPdf(

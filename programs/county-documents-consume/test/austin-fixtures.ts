@@ -1,5 +1,6 @@
-export function cityPdf() {
-  const text = "City of Austin Quarterly Financial Report Fiscal Year 2031";
+export function cityPdf(
+  text = "City of Austin Quarterly Financial Report Fiscal Year 2031",
+) {
   const stream = `BT /F1 12 Tf 10 180 Td (${text}) Tj ET`;
   const objects = [
     "<< /Type /Catalog /Pages 2 0 R >>",

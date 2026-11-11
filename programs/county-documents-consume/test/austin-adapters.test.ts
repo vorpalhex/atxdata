@@ -43,7 +43,7 @@ test("Austin snapshots retain explicit metadata version and verify without HTTP"
       engine.db
         .query("SELECT adapter_schema FROM snapshot_metadata WHERE snapshot=?")
         .get(result.snapshot),
-    ).toEqual({ adapter_schema: 4 });
+    ).toEqual({ adapter_schema: 5 });
     await engine.preflight();
     expect(engine.status().attempts).toBe(0);
     expect(

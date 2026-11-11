@@ -397,7 +397,8 @@ export function admissionRequest(
     required(opts, "root"),
     command,
     opts.source ? sourceName(opts.source) : undefined,
-    command === "collect" ? selection(opts) : undefined,
+    ["collect", "sync"].includes(command) ? selection(opts) : undefined,
+    opts.observation,
   ];
 }
 export async function run(args: string[]): Promise<unknown> {

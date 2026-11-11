@@ -10,7 +10,9 @@ import { state } from "./integrity-state";
 test("native Austin eDIMS acquisition preserves services robots302 and final policy; reuse and refresh", async () => {
   const root = await mkdtemp(join(process.env.TMPDIR!, "austin-native-"));
   const archive = join(root, "archive"),
-    pdf = cityPdf(),
+    pdf = cityPdf(
+      "City of Austin Quarterly Financial Report FY 2025-2026 First Quarter",
+    ),
     calls: { url: string; at: number }[] = [];
   const page =
     "https://www.austintexas.gov/budget-excellence/data-and-insights";
@@ -63,7 +65,7 @@ test("native Austin eDIMS acquisition preserves services robots302 and final pol
         });
       if (url === page)
         return new Response(
-          `<h1>City of Austin</h1><h2>FY 2031</h2><a href="${doc}">Quarterly Financial Report</a>`,
+          `<h1>City of Austin</h1><h2>FY 2025-2026</h2><a href="${doc}">First Quarter Financial Report</a>`,
           { headers: { "content-type": "text/html" } },
         );
       if (url === doc && interrupt)
@@ -146,6 +148,14 @@ test("native Austin eDIMS acquisition preserves services robots302 and final pol
     expect(original.error).toBeNull();
     const version = db.query<any, []>("SELECT * FROM versions").get();
     expect(version.sha).toBe(createHash("sha256").update(pdf).digest("hex"));
+    expect(JSON.parse(version.validation)).toMatchObject({
+      schema: 6,
+      selection: {
+        fiscalYear: null,
+        fiscalPeriod: { kind: "span", startYear: "2025", endYear: "2026" },
+        quarter: { ordinal: 1 },
+      },
+    });
     expect(
       Buffer.from(await readFile(join(archive, version.path))).equals(pdf),
     ).toBe(true);
@@ -246,7 +256,7 @@ test("native Austin eDIMS acquisition preserves services robots302 and final pol
     const seed = join(root, "seed.html");
     await writeFile(
       seed,
-      `<h2>FY 2031</h2><a href="${doc}">Quarterly Financial Report</a>`,
+      `<h2>FY 2025-2026</h2><a href="${doc}">First Quarter Financial Report</a>`,
     );
     const bounded = join(root, "bounded");
     await invoke(
