@@ -19,7 +19,18 @@ import {
   type Selection,
   type Source,
 } from "./adapters";
-import { initialize, verifySchema, readCooldown } from "./schema";
+import {
+  initialize,
+  verifySchema,
+  readCooldown,
+  archiveVersion,
+} from "./schema";
+import {
+  requireLiveFormat,
+  verifyProducing,
+  requireProducing,
+  producingReference,
+} from "./producing-integrity";
 import { verifyCooldownObligations } from "./cooldown-integrity";
 import { verifyTransportLedger } from "./transport-integrity";
 import { hasRedirectSchema } from "./redirects";
@@ -133,6 +144,19 @@ export class Engine {
     const repository = resolve(import.meta.dir, "../../..");
     if (root === repository || root.startsWith(repository + "/"))
       throw new Error("runtime must stay outside checkout");
+    const retained = await statFile(join(root, "documents.sqlite"));
+    if (retained) {
+      const reader = new Database(join(root, "documents.sqlite"), {
+        readonly: true,
+        strict: true,
+      });
+      try {
+        verifySchema(reader);
+        verifyProducing(reader);
+      } finally {
+        reader.close();
+      }
+    }
     const release = await archiveLock(root);
     try {
       const existing = await statFile(join(root, "documents.sqlite"));
@@ -257,7 +281,16 @@ export class Engine {
     html: string,
     origin: string,
     headers: string | null = null,
+    attempt?: string,
   ) {
+    const producing = producingReference(origin, attempt);
+    requireLiveFormat(this.db, origin);
+    requireProducing(
+      this.db,
+      { source, url, sha: sha(Buffer.from(html)), headers },
+      producing,
+      "page",
+    );
     if (source === "austin-financial-publications" && !hasRedirectSchema(this))
       throw Error(
         "Austin metadata requires new schema4 archive; no automatic migration",
@@ -289,6 +322,13 @@ export class Engine {
           headers === null ? null : sha(headers),
           origin === "live-http" ? new Date().toISOString() : null,
         ]);
+        if (archiveVersion(this.db) === 5)
+          this.db.run("INSERT INTO snapshot_producers VALUES(?,?,?,?)", [
+            id,
+            1,
+            origin,
+            producing.attempt,
+          ]);
         for (const evidence of rows)
           this.db.run("INSERT INTO observations VALUES(?,?,?,?,?,'pending')", [
             crypto.randomUUID(),
@@ -428,6 +468,11 @@ export class Engine {
     origin: string,
     validation: string,
   ) {
+    if (archiveVersion(this.db) === 5 && !JSON.parse(validation).producing)
+      validation = JSON.stringify({
+        ...JSON.parse(validation),
+        producing: producingReference(origin),
+      });
     const artifact = await this.artifact(bytes, "pdf"),
       receiptHash = sha(validation),
       observed = new Date().toISOString();
@@ -473,12 +518,25 @@ export class Engine {
     mime: string,
     origin: string,
     headers: string | null = null,
+    attempt?: string,
   ) {
     await this.preflight();
     const row = this.observation(id);
+    const producing = producingReference(origin, attempt);
+    requireLiveFormat(this.db, origin);
+    requireProducing(
+      this.db,
+      { source: row.source, url: row.url, sha: sha(bytes), headers },
+      producing,
+      "pdf",
+    );
     return this.run(row.source, "collect-import", async () => {
       try {
-        const validation = await this.validatePdf(bytes, mime, row, headers);
+        const original = await this.validatePdf(bytes, mime, row, headers);
+        const validation =
+          archiveVersion(this.db) === 5
+            ? JSON.stringify({ ...JSON.parse(original), producing })
+            : original;
         return await this.commitPdf(row, bytes, mime, origin, validation);
       } catch (error) {
         this.policyIntegrity();
@@ -605,6 +663,7 @@ export class Engine {
   }
   async archiveIntegrity(): Promise<void> {
     verifySchema(this.db);
+    verifyProducing(this.db);
     await verifyArtifacts(this);
     await this.verifySnapshots();
     this.verifyHistory();

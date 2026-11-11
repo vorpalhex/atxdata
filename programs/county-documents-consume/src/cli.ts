@@ -6,6 +6,7 @@ import { writeStdout } from "./cli-output";
 import { workBudget, type WorkBudget } from "./budgets";
 import { statFile } from "../../civicclerk-consume/src/archive";
 import { Engine } from "./engine";
+import { selectionBytes } from "./selection-budget";
 import { pageUrl } from "./discovery";
 import { requireArchiveEndpoint } from "./historical";
 import { sourceName, type Selection } from "./adapters";
@@ -283,16 +284,27 @@ async function collect(engine: Engine, opts: Options, refresh: boolean) {
     scope = selection(opts),
     rows = engine.list(source, scope);
   if (!rows.length) throw new Error("no selected observations");
-  const transport = new Transport(engine, {}, budgets(opts), {
-      human: opts.human === "yes",
-    }),
+  const budget = budgets(opts);
+  const cached = refresh
+    ? 0
+    : await selectionBytes(engine.root, source, scope, budget);
+  const transport = rows.every((row) => !refresh && row.status === "downloaded")
+      ? null
+      : new Transport(
+          engine,
+          {},
+          { ...budget, maxBytes: budget.maxBytes - cached },
+          {
+            human: opts.human === "yes",
+          },
+        ),
     outcomes = [];
   for (const row of rows) {
     if (!refresh && row.status === "downloaded")
       outcomes.push(
         await engine.verify(source, { ...scope, url: row.url, limit: 1 }),
       );
-    else outcomes.push(await transport.collect(row.id));
+    else outcomes.push(await transport!.collect(row.id));
   }
   return outcomes;
 }
@@ -393,6 +405,13 @@ export async function run(args: string[]): Promise<unknown> {
     throw new Error("network requires --allow-network");
   const budget = budgets(opts);
   validate(command as Command, opts);
+  if (command === "collect" || command === "verify")
+    await selectionBytes(
+      required(opts, "root"),
+      sourceName(required(opts, "source")),
+      selection(opts),
+      budget,
+    );
   const engine = await Engine.open(required(opts, "root"), {
     maxPdfBytes: budget.maxPdfBytes,
   });

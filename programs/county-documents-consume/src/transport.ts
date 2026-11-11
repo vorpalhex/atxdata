@@ -565,6 +565,7 @@ export class Transport {
         result.body.toString(),
         "live-http",
         result.headers,
+        result.attempt,
       );
       this.finishRedirect();
       return imported;
@@ -601,6 +602,7 @@ export class Transport {
         result.mime,
         "live-http",
         result.headers,
+        result.attempt,
       );
       this.finishRedirect();
       return imported;

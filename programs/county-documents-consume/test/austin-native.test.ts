@@ -5,6 +5,7 @@ import { Database } from "bun:sqlite";
 import { createHash } from "node:crypto";
 
 import { cityPdf } from "./austin-fixtures";
+import { state } from "./integrity-state";
 
 test("native Austin eDIMS acquisition preserves services robots302 and final policy; reuse and refresh", async () => {
   const root = await mkdtemp(join(process.env.TMPDIR!, "austin-native-"));
@@ -161,6 +162,22 @@ test("native Austin eDIMS acquisition preserves services robots302 and final pol
     for (let i = 1; i < calls.length; i++)
       expect(calls[i]!.at - calls[i - 1]!.at).toBeGreaterThanOrEqual(2950);
     for (const [name, sql, category] of [
+      ["missing-producer", "DELETE FROM snapshot_producers", /producing/],
+      [
+        "pdf-headers",
+        `UPDATE attempts SET headers='[["content-type","text/html"]]' WHERE kind='pdf'`,
+        /producing/,
+      ],
+      [
+        "pdf-url",
+        "UPDATE attempts SET url='https://services.austintexas.gov/edims/document.cfm?id=999999' WHERE kind='pdf'",
+        /producing/,
+      ],
+      [
+        "page-url",
+        "UPDATE attempts SET url='https://www.austintexas.gov/budget-excellence/other-report' WHERE kind='page'",
+        /producing/,
+      ],
       [
         "edge",
         "UPDATE redirect_edges SET target_url='https://other.invalid/robots.txt'",
@@ -204,12 +221,14 @@ test("native Austin eDIMS acquisition preserves services robots302 and final pol
       fault.exec(sql);
       fault.exec("PRAGMA wal_checkpoint(TRUNCATE)");
       fault.close();
+      const beforeState = await state(target);
       const bytes = await readFile(join(target, "documents.sqlite")),
         n = calls.length;
       expect(await invoke("verify", ["--limit", "1"], target, 1)).toMatch(
         category,
       );
       expect(calls.length).toBe(n);
+      expect(await state(target)).toEqual(beforeState);
       expect(
         (await readFile(join(target, "documents.sqlite"))).equals(bytes),
       ).toBe(true);

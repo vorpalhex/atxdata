@@ -94,7 +94,7 @@ export function hasRedirectSchema(engine: Engine): boolean {
   return (
     engine.db
       .query<{ version: number }, []>("SELECT version FROM archive_schema")
-      .get()?.version === 4
+      .get()?.version! >= 4
   );
 }
 export function redirectEdges(engine: Engine): Edge[] {

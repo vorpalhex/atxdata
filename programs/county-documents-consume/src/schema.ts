@@ -42,8 +42,9 @@ CREATE TABLE IF NOT EXISTS robots(origin TEXT PRIMARY KEY,body TEXT NOT NULL,sha
 CREATE TABLE IF NOT EXISTS representations(attempt TEXT PRIMARY KEY REFERENCES attempts(id),encoding TEXT NOT NULL,representation TEXT NOT NULL,wire_bytes INTEGER,decoded_bytes INTEGER NOT NULL,encoded_hash TEXT,decoded_hash TEXT NOT NULL,wire_path TEXT,decoded_path TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS classifier_resolutions(attempt TEXT PRIMARY KEY REFERENCES attempts(id),resolved_at INTEGER NOT NULL,previous_gate TEXT NOT NULL,reason TEXT NOT NULL,evidence_hash TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS history_receipts(observation TEXT NOT NULL,sha TEXT NOT NULL,receipt_hash TEXT NOT NULL,PRIMARY KEY(observation,sha),FOREIGN KEY(observation,sha) REFERENCES history(observation,sha));
-CREATE TABLE IF NOT EXISTS archive_schema(id INTEGER PRIMARY KEY CHECK(id=1),version INTEGER NOT NULL CHECK(version=4));
-INSERT OR IGNORE INTO archive_schema VALUES(1,4);
+CREATE TABLE IF NOT EXISTS archive_schema(id INTEGER PRIMARY KEY CHECK(id=1),version INTEGER NOT NULL CHECK(version=5));
+INSERT OR IGNORE INTO archive_schema VALUES(1,5);
+CREATE TABLE snapshot_producers(snapshot TEXT PRIMARY KEY REFERENCES snapshots(id),schema INTEGER NOT NULL CHECK(schema=1),origin TEXT NOT NULL,attempt TEXT REFERENCES attempts(id));
 CREATE TABLE redirect_edges(attempt TEXT PRIMARY KEY REFERENCES attempts(id),target_url TEXT NOT NULL,target_attempt TEXT UNIQUE REFERENCES attempts(id));
 CREATE TABLE robots_bindings(origin TEXT PRIMARY KEY REFERENCES robots(origin),redirect_attempt TEXT NOT NULL UNIQUE REFERENCES redirect_edges(attempt),final_attempt TEXT NOT NULL REFERENCES attempts(id));
 CREATE TABLE IF NOT EXISTS snapshot_metadata(snapshot TEXT PRIMARY KEY REFERENCES snapshots(id),adapter_schema INTEGER NOT NULL,observation_count INTEGER NOT NULL,headers TEXT,headers_hash TEXT,original_retrieved_at TEXT);
@@ -151,10 +152,11 @@ export function verifySchema(db: Database): void {
   verifyTransportSchema(db);
   requireTables(db, [...BASE_TABLES, ...EXTRA_TABLES]);
   readCooldown(db);
-  if (archiveVersion(db) === 4) verifyRedirectSchema(db);
+  if (archiveVersion(db) >= 4) verifyRedirectSchema(db);
+  if (archiveVersion(db) === 5) requireTables(db, ["snapshot_producers"]);
   verifyDatabaseIntegrity(db);
 }
-function archiveVersion(db: Database): number {
+export function archiveVersion(db: Database): number {
   const base = db
     .query<{ schema_version: number }, []>(
       "SELECT schema_version FROM settings WHERE id=1",
@@ -165,7 +167,10 @@ function archiveVersion(db: Database): number {
       "SELECT version FROM archive_schema WHERE id=1",
     )
     .get();
-  if (base?.schema_version !== 1 || ![3, 4].includes(extension?.version ?? 0))
+  if (
+    base?.schema_version !== 1 ||
+    ![3, 4, 5].includes(extension?.version ?? 0)
+  )
     throw new Error("schema mismatch");
   return extension!.version;
 }
