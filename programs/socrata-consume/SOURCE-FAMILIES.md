@@ -34,7 +34,9 @@ transactions under Texas Government Code Section 552.133 and Council Resolution
 The collector retains the publisher's metadata; it cannot recover excluded rows.
 See https://www.austintexas.gov/financial-services/financial-transparency.
 
-Contract fields such as `doc_cd`, `doc_dept_cd`, `doc_id`, `doc_vers_no`,
+The Contracts publisher states that contracts are visible only while active, so
+this catalog is not an archive of expired contracts. Contract fields such as
+`doc_cd`, `doc_dept_cd`, `doc_id`, `doc_vers_no`,
 `doc_vend_ln_no` and `row_key` retain distinct identities. The purchase-order
 source publishes `purchase_order`, `master_agreement`, quantities, units and
 prices at its own grain. Preserve those fields without treating every contract,
