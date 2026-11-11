@@ -2,6 +2,14 @@
 
 Bun/SQLite collector for explicitly selected, public tabular Austin Socrata datasets. eCheckbook (`8c6z-qnmj`) is a convenience preset, not an asset allowlist. Other compatible datasets are selected through retained Austin catalog membership and schema. This program does not authenticate, register identities, acquire tokens, mutate the publisher, enrich people, or enumerate all city holdings.
 
+## Austin source families
+
+[SOURCE-FAMILIES.md](SOURCE-FAMILIES.md) lists evidenced spending, procurement,
+campaign-finance, lobbying and other source IDs, their different record grains,
+and unresolved coverage boundaries. These are ordinary asset operands, not a new
+allowlist. Catalog/schema inspection is not proof that a dataset's rows have been
+acquired or its entire history is available.
+
 ## Source identity and old archives
 
 The canonical publisher and catalog authority is `https://datahub.austintexas.gov`; catalog queries filter that exact domain. Published catalog links must use that authority and name the matching asset. Source and catalog share one retained robots observation, without a separate api.us policy dependency. Asset IDs are preserved literally.
