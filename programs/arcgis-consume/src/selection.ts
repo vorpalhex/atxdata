@@ -135,7 +135,7 @@ export function selectionOptions(
   };
 }
 export async function readCatalog(
-  a: Archive,
+  a: Pick<Archive, "request" | "read" | "readExpected">,
   run: string,
   source: Source,
   maxPages: number,

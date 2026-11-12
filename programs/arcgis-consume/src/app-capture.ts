@@ -1,4 +1,4 @@
-import type { Archive } from "./archive";
+import type { AppEvidence } from "./app-readonly";
 function failedWire(
   fresh: {
     status: number | null;
@@ -15,7 +15,7 @@ function failedWire(
   );
 }
 function newUnknownTransfer(
-  a: Archive,
+  a: AppEvidence,
   run: string,
   label: string,
   before: Set<string>,
@@ -44,7 +44,7 @@ function newUnknownTransfer(
   );
 }
 export async function captureText(
-  a: Archive,
+  a: AppEvidence,
   run: string,
   label: string,
   url: string,
@@ -80,7 +80,7 @@ export async function captureText(
 }
 
 export async function json(
-  a: Archive,
+  a: AppEvidence,
   run: string,
   label: string,
   url: string,

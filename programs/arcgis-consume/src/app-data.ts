@@ -1,4 +1,4 @@
-import type { Archive } from "./archive";
+import type { AppEvidence } from "./app-readonly";
 import type { Database } from "bun:sqlite";
 import { createHash } from "node:crypto";
 import { ensure, object } from "./check";
@@ -60,7 +60,7 @@ type Producer = {
   bytes: number;
   headers: string;
 };
-function intent(a: Archive, run: string) {
+function intent(a: AppEvidence, run: string) {
   const row = a.store.db
     .query<AppRun, [string]>(
       "SELECT id,source,command,status,summary FROM runs WHERE id=?",
@@ -73,7 +73,12 @@ function intent(a: Archive, run: string) {
     "empty representation requires saved v2 intent",
   );
 }
-function freshEmpty(a: Archive, run: string, url: string, before: Set<string>) {
+function freshEmpty(
+  a: AppEvidence,
+  run: string,
+  url: string,
+  before: Set<string>,
+) {
   intent(a, run);
   const rows = a.store.db
     .query<Producer, [string, string]>(
@@ -182,7 +187,7 @@ export function v2Receipt(
   };
 }
 
-function requirePolicy(a: Archive, run: string) {
+function requirePolicy(a: AppEvidence, run: string) {
   const p = a.store.observation(run, "robots-www.arcgis.com");
   ensure(
     p &&
@@ -194,7 +199,7 @@ function requirePolicy(a: Archive, run: string) {
   );
 }
 function validateRepresentation(
-  a: Archive,
+  a: AppEvidence,
   run: string,
   url: string,
   before: Set<string>,
@@ -212,7 +217,7 @@ function validateRepresentation(
   freshEmpty(a, run, url, before);
 }
 export async function readV2AppData(
-  a: Archive,
+  a: AppEvidence,
   run: string,
   url: string,
   offline: boolean,

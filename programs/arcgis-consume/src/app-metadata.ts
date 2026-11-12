@@ -9,6 +9,7 @@ import {
 } from "./app-intent";
 import { readV2AppData } from "./app-data";
 import type { Archive } from "./archive";
+import type { AppEvidence } from "./app-readonly";
 import { ensure, object, same } from "./check";
 import {
   readCatalog,
@@ -28,14 +29,14 @@ type Options = Selection & {
   appDataFormat?: string;
 };
 type Run = AppRun;
-function runs(a: Archive) {
+function runs(a: AppEvidence) {
   return a.store.db
     .query<Run, []>(
       "SELECT id,source,command,status,summary FROM runs ORDER BY rowid",
     )
     .all();
 }
-function marked(a: Archive, r: Run) {
+function marked(a: AppEvidence, r: Run) {
   return markedApp(
     r,
     a.store.options(r.id),
@@ -44,7 +45,7 @@ function marked(a: Archive, r: Run) {
       .some((o) => o.run === r.id && o.label.startsWith("app-")),
   );
 }
-function checkpoint(a: Archive, r: Run) {
+function checkpoint(a: AppEvidence, r: Run) {
   return validateAppCheckpoint(r, a.store.options(r.id));
 }
 function isRecord(v: unknown): v is Record<string, unknown> {
@@ -87,7 +88,7 @@ function disposition(v: unknown) {
     return "empty";
   return "unsupported";
 }
-function receipts(a: Archive, run: string) {
+function receipts(a: AppEvidence, run: string) {
   return a.store
     .observations()
     .filter((o) => o.run === run)
@@ -116,7 +117,7 @@ type AppInterpretation = {
   appDataReceipt?: unknown;
 };
 async function interpretData(
-  a: Archive,
+  a: AppEvidence,
   r: Run,
   s: AppIntent,
   offline: boolean,
@@ -152,7 +153,7 @@ function representationFields(s: AppIntent, data: AppInterpretation) {
     ...(data.appDataReceipt ? { appDataReceipt: data.appDataReceipt } : {}),
   };
 }
-async function summary(a: Archive, r: Run, offline: boolean) {
+async function summary(a: AppEvidence, r: Run, offline: boolean) {
   const s = checkpoint(a, r),
     selected = s.selection;
   const catalog = await readCatalog(
@@ -217,7 +218,7 @@ async function summary(a: Archive, r: Run, offline: boolean) {
   };
 }
 
-export async function verifyAppRuns(a: Archive) {
+export async function verifyAppRuns(a: AppEvidence) {
   const selected = runs(a).filter((r) => marked(a, r));
   // Validate discriminator and summaries for every marked run before recovery writes.
   for (const r of selected) {

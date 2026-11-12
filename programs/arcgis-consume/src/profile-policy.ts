@@ -1,4 +1,4 @@
-import type { Archive } from "./archive";
+import type { AppEvidence } from "./app-readonly";
 import { ensure, object } from "./check";
 import robotsParser from "robots-parser";
 import { allowed } from "./rules";
@@ -22,7 +22,7 @@ export function profileAllowed(
 
 // RFC9309 2.3.1.3, explicitly approved only for these source profiles.
 // This is an unavailable policy receipt, never a successful robots body.
-function admitted(a: Archive, run: string, url: string) {
+function admitted(a: AppEvidence, run: string, url: string) {
   const source = a.store.options(run)?.source;
   return (
     (source === "austin" && url === "https://services.arcgis.com/robots.txt") ||
@@ -47,7 +47,7 @@ function requireUnavailableHeaders(raw: string) {
     "robots challenge/authentication requires review",
   );
 }
-export function unavailablePolicy(a: Archive, run: string, url: string) {
+export function unavailablePolicy(a: AppEvidence, run: string, url: string) {
   if (!admitted(a, run, url)) return;
   a.store.notBefore(); // provider validates timing/holds/manual stops; never reset.
   const label = "robots-" + new URL(url).hostname;
@@ -91,7 +91,7 @@ export function unavailablePolicy(a: Archive, run: string, url: string) {
     bodyRetained: false,
   };
 }
-async function retainedPolicy(a: Archive, run: string, origin: string) {
+async function retainedPolicy(a: AppEvidence, run: string, origin: string) {
   const url = origin + "/robots.txt";
   const label = "robots-" + new URL(origin).hostname;
   const row = a.store.observation(run, label);
@@ -116,7 +116,7 @@ async function retainedPolicy(a: Archive, run: string, origin: string) {
 }
 
 /** Read-only certification using the producing run's own retained evidence. */
-export async function verifyProfilePolicy(a: Archive, run: string) {
+export async function verifyProfilePolicy(a: AppEvidence, run: string) {
   const source = a.store.options(run)?.source;
   if (source !== "austin" && source !== "water") return;
   const policies = new Map<
@@ -143,7 +143,7 @@ export async function verifyProfilePolicy(a: Archive, run: string) {
     );
   }
 }
-export function sourcePolicy(a: Archive, run: string) {
+export function sourcePolicy(a: AppEvidence, run: string) {
   const source = a.store.options(run)?.source;
   if (source !== "austin" && source !== "water") return {};
   const url =

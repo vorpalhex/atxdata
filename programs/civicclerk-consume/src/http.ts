@@ -53,7 +53,7 @@ export class PoliteHttpClient {
     }
     this.deps = { fetch: (url, init) => fetch(url, init), sleep: Bun.sleep, now: Date.now, random: Math.random, ...dependencies };
   }
-  private async transfer<T>(url: string, consume: (response: Response) => Promise<T>): Promise<T> {
+  private async transfer<T>(url: string, consume: (response: Response) => Promise<T>, raw = false): Promise<T> {
     while (this.notBefore > this.deps.now()) await this.deps.sleep(Math.min(2_147_483_647, this.notBefore - this.deps.now()));
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(new DOMException("Request timed out", "TimeoutError")), this.options.timeoutMs ?? 180_000);
@@ -61,7 +61,7 @@ export class PoliteHttpClient {
     try {
       response = await this.deps.fetch(url, { redirect: "manual", signal: controller.signal, headers: { Accept: "*/*", "User-Agent": this.options.userAgent ?? "atxdata-civicclerk/0.1" } });
       this.notBefore = Math.max(this.notBefore, this.deps.now() + serverDelay(response, this.deps.now()));
-      if (!response.ok) throw new HttpError(response.status);
+      if (!raw && !response.ok) throw new HttpError(response.status);
       return await consume(response);
     } finally {
       clearTimeout(timeout);
@@ -81,6 +81,14 @@ export class PoliteHttpClient {
   }
   request<T>(url: string, consume: (response: Response) => Promise<T>): Promise<T> {
     const task = this.queue.then(() => this.retry(url, consume));
+    this.queue = task.then(() => {}, () => {});
+    return task;
+  }
+  /** Explicit diagnostic capture: original Response, same queue/deadline, no retries.
+   * Completing this callback is not HTTP or resource-policy acceptance.
+   */
+  captureResponse<T>(url: string, consume: (response: Response) => Promise<T>): Promise<T> {
+    const task = this.queue.then(() => this.transfer(url, consume, true));
     this.queue = task.then(() => {}, () => {});
     return task;
   }

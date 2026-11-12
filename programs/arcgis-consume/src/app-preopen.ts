@@ -109,7 +109,7 @@ export async function validateV2Ready(
     );
   }
 }
-function hold(db: Database) {
+export function readonlyGate(db: Database) {
   const values = db
     .query<{ id: number; not_before: number }, []>(
       "SELECT id,not_before FROM cooldown",
@@ -126,6 +126,7 @@ function hold(db: Database) {
     "uninterpretable cooldown: manual review required",
   );
   validateTiming(db, n, new Set());
+  return n;
 }
 async function checkSnapshot(db: Database, root: string, workflow: boolean) {
   ensure(
@@ -152,7 +153,7 @@ async function checkSnapshot(db: Database, root: string, workflow: boolean) {
       ),
     );
   if (!workflow && marked.length === 0) return;
-  hold(db);
+  readonlyGate(db);
   for (const { r, s } of marked) {
     const intent = validateAppCheckpoint(r, s);
     if (intent.receiptVersion === 2) await validateV2Ready(db, root, r, intent);
@@ -185,6 +186,50 @@ async function rootDirectory(root: string) {
     current = parent;
   }
   return dir;
+}
+/** Reuse the same bounded readonly SQLite/WAL snapshot; never open a writer. */
+export async function withReadOnlyArchive(
+  root: string,
+  inspect: (db: Database) => Promise<void>,
+  required = false,
+) {
+  const dir = await rootDirectory(root);
+  ensure(!required || dir, "policy inspection requires an existing archive");
+  if (!dir) return;
+  ensure(
+    !(await info(join(root, ".civicclerk.lock"))),
+    "archive locked; readonly refusal",
+  );
+  const exists = await info(join(root, "state.sqlite"));
+  ensure(
+    !required || exists,
+    "policy inspection requires existing source metadata",
+  );
+  if (!exists) return;
+  const db = await snapshot(root);
+  try {
+    ensure(
+      (db.query("PRAGMA integrity_check").get() as { integrity_check: string })
+        .integrity_check === "ok",
+      "readonly SQLite integrity failed",
+    );
+    await inspect(db);
+    const latest = await snapshot(root);
+    try {
+      ensure(
+        db.serialize().equals(latest.serialize()),
+        "readonly source ledger changed during verification",
+      );
+    } finally {
+      latest.close();
+    }
+    ensure(
+      !(await info(join(root, ".civicclerk.lock"))),
+      "archive locked; readonly refusal",
+    );
+  } finally {
+    db.close();
+  }
 }
 export async function readOnlyAppPreflight(root: string, workflow = false) {
   const dir = await rootDirectory(root);

@@ -1,4 +1,7 @@
 import { appRequestDependencies } from "./app-encoding";
+import { policyFlags } from "./policy-inspection-contract";
+import { inspectPolicy, readOnlyPolicyPreflight } from "./policy-inspection";
+import { verifyPolicyRuns } from "./policy-inspection-receipt";
 import { readOnlyAppPreflight } from "./app-preopen";
 import { v2Format } from "./app-intent";
 import { inspectApp, verifyAppRuns } from "./app-metadata";
@@ -15,6 +18,7 @@ import { ensure } from "./check";
 import { executeSelection, selectionOptions } from "./selection";
 import { statFile } from "../../civicclerk-consume/src/archive";
 const COMMANDS = [
+  "inspect-policy",
   "inspect-app",
   "list",
   "rules",
@@ -66,6 +70,18 @@ export function createProgram() {
     ),
   );
   program.addOption(new Option("--item <value>", "Catalog-backed item ID"));
+  program.addOption(
+    new Option(
+      "--app-run <value>",
+      "Existing successful v2 app run for policy inspection",
+    ),
+  );
+  program.addOption(
+    new Option(
+      "--app-item-sha256 <value>",
+      "Exact retained app-item body SHA256 for policy inspection",
+    ),
+  );
   program.addOption(
     new Option("--layer <value>", "Advertised layer ID (zero allowed)"),
   );
@@ -169,6 +185,8 @@ Default operational output is JSON; errors use stderr/status 1. No prompts or pa
 function commandHelp(command?: string): string {
   if (!command) return createProgram().helpInformation() + "\n" + help;
   const purpose: Record<string, string> = {
+    "inspect-policy":
+      "Inspect raw maps policy only from an existing v2 app run and exact --app-item-sha256. Two requests/one literal GeoHub edge maximum; defaults 2 requests/2000000 total/1000000 response and raw bytes. Every result has permission=false/navigation=false; never fetches the published application. Requires --source austin --item --archive --app-run --app-item-sha256. No resume, terms/header/bypass flags or new archive initialization.",
     "inspect-app":
       "Retain Austin catalog-backed public application metadata only, with separately reviewed --catalog-terms-sha256 and --terms-sha256. Requires explicit --item; no wrapper traversal or feature/file acquisition.",
     list: "List preset IDs and general/legacy defaults offline; no archive required.",
@@ -265,11 +283,20 @@ function validateAppDataFormat(command: string, flags: Record<string, string>) {
   );
   return value;
 }
+function policyPayload(
+  command: string,
+  selected: Source | undefined,
+  flags: Record<string, string>,
+) {
+  const policy = policyFlags(command, selected, flags);
+  return policy ? { policy } : {};
+}
 export function parseArgs(args: string[]) {
   const parsed = parseCLI(args);
   const command = parsed.command ?? "";
   ensure(
     [
+      "inspect-policy",
       "inspect-app",
       "list",
       "rules",
@@ -292,6 +319,7 @@ export function parseArgs(args: string[]) {
   let selected: Source | undefined;
   if (!["list", "status", "verify"].includes(command))
     selected = source(flags["--source"]);
+  const policy = policyPayload(command, selected, flags);
   validateSourceSelection(selected, command, flags);
   const appOnly = validateAppOnlyFlags(selected, command, flags);
   const catalogTermsSha256 = validateAppFlags(selected, command, flags);
@@ -305,6 +333,7 @@ export function parseArgs(args: string[]) {
   if (resume) ensure(/^[a-f0-9-]{36}$/.test(resume), "invalid run identifier");
   return {
     command,
+    ...policy,
     archive,
     source: selected,
     termsSha256,
@@ -315,7 +344,10 @@ export function parseArgs(args: string[]) {
     legacyPreset: Object.keys(flags).every((k) =>
       ["--source", "--archive", "--terms-sha256", "--resume"].includes(k),
     ),
-    selection: presetSelection(selected, flags),
+    selection:
+      command === "inspect-policy"
+        ? undefined
+        : presetSelection(selected, flags),
   };
 }
 function legacyDispatch(
@@ -330,6 +362,20 @@ function legacyDispatch(
         archive.store.latestCollection(options.source!)))
   );
 }
+function inspectMetadata(
+  options: ReturnType<typeof parseArgs>,
+  archive: Archive,
+) {
+  if (options.command === "inspect-policy")
+    return inspectPolicy(archive, options.policy!);
+  return inspectApp(archive, options.source!, {
+    ...options.selection!,
+    termsSha256: options.termsSha256,
+    catalogTermsSha256: options.catalogTermsSha256,
+    appDataFormat: options.appDataFormat,
+    resume: options.resume,
+  });
+}
 async function executeArchive(
   options: ReturnType<typeof parseArgs>,
   archive: Archive,
@@ -341,14 +387,9 @@ async function executeArchive(
       limits,
     };
   const appMetadata = await verifyAppRuns(archive);
-  if (options.command === "inspect-app")
-    return inspectApp(archive, options.source!, {
-      ...options.selection!,
-      termsSha256: options.termsSha256,
-      catalogTermsSha256: options.catalogTermsSha256,
-      appDataFormat: options.appDataFormat,
-      resume: options.resume,
-    });
+  await verifyPolicyRuns(archive.store.db, archive.root);
+  if (["inspect-policy", "inspect-app"].includes(options.command))
+    return inspectMetadata(options, archive);
   if (
     options.command === "verify" &&
     appMetadata > 0 &&
@@ -416,6 +457,7 @@ export async function main(
     );
   if (["inspect-app", "verify"].includes(options.command))
     await readOnlyAppPreflight(root, options.command === "inspect-app");
+  await readOnlyPolicyPreflight(root, options.policy);
   const archive = await Archive.open(
     root,
     appRequestDependencies(options, dependencies),
