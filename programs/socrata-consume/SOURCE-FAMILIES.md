@@ -197,6 +197,38 @@ interpretation must be established independently. Keep public personal/contact
 fields private in the acquisition archive; do not publish fixture rows or enrich
 people to demonstrate collection.
 
+## Operational and departmental datasets
+
+These assets have distinct grains and limits. Choose an explicit positive row
+budget and a source-field predicate after current schema inspection; a bounded
+selection is not whole history. The observed selectors below are not proven
+unique, stable, populated, or join keys. Preserve original observations without
+publishing example rows or personal details. Deduplicate cross-category discovery
+only by identical dataset ID; do not merge ambiguous parents or views.
+
+| Dataset                                                         | ID          | Observed selector           | Grain and limit                                                                                                                                                                             |
+| --------------------------------------------------------------- | ----------- | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 311 Service Requests - Austin Transportation and Public Works   | `38mr-dwji` | `service_request_sr_number` | Department-assigned requests from October 2021; not whole-city 311 or a proven replacement for the unresolved older asset.[9]                                                               |
+| Crime Reports                                                   | `fdj4-gpfu` | `incident_report_number`    | Report-written incidents; highest offense only, excluding calls without reports. Classifications and UCR comparisons can change.[10]                                                        |
+| AFD Fire Incidents 2023-2025                                    | `v5hh-nyr8` | `incident_number`           | Dispatched fire records for 2023–2025, not all Fire history; one row per incident is unproven.[11]                                                                                          |
+| EMS - Incidents by Month                                        | `gjtj-jt2d` | `month_key`                 | Monthly incident counts by location and priority, not individual patient encounters.[12]                                                                                                    |
+| Food Establishment Inspection Scores                            | `ecmv-9xxi` | `inspectionid`              | Inspection-score observations from the last three years, not complete inspection histories.[13]                                                                                             |
+| Preventative Health Screenings Services provided by Demographic | `q2n9-6bj9` | `year`                      | Year and race/ethnicity and gender aggregate service counts, not individual clinical records.[14]                                                                                           |
+| Water Quality Sampling Data                                     | `5tye-7ray` | `sample_site_no`            | Provisional creek, aquifer and lake analytical observations; retain parameter, result, unit and quality-control fields. Not drinking-water compliance records.[15]                          |
+| KPI - Percent of Consumer Utility Complaints Resolved           | `k3s2-p7rw` | `service_request_number`    | Despite the KPI title, fields describe consumer complaints and their resolution workflow; do not treat records as precomputed rates.[16]                                                    |
+| Real-Time Traffic Incident Reports                              | `dx9v-zd7x` | `traffic_report_id`         | Refreshing traffic incident snapshot; schema inspected only, with no source-row acquisition established here.[17]                                                                           |
+| Affordable Housing Inventory                                    | `ifzc-3xz8` | `project_id`, `contract_id` | Subsidized or incentive-program project/contract observations, potentially across stages and mixed affordability; not all housing units. Do not infer parcel joins.[18]                     |
+| % Access to Parks                                               | `8zqp-nigd` | `year`                      | Population access measure, not a complete facilities inventory.[19]                                                                                                                         |
+| Annual Physical Circulation by Library                          | `kkkb-enqr` | `format`                    | Formats by branch for publisher-described fiscal 2025 circulation; no explicit fiscal-year column was observed, so a selected period cannot be inferred from a predicate on that field.[20] |
+| 2025 City of Austin Demographic Profiles                        | `k4ue-wizq` | `name`                      | Area profiles published in 2025 using 2023 and 2024 data from multiple sources, not workforce or crash-victim microdata.[21]                                                                |
+| EMS - Quarterly OMD Clinical Performance Indicators             | `2cxe-9vbj` | `fiscal_quarter_key`        | Quarterly clinical performance measures, not patient-level clinical encounters.[22]                                                                                                         |
+
+Retain geometry in its native representation and coordinate reference system
+where supplied; no ArcGIS alias or relationship follows from a similar name.
+Bounded keyword discovery is dataset-only and does not establish complete
+departments, stories, GIS services or historical coverage. Consult each source's
+metadata and definitions before interpreting measures and dates.
+
 ## Sources
 
 [1] https://services.austintexas.gov/cityclerk/cfdi/index.cfm
@@ -207,3 +239,17 @@ people to demonstrate collection.
 [6] https://datahub.austintexas.gov/api/views/3syk-w9eu.json — Issued Construction Permits
 [7] https://datahub.austintexas.gov/api/views/nbzi-qabm.json — Zoning By Address
 [8] https://datahub.austintexas.gov/api/views/86z9-i27i.json — Repeat Offender Registrations
+[9] https://datahub.austintexas.gov/api/views/38mr-dwji.json — 311 Service Requests - Austin Transportation and Public Works
+[10] https://datahub.austintexas.gov/api/views/fdj4-gpfu.json — Crime Reports
+[11] https://datahub.austintexas.gov/api/views/v5hh-nyr8.json — AFD Fire Incidents 2023-2025
+[12] https://datahub.austintexas.gov/api/views/gjtj-jt2d.json — EMS - Incidents by Month
+[13] https://datahub.austintexas.gov/api/views/ecmv-9xxi.json — Food Establishment Inspection Scores
+[14] https://datahub.austintexas.gov/api/views/q2n9-6bj9.json — Preventative Health Screenings Services provided by Demographic
+[15] https://datahub.austintexas.gov/api/views/5tye-7ray.json — Water Quality Sampling Data
+[16] https://datahub.austintexas.gov/api/views/k3s2-p7rw.json — KPI - Percent of Consumer Utility Complaints Resolved
+[17] https://datahub.austintexas.gov/api/views/dx9v-zd7x.json — Real-Time Traffic Incident Reports
+[18] https://datahub.austintexas.gov/api/views/ifzc-3xz8.json — Affordable Housing Inventory
+[19] https://datahub.austintexas.gov/api/views/8zqp-nigd.json — % Access to Parks
+[20] https://datahub.austintexas.gov/api/views/kkkb-enqr.json — Annual Physical Circulation by Library
+[21] https://datahub.austintexas.gov/api/views/k4ue-wizq.json — 2025 City of Austin Demographic Profiles
+[22] https://datahub.austintexas.gov/api/views/2cxe-9vbj.json — EMS - Quarterly OMD Clinical Performance Indicators
