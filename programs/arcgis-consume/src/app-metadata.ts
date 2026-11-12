@@ -1,3 +1,13 @@
+import { validateV2Ready } from "./app-preopen";
+import type { AppIntent } from "./app-intent";
+import { json, captureText } from "./app-capture";
+import {
+  appContract,
+  markedApp,
+  validateAppCheckpoint,
+  type AppRun,
+} from "./app-intent";
+import { readV2AppData } from "./app-data";
 import type { Archive } from "./archive";
 import { ensure, object, same } from "./check";
 import {
@@ -15,15 +25,9 @@ type Options = Selection & {
   termsSha256?: string;
   catalogTermsSha256?: string;
   resume?: string;
+  appDataFormat?: string;
 };
-type Run = {
-  id: string;
-  source: string;
-  command: string;
-  status: string;
-  summary: string | null;
-};
-const mode = "app-metadata-v1";
+type Run = AppRun;
 function runs(a: Archive) {
   return a.store.db
     .query<Run, []>(
@@ -32,56 +36,16 @@ function runs(a: Archive) {
     .all();
 }
 function marked(a: Archive, r: Run) {
-  const s = a.store.options(r.id);
-  return (
-    r.command === "inspect-app" ||
-    r.source.endsWith(":" + mode) ||
-    s?.mode === mode ||
+  return markedApp(
+    r,
+    a.store.options(r.id),
     a.store
       .observations()
-      .some((o) => o.run === r.id && o.label.startsWith("app-"))
-  );
-}
-function validateMode(
-  s: Record<string, any> | undefined,
-  r: Run,
-): asserts s is Record<string, any> {
-  ensure(
-    s &&
-      s.mode === mode &&
-      s.receiptVersion === 1 &&
-      s.source === "austin" &&
-      r.command === "inspect-app",
-    "app metadata mode/receipt binding missing",
+      .some((o) => o.run === r.id && o.label.startsWith("app-")),
   );
 }
 function checkpoint(a: Archive, r: Run) {
-  const s = a.store.options(r.id);
-  validateMode(s, r);
-  validateSelection(s.selection);
-  ensure(
-    r.source === `austin:${s.selection.item}:${mode}` &&
-      /^[a-f0-9]{64}$/.test(s.termsSha256) &&
-      /^[a-f0-9]{64}$/.test(s.catalogTermsSha256) &&
-      same(s.budget, s.selection.budget),
-    "app metadata immutable selection/terms missing",
-  );
-  if (r.status === "succeeded")
-    ensure(
-      r.summary &&
-        object(JSON.parse(r.summary)).metadataOnly === true &&
-        object(JSON.parse(r.summary)).receiptVersion === 1,
-      "app metadata summary missing/downgraded",
-    );
-  return s as {
-    mode: string;
-    receiptVersion: number;
-    source: Source;
-    selection: Selection;
-    termsSha256: string;
-    catalogTermsSha256: string;
-    budget: Selection["budget"];
-  };
+  return validateAppCheckpoint(r, a.store.options(r.id));
 }
 function isRecord(v: unknown): v is Record<string, unknown> {
   return v !== null && typeof v === "object" && !Array.isArray(v);
@@ -123,83 +87,6 @@ function disposition(v: unknown) {
     return "empty";
   return "unsupported";
 }
-function failedWire(
-  fresh: {
-    status: number | null;
-    finished: string | null;
-    error: string | null;
-  },
-  error: unknown,
-) {
-  return (
-    fresh.status === 200 &&
-    fresh.finished !== null &&
-    error instanceof Error &&
-    fresh.error === error.message
-  );
-}
-function newUnknownTransfer(
-  a: Archive,
-  run: string,
-  label: string,
-  before: Set<string>,
-  cached: unknown,
-  error: unknown,
-) {
-  const fresh = a.store.db
-    .query<
-      {
-        id: string;
-        status: number | null;
-        error: string | null;
-        finished: string | null;
-      },
-      [string, string]
-    >(
-      "SELECT id,status,error,finished FROM attempts WHERE run=? AND label=? ORDER BY rowid DESC LIMIT 1",
-    )
-    .get(run, label);
-  return (
-    !cached &&
-    fresh !== null &&
-    !before.has(fresh.id) &&
-    failedWire(fresh, error) &&
-    !a.store.observation(run, label)
-  );
-}
-async function json(
-  a: Archive,
-  run: string,
-  label: string,
-  url: string,
-  offline: boolean,
-) {
-  if (offline)
-    return JSON.parse(String(await a.readExpected(run, label, url, "text")));
-  a.guard?.(url);
-  const cached = a.store.observation(run, label);
-  const before = new Set(
-    a.store.db
-      .query<{ id: string }, [string, string]>(
-        "SELECT id FROM attempts WHERE run=? AND label=?",
-      )
-      .all(run, label)
-      .map((row) => row.id),
-  );
-  // JSON representation admits every JSON value. Only syntax runs inside wire admission.
-  try {
-    const raw = await a.request(run, label, url, "text", (v) => {
-      JSON.parse(String(v));
-    });
-    return JSON.parse(String(raw));
-  } catch (error) {
-    // Only a newly dispatched, settled unsuccessful metadata transfer may
-    // create this hold. Cached corruption and historical parse failures cannot.
-    if (newUnknownTransfer(a, run, label, before, cached, error))
-      a.store.defer(Number.MAX_SAFE_INTEGER);
-    throw error;
-  }
-}
 function receipts(a: Archive, run: string) {
   return a.store
     .observations()
@@ -223,6 +110,48 @@ function receipts(a: Archive, run: string) {
       };
     });
 }
+type AppInterpretation = {
+  outcome: string;
+  representation: string;
+  appDataReceipt?: unknown;
+};
+async function interpretData(
+  a: Archive,
+  r: Run,
+  s: AppIntent,
+  offline: boolean,
+): Promise<AppInterpretation> {
+  if (s.receiptVersion === 2) {
+    const data = await readV2AppData(
+      a,
+      r.id,
+      itemUrl(s.selection.item, true),
+      offline,
+    );
+    return {
+      outcome:
+        data.representation === "empty-body"
+          ? "raw-empty"
+          : disposition(data.value),
+      representation: data.representation,
+      appDataReceipt: data.receipt,
+    };
+  }
+  return {
+    outcome: disposition(
+      await json(a, r.id, "app-data", itemUrl(s.selection.item, true), offline),
+    ),
+    representation: "not-requested",
+  };
+}
+function representationFields(s: AppIntent, data: AppInterpretation) {
+  if (s.receiptVersion !== 2) return {};
+  return {
+    appDataFormat: s.appDataFormat,
+    representation: data.representation,
+    ...(data.appDataReceipt ? { appDataReceipt: data.appDataReceipt } : {}),
+  };
+}
 async function summary(a: Archive, r: Run, offline: boolean) {
   const s = checkpoint(a, r),
     selected = s.selection;
@@ -243,16 +172,18 @@ async function summary(a: Archive, r: Run, offline: boolean) {
     "catalog member is not a public Web Mapping Application with published URL",
   );
   const item = await json(a, r.id, "app-item", itemUrl(selected.item), offline);
-  let outcome = "item-unavailable";
-  if (isRecord(item) && Object.hasOwn(item, "error")) outcome = "item-error";
+  let data: AppInterpretation = {
+    outcome: "item-unavailable",
+    representation: "not-requested",
+  };
+  if (isRecord(item) && Object.hasOwn(item, "error"))
+    data.outcome = "item-error";
   else if (role(item, entry, selected.item)) {
     ensure(
       terms(item).sha256 === s.termsSha256,
       "item usage terms unapproved; review rules output",
     );
-    outcome = disposition(
-      await json(a, r.id, "app-data", itemUrl(selected.item, true), offline),
-    );
+    data = await interpretData(a, r, s, offline);
   }
   await verifyProfilePolicy(a, r.id);
   const bound = receipts(a, r.id);
@@ -262,15 +193,16 @@ async function summary(a: Archive, r: Run, offline: boolean) {
     "site-data",
     "catalog",
     "app-item",
-    ...(outcome.startsWith("item-") ? [] : ["app-data"]),
+    ...(data.outcome.startsWith("item-") ? [] : ["app-data"]),
   ]);
   ensure(
     bound.every((o) => labels.has(o.label) || /^catalog-[0-9]+$/.test(o.label)),
     "unexpected app metadata route/checkpoint",
   );
   return {
-    receiptVersion: 1,
-    mode,
+    receiptVersion: s.receiptVersion,
+    mode: s.mode,
+    ...representationFields(s, data),
     source: "austin",
     catalogItem: selected.item,
     catalogItems: catalog.catalogItems,
@@ -278,16 +210,21 @@ async function summary(a: Archive, r: Run, offline: boolean) {
     wrapperResolved: false,
     acquiredFeatures: false,
     acquiredFiles: false,
-    outcome,
+    outcome: data.outcome,
     receipts: bound,
     scope:
       "public application metadata only; no app schema parsing, map traversal, feature or original-file coverage",
   };
 }
+
 export async function verifyAppRuns(a: Archive) {
   const selected = runs(a).filter((r) => marked(a, r));
   // Validate discriminator and summaries for every marked run before recovery writes.
-  for (const r of selected) checkpoint(a, r);
+  for (const r of selected) {
+    const intent = checkpoint(a, r);
+    if (intent.receiptVersion === 2)
+      await validateV2Ready(a.store.db, a.root, r, intent);
+  }
   let count = 0;
   for (const r of selected)
     if (r.status === "succeeded") {
@@ -312,19 +249,41 @@ function validateAppOptions(source: Source, options: Options) {
     "invalid app metadata invocation",
   );
 }
-export async function inspectApp(a: Archive, source: Source, options: Options) {
+async function prepareAppOperation(
+  a: Archive,
+  source: Source,
+  options: Options,
+) {
   validateAppOptions(source, options);
-  const { termsSha256, catalogTermsSha256, resume, ...selection } = options;
+  const contract = appContract(options.appDataFormat);
+  if (contract.receiptVersion === 2)
+    ensure(options.budget.retries === 0, "v2 requires zero retries");
+  a.store.preflight();
+  for (const r of runs(a).filter((r) => marked(a, r))) {
+    const intent = checkpoint(a, r);
+    if (intent.receiptVersion === 2)
+      await validateV2Ready(a.store.db, a.root, r, intent);
+  }
+  return contract;
+}
+export async function inspectApp(a: Archive, source: Source, options: Options) {
+  const contract = await prepareAppOperation(a, source, options);
+  const {
+    termsSha256,
+    catalogTermsSha256,
+    resume,
+    appDataFormat,
+    ...selection
+  } = options;
   const saved = {
-    mode,
-    receiptVersion: 1,
+    ...contract,
     source,
     selection,
     termsSha256,
     catalogTermsSha256,
     budget: selection.budget,
   };
-  const key = `austin:${selection.item}:${mode}`;
+  const key = `austin:${selection.item}:${contract.mode}`;
   const prior = runs(a)
     .reverse()
     .find(

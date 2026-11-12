@@ -1,3 +1,5 @@
+import { readOnlyAppPreflight } from "./app-preopen";
+import { v2Format } from "./app-intent";
 import { inspectApp, verifyAppRuns } from "./app-metadata";
 import { Command as Commander, Option } from "commander";
 import { parseCLI as parseOptions } from "./cli-parser";
@@ -54,6 +56,12 @@ export function createProgram() {
     new Option(
       "--catalog-terms-sha256 <value>",
       "Reviewed catalog terms SHA256 for inspect-app",
+    ),
+  );
+  program.addOption(
+    new Option(
+      "--app-data-format <value>",
+      "Explicit inspect-app representation: json-or-empty-v2; omission is strict v1",
     ),
   );
   program.addOption(new Option("--item <value>", "Catalog-backed item ID"));
@@ -148,6 +156,7 @@ Water real acquisition remains pending: the observed outage polygon layer exceed
 --item selects a catalog-backed ID. --layer selects an advertised layer (zero allowed).
 --service asserts the matching service, never arbitrary URL permission.
 --fields comma-separated actual fields must include the actual OID.
+inspect-app --app-data-format json-or-empty-v2: explicit app-data-only HTTP200 empty-body capture; omission is strict v1. No old pending adoption, source permission or wrapper inference.
 inspect-app: --source austin --item CATALOG_APP_ID --catalog-terms-sha256 CATALOG_TERMS_SHA256 --terms-sha256 ITEM_TERMS_SHA256; catalog traversal costs count against the same finite request/byte budgets. Fixture-only implementation; not live access authority.
 rules --app-only: Portal-only app terms with --source austin and explicit --item; rejects changed/non-app roles before another origin or service/itemData requests. Ordinary rules remains unrestricted by this option when omitted.
 --terms-sha256: reviewed catalogTerms.sha256 for discover; selected item's terms.sha256 for collect/sync.
@@ -246,6 +255,15 @@ function validateAppOnlyFlags(
   );
   return true;
 }
+function validateAppDataFormat(command: string, flags: Record<string, string>) {
+  const value = flags["--app-data-format"];
+  if (value === undefined) return;
+  ensure(
+    command === "inspect-app" && value === v2Format,
+    "--app-data-format is inspect-app json-or-empty-v2 only",
+  );
+  return value;
+}
 export function parseArgs(args: string[]) {
   const parsed = parseCLI(args);
   const command = parsed.command ?? "";
@@ -263,6 +281,7 @@ export function parseArgs(args: string[]) {
     "commands: list, rules, discover, collect, sync, status, verify",
   );
   const flags = parsed.flags;
+  const appDataFormat = validateAppDataFormat(command, flags);
   const archive = flags["--archive"];
   if (command !== "list")
     ensure(
@@ -289,6 +308,7 @@ export function parseArgs(args: string[]) {
     source: selected,
     termsSha256,
     catalogTermsSha256,
+    appDataFormat,
     appOnly,
     resume,
     legacyPreset: Object.keys(flags).every((k) =>
@@ -325,8 +345,20 @@ async function executeArchive(
       ...options.selection!,
       termsSha256: options.termsSha256,
       catalogTermsSha256: options.catalogTermsSha256,
+      appDataFormat: options.appDataFormat,
       resume: options.resume,
     });
+  if (
+    options.command === "verify" &&
+    appMetadata > 0 &&
+    archive.store.completed().length === 0
+  )
+    return {
+      ...(await archive.verify()),
+      collections: 0,
+      status: archive.store.status(),
+      appMetadata,
+    };
   const adapter = new Adapter(archive);
   if (options.command === "verify")
     return { ...(await adapter.verify()), appMetadata };
@@ -381,6 +413,8 @@ export async function main(
       await statFile(root + "/state.sqlite"),
       "archive state does not exist",
     );
+  if (["inspect-app", "verify"].includes(options.command))
+    await readOnlyAppPreflight(root, options.command === "inspect-app");
   const archive = await Archive.open(root, dependencies);
   try {
     return await executeArchive(options, archive);
