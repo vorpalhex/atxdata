@@ -1,3 +1,4 @@
+import { appRules } from "./app-metadata";
 import { acquirePublished, verifyPublished } from "./published";
 import { waterCatalog } from "./water";
 import {
@@ -252,13 +253,39 @@ export async function gate(
       a.setSpacing(profileAllowed(source, origin + "/robots.txt", text, url));
   };
 }
+function validateAppOnlyInvocation(
+  source: Source,
+  command: string,
+  options: Selection & { appOnly?: boolean },
+) {
+  ensure(
+    options.appOnly === undefined || typeof options.appOnly === "boolean",
+    "invalid app-only option",
+  );
+  if (!options.appOnly) return;
+  ensure(
+    source === "austin" && command === "rules",
+    "app-only requires Austin rules",
+  );
+  ensure(
+    [options.layer, options.service, options.fields].every(
+      (value) => value === undefined,
+    ),
+    "app-only does not accept service/layer/fields selections",
+  );
+}
 function validateInvocation(
   source: Source,
   command: string,
-  options: Selection & { termsSha256?: string; resume?: string },
+  options: Selection & {
+    termsSha256?: string;
+    resume?: string;
+    appOnly?: boolean;
+  },
 ) {
   validateSelection(options);
   validateSource(source);
+  validateAppOnlyInvocation(source, command, options);
   if (options.service) sourceService(options.service, source);
   ensure(
     ["collect", "sync", "rules", "discover"].includes(command),
@@ -328,6 +355,7 @@ async function performSelection(
   command: string,
   selected: Selection,
   termsSha256?: string,
+  appOnly = false,
 ) {
   const origins = sourceOrigins(source);
   await gate(a, run, origins);
@@ -340,6 +368,7 @@ async function performSelection(
     );
     return catalog;
   }
+  if (appOnly) return appRules(a, run, selected, catalog, catalogTerms);
   const entry = catalogEntry(catalog.items, selected.item, selected.layer);
   if (command === "rules" && !entry)
     return {
@@ -395,10 +424,14 @@ export async function executeSelection(
   a: Archive,
   source: Source,
   command: string,
-  options: Selection & { termsSha256?: string; resume?: string },
+  options: Selection & {
+    termsSha256?: string;
+    resume?: string;
+    appOnly?: boolean;
+  },
 ) {
   validateInvocation(source, command, options);
-  const { termsSha256, resume, ...selection } = options;
+  const { termsSha256, resume, appOnly, ...selection } = options;
   // Only persist the explicit immutable selection, not CLI bookkeeping.
   const selected: Selection = {
     item: selection.item,
@@ -412,6 +445,9 @@ export async function executeSelection(
     maxMembers: selection.maxMembers,
     budget: selection.budget,
   };
+  const saved = appOnly
+    ? { ...selected, source, appOnly: true }
+    : { ...selected, source };
   const key = selectionKey(source, selected);
   if (!a.store.db.query("SELECT 1 FROM sources WHERE id=?").get(key))
     a.store.source(
@@ -436,13 +472,13 @@ export async function executeSelection(
   let run: string;
   if (resume) {
     ensure(
-      same(a.store.options(resume), { ...selected, source }),
+      same(a.store.options(resume), saved),
       "resume selection/budget changed",
     );
     run = a.store.resume(resume, key, command);
   } else {
     run = a.store.start(key, command);
-    a.store.saveOptions(run, { ...selected, source });
+    a.store.saveOptions(run, saved);
   }
   try {
     const summary = await performSelection(
@@ -453,6 +489,7 @@ export async function executeSelection(
       command,
       selected,
       termsSha256,
+      appOnly,
     );
     a.store.finish(run, "succeeded", undefined, summary);
     return { run, reused: false, summary };

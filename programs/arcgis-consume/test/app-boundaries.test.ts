@@ -1,4 +1,5 @@
 import { test, expect } from "bun:test";
+import { existsSync } from "node:fs";
 import { Database } from "bun:sqlite";
 import { mkdtemp, writeFile, readFile, readdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
@@ -33,7 +34,14 @@ function setup(c: any) {
       const url = input instanceof Request ? input.url : String(input);
       fs.appendFileSync(c.calls, url + "\n");
       const u = new URL(url);
-      if (u.origin !== "https://www.arcgis.com") throw Error("fixture origin");
+      if (u.origin !== "https://www.arcgis.com") {
+        if (c.service && u.origin === new URL(c.service).origin) {
+          if (u.pathname === "/robots.txt")
+            return new Response("User-agent: *\nAllow: /\n");
+          return Response.json({ layers: [] });
+        }
+        throw Error("fixture origin");
+      }
       if (u.pathname === "/robots.txt") return new Response(c.policy);
       if (u.pathname.endsWith("/search"))
         return Response.json({ total: 1, nextStart: -1, results: [c.app] });
@@ -511,6 +519,219 @@ for (const [name, url, usable] of publishedCases)
           .split("\n")
           .filter((u) => u.includes(id + "/data")),
       ).toHaveLength(usable ? 1 : 0);
+    } finally {
+      globalThis.fetch = original.fetch;
+      Date.now = original.now;
+      Bun.sleep = original.sleep;
+    }
+  });
+
+const appTermsCatalog = "Separate app-terms catalog license";
+const otherService =
+  "https://services.arcgis.com/0L95CJ0VTaxqcmED/arcgis/rest/services/NarrowFixture/FeatureServer";
+async function appTermsFixture(kind = "app", currentOnly = false) {
+  const f = await fixture();
+  const selected =
+    currentOnly || kind === "app"
+      ? app
+      : { ...app, type: kind, url: otherService };
+  const config = {
+    clock: join(f.root, "..", "rules-clock"),
+    calls: f.calls,
+    app: selected,
+    site: configs.austin.site,
+    policy,
+    partial: false,
+    catalogTerms: appTermsCatalog,
+    service: otherService,
+    ...(currentOnly ? { item: { ...app, type: kind, url: otherService } } : {}),
+  };
+  await writeFile(
+    join(f.root, "..", "preload.ts"),
+    `(${setup.toString()})(${JSON.stringify(config)});`,
+  );
+  const args = [
+    "rules",
+    "--app-only",
+    "--source",
+    "austin",
+    "--item",
+    id,
+    "--archive",
+    f.root,
+    "--max-requests",
+    "32",
+  ];
+  return { ...f, args, config };
+}
+for (const [role, drift] of [
+  ["Feature Service", false],
+  ["Map Service", false],
+  ["Feature Service", true],
+] as const)
+  test(
+    "native app-only terms blocks current " +
+      role +
+      " before another authority drift=" +
+      drift,
+    async () => {
+      const f = await appTermsFixture(role, drift);
+      const result = await f.invoke(f.args, true);
+      const calls = (await readFile(f.calls, "utf8")).trim().split("\n");
+      expect(
+        calls.filter((u) => new URL(u).origin !== "https://www.arcgis.com"),
+      ).toHaveLength(0);
+      expect(calls.filter((u) => u.includes(id + "/data"))).toHaveLength(0);
+      expect(result.exit).toBe(1);
+      expect(result.err).toContain("app-only");
+      const db = new Database(join(f.root, "state.sqlite"), { readonly: true });
+      expect(
+        db
+          .query("SELECT COUNT(*) AS n FROM observations WHERE label=?")
+          .get("item-before"),
+      ).toEqual({ n: 1 });
+      expect(
+        db
+          .query(
+            "SELECT COUNT(*) AS n FROM attempts WHERE finished IS NULL OR error IS NOT NULL",
+          )
+          .get(),
+      ).toEqual({ n: 0 });
+      expect(
+        (
+          db.query("SELECT not_before FROM cooldown").get() as {
+            not_before: number;
+          }
+        ).not_before,
+      ).toBeLessThan(Number.MAX_SAFE_INTEGER);
+      db.close();
+    },
+  );
+test("native app-only terms emits distinct current terms using Portal only", async () => {
+  const f = await appTermsFixture();
+  const result = await f.invoke(f.args, true);
+  expect(result.err).toBe("");
+  expect(result.exit).toBe(0);
+  const summary = JSON.parse(result.out).summary;
+  expect(summary).toMatchObject({
+    appOnly: true,
+    metadataOnly: true,
+    wrapperResolved: false,
+    service: null,
+  });
+  expect(summary.terms.sha256).toBe(terms(app).sha256);
+  expect(summary.catalogTerms.sha256).toBe(
+    terms({ licenseInfo: appTermsCatalog }).sha256,
+  );
+  expect(summary.terms.sha256).not.toBe(summary.catalogTerms.sha256);
+  const calls = (await readFile(f.calls, "utf8")).trim().split("\n");
+  expect(calls).toHaveLength(5);
+  expect(
+    calls.every((u) => new URL(u).origin === "https://www.arcgis.com"),
+  ).toBe(true);
+  expect(calls.filter((u) => u.includes(id + "/data"))).toHaveLength(0);
+});
+test("native ordinary rules keeps advertised service inspection when app-only omitted", async () => {
+  const f = await appTermsFixture("Feature Service");
+  const result = await f.invoke(
+    f.args.filter((x) => x !== "--app-only"),
+    true,
+  );
+  expect(result.exit).toBe(0);
+  expect(
+    (await readFile(f.calls, "utf8"))
+      .split("\n")
+      .filter((u) => u.startsWith(new URL(otherService).origin)),
+  ).toHaveLength(2);
+  expect(JSON.parse(result.out).summary.service).toEqual({ layers: [] });
+});
+test("native app-only guards fail before archive mutation and informationals remain offline", async () => {
+  const f = await appTermsFixture();
+  const root = join(f.root, "..", "absent");
+  for (const args of [
+    ["rules", "--app-only", "--source", "water", "--item", id],
+    ["rules", "--app-only", "--source", "austin"],
+    ["rules", "--app-only", "--source", "austin", "--item", "bad"],
+    ["rules", "--app-only", "--app-only", "--source", "austin", "--item", id],
+    [
+      "collect",
+      "--app-only",
+      "--source",
+      "austin",
+      "--item",
+      id,
+      "--terms-sha256",
+      "a".repeat(64),
+    ],
+    ["rules", "--app-only", "--source", "austin", "--item", id, "--layer", "0"],
+  ]) {
+    const result = await f.invoke([...args, "--archive", root], true);
+    expect(result.exit).toBe(1);
+    expect(existsSync(root)).toBe(false);
+  }
+  for (const info of ["--help", "--version"]) {
+    const result = await f.invoke([
+      "rules",
+      "--app-only",
+      "--source",
+      "invalid",
+      "--archive",
+      "/dev/null",
+      info,
+    ]);
+    expect(result.exit).toBe(0);
+    expect(result.err).toBe("");
+    if (info === "--help") expect(result.out).toContain("--app-only");
+  }
+  expect(await readFile(f.calls, "utf8")).toBe("");
+});
+
+test("native app-only requires actual catalog membership and immutable resume scope", async () => {
+  const f = await appTermsFixture();
+  const absent = [...f.args];
+  absent[absent.indexOf("--item") + 1] = "d".repeat(32);
+  const refused = await f.invoke(absent, true);
+  expect(refused.exit).toBe(1);
+  expect(refused.err).toContain("absent from authoritative catalog");
+  expect(
+    (await readFile(f.calls, "utf8"))
+      .split("\n")
+      .filter((u) => u.includes("/items/" + "d".repeat(32))),
+  ).toHaveLength(0);
+  const good = await f.invoke(f.args, true);
+  expect(good.exit).toBe(0);
+  const run = JSON.parse(good.out).run;
+  const before = await readFile(f.calls, "utf8");
+  const changed = await f.invoke(
+    [...f.args.filter((x) => x !== "--app-only"), "--resume", run],
+    true,
+  );
+  expect(changed.exit).toBe(1);
+  expect(changed.err).toContain("resume selection/budget changed");
+  expect(await readFile(f.calls, "utf8")).toBe(before);
+});
+for (const kind of ["app", "Feature Service", "Map Service"])
+  test("in-process app-only terms restriction coverage " + kind, async () => {
+    const f = await appTermsFixture(kind);
+    const original = {
+      fetch: globalThis.fetch,
+      now: Date.now,
+      sleep: Bun.sleep,
+    };
+    try {
+      setup(f.config);
+      if (kind === "app") {
+        const result = (await main(f.args)) as {
+          summary: { appOnly: boolean };
+        };
+        expect(result.summary.appOnly).toBe(true);
+      } else await expect(main(f.args)).rejects.toThrow("app-only");
+      expect(
+        (await readFile(f.calls, "utf8"))
+          .trim()
+          .split("\n")
+          .every((u) => new URL(u).origin === "https://www.arcgis.com"),
+      ).toBe(true);
     } finally {
       globalThis.fetch = original.fetch;
       Date.now = original.now;

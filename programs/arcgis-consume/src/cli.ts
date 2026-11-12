@@ -37,6 +37,12 @@ export function createProgram() {
   program.addOption(new Option("--source <value>", "Exact source ID"));
   program.addOption(
     new Option(
+      "--app-only",
+      "Restrict rules to Portal-only public application terms",
+    ),
+  );
+  program.addOption(
+    new Option(
       "--terms-sha256 <value>",
       "Reviewed catalog or item terms SHA256",
     ),
@@ -143,6 +149,7 @@ Water real acquisition remains pending: the observed outage polygon layer exceed
 --service asserts the matching service, never arbitrary URL permission.
 --fields comma-separated actual fields must include the actual OID.
 inspect-app: --source austin --item CATALOG_APP_ID --catalog-terms-sha256 CATALOG_TERMS_SHA256 --terms-sha256 ITEM_TERMS_SHA256; catalog traversal costs count against the same finite request/byte budgets. Fixture-only implementation; not live access authority.
+rules --app-only: Portal-only app terms with --source austin and explicit --item; rejects changed/non-app roles before another origin or service/itemData requests. Ordinary rules remains unrestricted by this option when omitted.
 --terms-sha256: reviewed catalogTerms.sha256 for discover; selected item's terms.sha256 for collect/sync.
 --resume RUN_ID: repeat matching selection/budgets after a settled interruption; never steals locks or resets unknown transfers/cooldowns.
 Positive safe-integer defaults: --page-size 1000, --max-records 1000000, --max-pages 1000, --max-requests 1000, --max-bytes 268435456, --response-bytes 16777216, --raw-bytes 134217728, --expanded-bytes 536870912, --max-members 1000.
@@ -221,6 +228,24 @@ function validateAppFlags(
     );
   return catalogTermsSha256;
 }
+function validateAppOnlyFlags(
+  selected: Source | undefined,
+  command: string,
+  flags: Record<string, string>,
+) {
+  if (flags["--app-only"] === undefined) return false;
+  ensure(
+    command === "rules" && selected === "austin" && flags["--item"],
+    "--app-only requires rules --source austin and an explicit --item",
+  );
+  ensure(
+    !["--layer", "--service", "--fields"].some(
+      (key) => flags[key] !== undefined,
+    ),
+    "--app-only does not accept service/layer/fields selections",
+  );
+  return true;
+}
 export function parseArgs(args: string[]) {
   const parsed = parseCLI(args);
   const command = parsed.command ?? "";
@@ -248,6 +273,7 @@ export function parseArgs(args: string[]) {
   if (!["list", "status", "verify"].includes(command))
     selected = source(flags["--source"]);
   validateSourceSelection(selected, command, flags);
+  const appOnly = validateAppOnlyFlags(selected, command, flags);
   const catalogTermsSha256 = validateAppFlags(selected, command, flags);
   const termsSha256 = flags["--terms-sha256"];
   if (["discover", "collect", "sync", "inspect-app"].includes(command))
@@ -263,6 +289,7 @@ export function parseArgs(args: string[]) {
     source: selected,
     termsSha256,
     catalogTermsSha256,
+    appOnly,
     resume,
     legacyPreset: Object.keys(flags).every((k) =>
       ["--source", "--archive", "--terms-sha256", "--resume"].includes(k),

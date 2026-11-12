@@ -369,3 +369,30 @@ export async function inspectApp(a: Archive, source: Source, options: Options) {
     throw e;
   }
 }
+
+export async function appRules(
+  a: Archive,
+  run: string,
+  selected: Selection,
+  catalog: { items: unknown[]; catalogItems: number },
+  catalogTerms: ReturnType<typeof terms>,
+) {
+  const entry = catalogEntry(catalog.items, selected.item);
+  ensure(entry, "app-only item absent from authoritative catalog");
+  const item = await json(a, run, "item-before", itemUrl(selected.item), false);
+  ensure(
+    role(entry, entry, selected.item) && role(item, entry, selected.item),
+    "app-only rules requires a matching public Web Mapping Application and exact published URL",
+  );
+  return {
+    source: "austin",
+    catalogItem: selected.item,
+    catalogItems: catalog.catalogItems,
+    terms: terms(item),
+    catalogTerms,
+    service: null,
+    appOnly: true,
+    metadataOnly: true,
+    wrapperResolved: false,
+  };
+}
