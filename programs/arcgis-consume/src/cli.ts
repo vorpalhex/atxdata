@@ -1,3 +1,4 @@
+import { appRequestDependencies } from "./app-encoding";
 import { readOnlyAppPreflight } from "./app-preopen";
 import { v2Format } from "./app-intent";
 import { inspectApp, verifyAppRuns } from "./app-metadata";
@@ -415,7 +416,10 @@ export async function main(
     );
   if (["inspect-app", "verify"].includes(options.command))
     await readOnlyAppPreflight(root, options.command === "inspect-app");
-  const archive = await Archive.open(root, dependencies);
+  const archive = await Archive.open(
+    root,
+    appRequestDependencies(options, dependencies),
+  );
   try {
     return await executeArchive(options, archive);
   } finally {
