@@ -107,10 +107,10 @@ Official source: https://services.austintexas.gov/cityclerk/cfdi/index.cfm.
 | City Officials                                    | `tnne-6nva` |
 | Municipal Question Subject Matter Key-Value Pairs | `tajf-gz53` |
 
-The official Clerk page additionally links Reports with Lobbyist Name,
-`f5dv-uwts`.[4] It is distinct from raw Reports `aahu-djdd`. The additional linked
-view has not yet passed native inspection in this workstream, so do not silently
-replace the raw table or claim that both representations have been acquired.
+The official Clerk page additionally links "Lobbyist Reports", `f5dv-uwts`.[4]
+That linked asset is distinct from raw Reports `aahu-djdd`. It has not yet passed
+native inspection in this workstream, so do not silently replace the raw table,
+assert an unverified view title or claim that both representations were acquired.
 
 The master view is not a substitute for every activity or relationship table.
 The published model identifies registrant and report keys separately, with
@@ -128,7 +128,46 @@ Published model: https://services.austintexas.gov/edims/document.cfm?id=293053.
 
 Official source: https://services.austintexas.gov/cityclerk/lobbyist/index.cfm.
 
-## Council votes, permits and departmental operations
+## Permitting, zoning and enforcement registrations
+
+These are distinct published datasets, not a combined property or case-history
+ledger:
+
+| Published dataset             | ID          | Observed selector field |
+| ----------------------------- | ----------- | ----------------------- |
+| Issued Construction Permits   | `3syk-w9eu` | `permit_number` (text)  |
+| Zoning By Address             | `nbzi-qabm` | `place_id` (number)     |
+| Repeat Offender Registrations | `86z9-i27i` | `foldernumber` (text)   |
+
+The permits publisher describes issued building, electrical, mechanical, plumbing
+and driveway/sidewalk permits, with details such as issue/expiration dates, work,
+valuation and units.[6] Issuance is not the same event as an application,
+inspection, zoning decision or enforcement action. Collect these at their own
+grain; a permit row is not an attached plan or complete project history.
+
+The zoning publisher explicitly says not to use this table to make zoning
+determinations: it can be out of date and omits overlays and multiple-zoning
+situations.[7] It covers addresses within City limits and provides `place_id` for
+linking to the address GIS layer.[7] That is not a universal parcel or cross-source
+case key. The publisher points to PropertyProfile for zoning inquiries; this
+collector does not turn the table into an authoritative zoning decision or
+establish acquisition of the separate mapping application's underlying services.[7]
+
+Repeat Offender Registrations lists properties in the Development Services
+program; its status indicates whether a property is currently actively
+registered.[8] Preserve inactive records and source status rather than treating
+all rows as current violations or labeling people as offenders. The publisher
+calls these data informational, potentially different from official department
+records, and continuously updated.[8] Registration rows do not establish complete
+inspection/enforcement case histories; AB+C records and attachments are separate.
+
+Inspect the current schema before constructing predicates. In the observed schemas,
+`permit_number` and `foldernumber` are text while `place_id` is numeric; preserve
+original identifiers and numeric lexemes rather than coercing every key into the
+same type.[6][7][8] Do not infer relationships by matching addresses or names. Bounded
+related-catalog discovery identifies leads, not an exhaustive enforcement inventory.
+
+## Council votes and departmental operations
 
 - City of Austin Council Voting Record: `3c89-i35a`. The retained publisher
   metadata says January 6, 2023 onward; the Clerk page says new records are added
@@ -142,9 +181,6 @@ Official source: https://services.austintexas.gov/cityclerk/lobbyist/index.cfm.
   automatically Legistar meeting, matter or attachment IDs; no cross-source
   join or pre-2023 roll-call completeness is asserted. See
   https://www.austintexas.gov/clerk/council-voting-history.
-- Issued Construction Permits: `3syk-w9eu`. Issuance is not the same event as an
-  application, inspection, zoning decision or enforcement case. Discover and
-  inspect those separate assets instead of assigning them permit semantics.
 - Departmental 311, signs, markings and work-order datasets are distinct streams.
   A transportation 311 subset does not establish whole-city service-request
   coverage or identify all callers.
@@ -168,3 +204,6 @@ people to demonstrate collection.
 [3] https://services.austintexas.gov/edims/document.cfm?id=247730
 [4] https://services.austintexas.gov/cityclerk/lobbyist/index.cfm
 [5] https://services.austintexas.gov/edims/document.cfm?id=293053
+[6] https://datahub.austintexas.gov/api/views/3syk-w9eu.json — Issued Construction Permits
+[7] https://datahub.austintexas.gov/api/views/nbzi-qabm.json — Zoning By Address
+[8] https://datahub.austintexas.gov/api/views/86z9-i27i.json — Repeat Offender Registrations
