@@ -184,3 +184,28 @@ The bounded public metadata exercise used 12 serial attempts: three robots, six 
 The historical source-wide repair used archive schema 3 (current fresh archives use 5): no automatic migration, historical-row rewriting or policy reset is required for this repair. New snapshots use adapter parser schema 3; schemas 1/2 retain the prior direct-page inventory semantics when reverified. New selected-page visual review uses a separately labeled schema4 validation quality; legacy one-page receipts retain their existing validation path.
 
 Quality gates were run on an external private source mirror preserving sibling imports. CRAP was measured from fresh Bun LCOV for all 148 own functions: maximum 9, strictly below 10. Dryer found no candidates at similarity 0.8. Scoped budget mutation testing executed 32 sites: 30 killed, two surviving boundary cases; it is not a whole-program mutation score. Unchanged-worker tests passed and a known disabled-request-limit defect failed after a conflated request/byte-bound test was separated. Remaining survivors concern one-byte PDF reservation and a later metadata-reservation arithmetic boundary, not evidence of complete branch coverage. Independent review and acceptance remain outstanding.
+
+## City Council archives and municipal election publications
+
+Two distinct profiles reuse the document engine, private SQLite archive, source-link closure, operation budgets, pacing, robots and version replay:
+
+- `austin-council-archives`: starts at the official Council archive. Catalog retains publisher year labels and exact source hrefs; indexed years are not proof of surviving minutes. Source-linked year routes and evidenced same-year canonical 302s are supported. Committee/corporation entry links are discoverable; their deeper meeting-page layouts are not yet verified. This is not Legistar history equivalence.
+- `austin-election-publications`: starts at the City Clerk elections page and follows literal linked election/ballot pages. Notices, official-return labels, sample ballots, election calendars and ballot-related publications have separate City roles. This is not the Travis voter-PDF profile, Clarity exports or financial publications.
+
+For example, with `APPROVED_PRIVATE_DIRECTORY` replaced by an approved private archive:
+
+```sh
+bun run src/cli.ts discover --root APPROVED_PRIVATE_DIRECTORY --source austin-council-archives --page https://www.austintexas.gov/council/archive/city_council_meeting_archives --year 2030 --max-pages 2 --allow-network
+bun run src/cli.ts catalog --root APPROVED_PRIVATE_DIRECTORY --source austin-council-archives
+bun run src/cli.ts list --root APPROVED_PRIVATE_DIRECTORY --source austin-council-archives --year 2030 --limit 10
+```
+
+Use publisher-indexed years actually shown by `catalog`; the example year is not a coverage assertion. City discovery `--year` or the year portion of `--date` restricts traversal of indexed-year links; date/year conflicts reject before HTTP. The existing `--max-pages` bound returns explicit pending URLs. Date/role/year/URL selection applies to list/collect/sync/verify; discovery does not infer an exact meeting day from a year index.
+
+New City metadata uses adapter6 and PDF validation receipt7 in physical archive5. Financial metadata5/receipt6 and older county formats retain their existing dispatch. City records preserve City publisher/jurisdiction, null administering county/fiscal fields, and literal label-based role/date/year provenance. New City mutations refuse older physical archives; no migration or historical receipt rewrite is performed.
+
+Supported text PDFs must independently match a leading City of Austin publisher, selected date and supported meeting/election title role. No county rendered-attestation fallback is permitted. Calendar/packet/ballot-process roles without supported date/body identity remain discovery evidence, not accepted PDFs. Unsupported scans/text gaps cause explicit identity failure: available candidate/wire bytes and failed observation remain private, with no validated version created. This is not a general raw-only capture command or semantic interpretation.
+
+HTTP eDIMS hrefs remain literal blocked evidence: they are not upgraded to HTTPS or guessed services routes. Widen/Acquia wrappers and the election-history search form remain unsupported navigation, not authorized submissions. The retained 1869 page advertises two HTTP originals; neither was acquired by this implementation. Current retained election HTML exposes four dated notice links. Counts are bounded source observations, not complete historical coverage or certification.
+
+Portable City tests use authored PDF/loopback fixtures and exact retained HTML named by the private `CITY_SOURCE_INPUTS` manifest (entries: label, URL, path, SHA-256). As with existing retained financial tests, configure that approved fixture manifest before running the whole suite. Worker tests make no publisher requests. Actual source original acquisition and independent review are separate, outstanding gates.

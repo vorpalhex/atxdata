@@ -1,5 +1,10 @@
 import { load } from "cheerio";
 import {
+  cityPublication,
+  cityEvidence,
+  cityContent,
+} from "./city-publications";
+import {
   currentFinancial,
   type FiscalPeriod,
   type Quarter,
@@ -7,6 +12,18 @@ import {
 import { pageUrl } from "./discovery";
 
 export const sources = {
+  "austin-council-archives": {
+    pages: [
+      "https://www.austintexas.gov/council/archive/city_council_meeting_archives",
+    ],
+    disclaimer:
+      "Publisher-indexed years are not surviving original coverage; committees/corporations require actual links. Not Legistar equivalence. HTTP originals remain blocked.",
+  },
+  "austin-election-publications": {
+    pages: ["https://www.austintexas.gov/clerk/programs/elections"],
+    disclaimer:
+      "City municipal publications, not Travis voter PDFs or Clarity exports. Search form submission and Widen wrappers unsupported.",
+  },
   "austin-financial-publications": {
     pages: [
       "https://www.austintexas.gov/budget-excellence/data-and-insights",
@@ -67,6 +84,12 @@ export type Evidence = {
   taxYear: string | null;
   administeringCounty: "Travis" | null;
   publisher?: "City of Austin";
+  cityIdentity?: {
+    profile: string;
+    dateOrigin: { kind: "label"; original: string } | null;
+    roleOrigin: { kind: "label"; original: string };
+    yearOrigin: { kind: "label"; original: string } | null;
+  };
   fiscalPeriod?: FiscalPeriod | null;
   quarter?: Quarter | null;
 };
@@ -82,6 +105,14 @@ export function sourceName(value: string): Source {
   if (!Object.hasOwn(sources, value)) throw new Error("unsupported source");
   return value as Source;
 }
+function robotsAuthority(source: Source, url: URL, host: string): boolean {
+  if (url.hostname === host) return true;
+  if (source === "county-code") return url.hostname === "online.encodeplus.com";
+  return (
+    (source === "austin-financial-publications" || cityPublication(source)) &&
+    url.hostname === "services.austintexas.gov"
+  );
+}
 export function transportUrl(
   source: Source,
   raw: string,
@@ -92,10 +123,7 @@ export function transportUrl(
   if (
     kind === "robots" &&
     url.href === `https://${url.hostname}/robots.txt` &&
-    (url.hostname === host ||
-      (source === "county-code" && url.hostname === "online.encodeplus.com") ||
-      (source === "austin-financial-publications" &&
-        url.hostname === "services.austintexas.gov"))
+    robotsAuthority(source, url, host)
   )
     return url.href;
   if (url.pathname === "/robots.txt")
@@ -104,7 +132,7 @@ export function transportUrl(
 }
 function edimsAuthority(source: Source, url: URL): boolean {
   return [
-    source === "austin-financial-publications",
+    source === "austin-financial-publications" || cityPublication(source),
     url.hostname === "services.austintexas.gov",
     url.pathname === "/edims/document.cfm",
     /^\?id=\d+$/.test(url.search),
@@ -342,6 +370,8 @@ function austinFinancial(row: Evidence): Evidence | null {
   };
 }
 const adapters: Record<Source, (row: Evidence) => Evidence | null> = {
+  "austin-council-archives": cityEvidence,
+  "austin-election-publications": cityEvidence,
   "county-code": chapter,
   budgets: budget,
   "meeting-archives": minutes,
@@ -358,15 +388,22 @@ function documentHref(href: string, austin: boolean): boolean {
       ))
   );
 }
-function pageCandidates(html: string, austin = false): Candidate[] {
-  const $ = load(html),
+function pageCandidates(
+  html: string,
+  austin = false,
+  city = false,
+): Candidate[] {
+  const $ = load(cityContent(html, city)),
     headings: string[] = [],
     rows: Candidate[] = [];
   let links = 0;
-  $("h1,h2,h3,h4,h5,h6,strong,b,a").each((_, element) => {
+  const selector = "h1,h2,h3,h4,h5,h6,strong,b,a";
+  const nodes = $(selector);
+  nodes.each((_, element) => {
     const node = $(element),
       text = node.text();
     if (node.parents("footer,nav,header").length) return;
+
     if (element.tagName !== "a") {
       if (node.parents("a").length) return;
       recordHeading(element.tagName, text, headings);
@@ -433,12 +470,13 @@ function adaptedEvidence(
     ? currentFinancial(row)
     : row;
 }
-export function discover(
+function requireAdapterPage(
   source: Source,
   page: string,
-  html: string,
-  schema = source === "austin-financial-publications" ? 5 : 3,
-): Evidence[] {
+  schema: number,
+): void {
+  if (cityPublication(source) && schema !== 6)
+    throw Error("City publications require adapter metadata6");
   if (source === "austin-financial-publications" && ![4, 5].includes(schema))
     throw Error("Austin requires adapter metadata schema4 or schema5");
   if (
@@ -447,9 +485,25 @@ export function discover(
   )
     throw new Error("unapproved discovery page");
   if (schema >= 3) pageUrl(source, page, page);
+}
+export function discover(
+  source: Source,
+  page: string,
+  html: string,
+  schema = cityPublication(source)
+    ? 6
+    : source === "austin-financial-publications"
+      ? 5
+      : 3,
+): Evidence[] {
+  requireAdapterPage(source, page, schema);
   if (Buffer.byteLength(html) > 3 * 1024 * 1024)
     throw new Error("metadata byte limit");
-  return pageCandidates(html, source === "austin-financial-publications")
+  return pageCandidates(
+    html,
+    source === "austin-financial-publications" || cityPublication(source),
+    cityPublication(source),
+  )
     .map((candidate) => parseCandidate(source, page, candidate, schema))
     .filter((row): row is Evidence => row !== null);
 }

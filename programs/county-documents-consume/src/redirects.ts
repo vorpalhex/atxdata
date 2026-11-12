@@ -87,7 +87,21 @@ export function redirectTarget(
     "unapproved redirect",
   );
   const target = safeTarget(from, location!);
-  if (!robotsRoute(from, target, kind)) councilRoute(from, target, kind);
+  if (!robotsRoute(from, target, kind)) {
+    councilRoute(from, target, kind);
+    if (source === "austin-council-archives") {
+      const year = /\b(\d{4})\b/.exec(
+        new URL(from).pathname.replaceAll("_", "-"),
+      )?.[1];
+      const next = /\b(\d{4})\b/.exec(
+        target.pathname.replaceAll("_", "-"),
+      )?.[1];
+      requireRedirect(
+        [Boolean(year), year === next],
+        "Council redirect year mismatch",
+      );
+    }
+  }
   return target.href;
 }
 export function hasRedirectSchema(engine: Engine): boolean {

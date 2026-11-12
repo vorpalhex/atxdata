@@ -1,3 +1,8 @@
+import {
+  cityPublication,
+  requireCityBody,
+  requireCityTextOnly,
+} from "./city-publications";
 import { DEFAULT_PDF_BYTES, positiveBudget } from "./budgets";
 import { readFile, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -189,8 +194,13 @@ function scopedIdentity(text: string, row: Evidence): boolean {
     case "austin-financial-publications":
       return austinFinancialIdentity(text, row);
   }
+  return false;
 }
 export function requireTextIdentity(text: string, row: Evidence): void {
+  if (cityPublication(row.source)) {
+    requireCityBody(text, row);
+    return;
+  }
   if (row.source === "austin-financial-publications") {
     if (!scopedIdentity(text, row))
       throw Error("Austin PDF body identity unresolved");
@@ -320,6 +330,7 @@ export function requirePageReview(
   images: Uint8Array[],
   pages: number,
 ): void {
+  requireCityTextOnly(row);
   const checks = [
     review.schema === 1,
     review.documentSha256 === sha(bytes),
@@ -375,6 +386,7 @@ export function requireReview(
   bytes: Uint8Array,
   image: Uint8Array,
 ): void {
+  requireCityTextOnly(row);
   const checks = [
     review.documentSha256 === sha(bytes),
     review.imageSha256 === sha(image),

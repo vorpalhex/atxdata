@@ -1,3 +1,9 @@
+import {
+  cityPublication,
+  requireCityEvidence,
+  citySelection,
+  requireCityTextOnly,
+} from "./city-publications";
 import { DEFAULT_PDF_BYTES, positiveBudget } from "./budgets";
 import {
   financialSelection,
@@ -88,6 +94,7 @@ function selectedIdentity(row: Evidence) {
     date: row.date,
     role: row.role,
     ...(Object.hasOwn(row, "fiscalPeriod") ? financialSelection(row) : {}),
+    ...(cityPublication(row.source) ? citySelection(row) : {}),
   };
 }
 function knownReceiptSchema(receipt: {
@@ -99,23 +106,38 @@ function knownReceiptSchema(receipt: {
       (receipt.schema !== 4 || receipt.identityPolicy === "scoped-title-v1")) ||
     (receipt.schema === 5 &&
       receipt.identityPolicy === "austin-fiscal-title-v1") ||
+    (receipt.schema === 7 &&
+      receipt.identityPolicy === "austin-publication-title-date-role-v1") ||
     (receipt.schema === 6 &&
       receipt.identityPolicy === "austin-period-quarter-title-v2")
   );
 }
+function sourcePolicy(
+  row: Evidence,
+): { schema: number; identityPolicy: string } | null {
+  if (cityPublication(row.source))
+    return {
+      schema: 7,
+      identityPolicy: "austin-publication-title-date-role-v1",
+    };
+  if (row.source !== "austin-financial-publications") return null;
+  return Object.hasOwn(row, "fiscalPeriod")
+    ? { schema: 6, identityPolicy: "austin-period-quarter-title-v2" }
+    : { schema: 5, identityPolicy: "austin-fiscal-title-v1" };
+}
 function requireSourceReceipt(
   row: Evidence,
-  receipt: { schema?: number; identityPolicy?: string },
+  receipt: { schema?: number; identityPolicy?: string; quality?: string },
 ): void {
+  const policy = sourcePolicy(row);
   if (
-    row.source === "austin-financial-publications" &&
-    (Object.hasOwn(row, "fiscalPeriod")
-      ? receipt.schema !== 6 ||
-        receipt.identityPolicy !== "austin-period-quarter-title-v2"
-      : receipt.schema !== 5 ||
-        receipt.identityPolicy !== "austin-fiscal-title-v1")
+    policy &&
+    (receipt.schema !== policy.schema ||
+      receipt.identityPolicy !== policy.identityPolicy)
   )
     throw Error("Austin PDF requires versioned city identity receipt");
+  if (cityPublication(row.source) && receipt.quality !== "text-identity-only")
+    throw Error("City publication requires text identity receipt7");
 }
 function receiptBody(text: string, schema: number) {
   if (schema === 2) return legacyBodyEvidence(text);
@@ -196,6 +218,8 @@ export class Engine {
     kind: string,
     id: string = crypto.randomUUID(),
   ): string {
+    if (cityPublication(source) && archiveVersion(this.db) !== 5)
+      throw Error("City publications require physical archive5");
     this.policyIntegrity();
     this.db.run("INSERT OR IGNORE INTO sources VALUES(?)", [source]);
     this.db.run("INSERT INTO runs VALUES(?,?,?,?,NULL,'running',NULL)", [
@@ -290,6 +314,14 @@ export class Engine {
         .get(snapshot.id)!.n;
     if (count > 2000) throw new Error("source aggregate link ceiling");
   }
+  private requireMetadataFormat(source: Source): void {
+    if (cityPublication(source) && archiveVersion(this.db) !== 5)
+      throw Error("City publications require physical archive5; no migration");
+    if (source === "austin-financial-publications" && !hasRedirectSchema(this))
+      throw Error(
+        "Austin metadata requires new schema4 archive; no automatic migration",
+      );
+  }
   async importPage(
     source: Source,
     url: string,
@@ -298,6 +330,7 @@ export class Engine {
     headers: string | null = null,
     attempt?: string,
   ) {
+    this.requireMetadataFormat(source);
     const producing = producingReference(origin, attempt);
     requireLiveFormat(this.db, origin);
     requireProducing(
@@ -306,10 +339,7 @@ export class Engine {
       producing,
       "page",
     );
-    if (source === "austin-financial-publications" && !hasRedirectSchema(this))
-      throw Error(
-        "Austin metadata requires new schema4 archive; no automatic migration",
-      );
+    this.requireMetadataFormat(source);
     await this.preflight();
     await this.requireDiscoveryPage(source, url);
     const rows = discover(source, url, html);
@@ -331,7 +361,11 @@ export class Engine {
         ]);
         this.db.run("INSERT INTO snapshot_metadata VALUES(?,?,?,?,?,?)", [
           id,
-          source === "austin-financial-publications" ? 5 : 3,
+          cityPublication(source)
+            ? 6
+            : source === "austin-financial-publications"
+              ? 5
+              : 3,
           rows.length,
           headers,
           headers === null ? null : sha(headers),
@@ -360,6 +394,17 @@ export class Engine {
       };
     });
   }
+  private redirectPages(source: Source, admitted: Set<string>): void {
+    if (!cityPublication(source) || archiveVersion(this.db) !== 5) return;
+    const edges = this.db
+      .query<{ url: string; target_url: string }, [string]>(
+        "SELECT a.url,e.target_url FROM redirect_edges e JOIN attempts a ON a.id=e.attempt JOIN runs r ON r.id=a.run WHERE r.source=? AND a.kind='page'",
+      )
+      .all(source);
+    for (let i = 0; i < 3; i++)
+      for (const edge of edges)
+        if (admitted.has(edge.url)) admitted.add(edge.target_url);
+  }
   async discoveryPages(source: Source): Promise<PageLink[]> {
     await this.preflight();
     const snapshots = this.db
@@ -371,6 +416,7 @@ export class Engine {
       links = new Map<string, PageLink>();
     for (const snapshot of snapshots) {
       const bytes = await this.readArtifact(snapshot.path);
+      this.redirectPages(source, admitted);
       if (sha(bytes) !== snapshot.sha || !admitted.has(snapshot.url))
         throw Error("discovery source-linked provenance mismatch");
       for (const link of pageLinks(source, snapshot.url, bytes.toString())) {
@@ -384,7 +430,11 @@ export class Engine {
     if (pageUrl(source, url, url) !== url)
       throw Error("noncanonical source-linked discovery URL");
     if (rootPage(source, url)) return;
-    if (!(await this.discoveryPages(source)).some((link) => link.url === url))
+    const admitted = new Set(
+      (await this.discoveryPages(source)).map((link) => link.url),
+    );
+    this.redirectPages(source, admitted);
+    if (!admitted.has(url))
       throw Error("unapproved source-linked discovery URL");
   }
   async discoveryCatalog(source: Source) {
@@ -448,9 +498,14 @@ export class Engine {
     headers: string | null,
   ) {
     return {
-      schema: row.source === "austin-financial-publications" ? 6 : 4,
-      identityPolicy:
-        row.source === "austin-financial-publications"
+      schema: cityPublication(row.source)
+        ? 7
+        : row.source === "austin-financial-publications"
+          ? 6
+          : 4,
+      identityPolicy: cityPublication(row.source)
+        ? "austin-publication-title-date-role-v1"
+        : row.source === "austin-financial-publications"
           ? "austin-period-quarter-title-v2"
           : "scoped-title-v1",
       parser: "Poppler",
@@ -475,6 +530,7 @@ export class Engine {
     row: Evidence,
     headers: string | null = null,
   ): Promise<string> {
+    requireCityEvidence(row);
     requireCurrentFinancial(row);
     const parsed = await this.parsedPdf(bytes, mime);
     requireTextIdentity(parsed.text, row);
@@ -541,7 +597,10 @@ export class Engine {
   ) {
     await this.preflight();
     const row = this.observation(id);
+    requireCityEvidence(row);
     requireCurrentFinancial(row);
+    if (cityPublication(row.source) && archiveVersion(this.db) !== 5)
+      throw Error("City publications require physical archive5; no migration");
     const producing = producingReference(origin, attempt);
     requireLiveFormat(this.db, origin);
     requireProducing(
@@ -574,6 +633,7 @@ export class Engine {
   ) {
     await this.preflight();
     const row = this.observation(id);
+    requireCityTextOnly(row);
     if (row.source === "austin-financial-publications")
       throw Error(
         "Austin requires text identity; county rendered review is unsupported",
@@ -615,6 +675,7 @@ export class Engine {
   ) {
     await this.preflight();
     const row = this.observation(id);
+    requireCityTextOnly(row);
     if (row.source === "austin-financial-publications")
       throw Error(
         "Austin requires text identity; county rendered review is unsupported",
@@ -907,6 +968,7 @@ export class Engine {
       const urls =
         admitted.get(snapshot.source) ??
         new Set<string>(sources[snapshot.source].pages);
+      this.redirectPages(snapshot.source, urls);
       if (!urls.has(snapshot.url))
         throw Error("discovery source-linked provenance mismatch");
       await this.verifySnapshot(snapshot);
@@ -925,7 +987,7 @@ export class Engine {
         "SELECT * FROM snapshot_metadata WHERE snapshot=?",
       )
       .get(id);
-    if (!meta || ![1, 2, 3, 4, 5].includes(meta.adapter_schema))
+    if (!meta || ![1, 2, 3, 4, 5, 6].includes(meta.adapter_schema))
       throw new Error("snapshot schema receipt missing");
     if (
       (meta.headers === null ? null : sha(meta.headers)) !== meta.headers_hash
@@ -933,15 +995,22 @@ export class Engine {
       throw new Error("snapshot header receipt mismatch");
     return meta;
   }
+  private requireSnapshotSource(source: Source, meta: SnapshotMeta): void {
+    if (cityPublication(source) && archiveVersion(this.db) !== 5)
+      throw Error("City metadata requires physical archive5");
+    if (
+      (source === "austin-financial-publications") !==
+      [4, 5].includes(meta.adapter_schema)
+    )
+      throw Error("source/adapter metadata version mismatch");
+    if (cityPublication(source) !== (meta.adapter_schema === 6))
+      throw Error("City source/adapter metadata6 mismatch");
+  }
   private async verifySnapshot(snapshot: Snapshot): Promise<void> {
     const bytes = await this.readArtifact(snapshot.path);
     if (sha(bytes) !== snapshot.sha) throw new Error("snapshot hash mismatch");
     const meta = this.snapshotMeta(snapshot.id);
-    if (
-      (snapshot.source === "austin-financial-publications") !==
-      [4, 5].includes(meta.adapter_schema)
-    )
-      throw Error("source/adapter metadata version mismatch");
+    this.requireSnapshotSource(snapshot.source, meta);
     const expected = discover(
       snapshot.source,
       snapshot.url,

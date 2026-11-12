@@ -1,7 +1,10 @@
 import { load } from "cheerio";
+import { cityPublication, cityPage, cityContent } from "./city-publications";
 import { officialUrl, sources, type Source } from "./adapters";
 export type PageLink = { url: string; href: string; label: string };
 const PREFIX: Record<Source, string[]> = {
+  "austin-council-archives": ["/council", "/content"],
+  "austin-election-publications": ["/clerk"],
   "austin-financial-publications": [
     "/budget-excellence",
     "/financial-services",
@@ -17,6 +20,8 @@ const PREFIX: Record<Source, string[]> = {
   ],
 };
 const RELEVANT: Record<Source, RegExp> = {
+  "austin-council-archives": /archive|committee|corporation|\b\d{4}\b/i,
+  "austin-election-publications": /election|ballot|returns|results|history/i,
   "austin-financial-publications":
     /budget|financial|bond|debt|annual|report|insights|\b\d{4}\b/i,
   budgets:
@@ -31,6 +36,8 @@ const RELEVANT: Record<Source, RegExp> = {
 export function pageUrl(source: Source, raw: string, base: string): string {
   const value = officialUrl(source, raw, base),
     url = new URL(value);
+  if (cityPublication(source) && !cityPage(source, url))
+    throw Error("not a City source-linked discovery path");
   if (
     !PREFIX[source].some(
       (prefix) =>
@@ -55,9 +62,10 @@ export function pageLinks(
   page: string,
   html: string,
 ): PageLink[] {
-  const $ = load(html),
+  const $ = load(cityContent(html, cityPublication(source))),
     links = new Map<string, PageLink>();
-  $("a[href]").each((_, element) => {
+  const nodes = $("a[href]");
+  nodes.each((_, element) => {
     const node = $(element);
     if (node.parents("footer,nav,header").length) return;
     const href = node.attr("href")!;
@@ -111,7 +119,9 @@ export function catalog(source: Source, page: string, html: string) {
       href = node.attr("href")!,
       label = node.text();
     if (
-      !/archive|code|title\s*30|budget|election|results|minutes/i.test(label) ||
+      !/archive|code|title\s*30|budget|election|results|minutes|meeting|ballot|history|voting/i.test(
+        label,
+      ) ||
       node.parents("footer,nav,header").length
     )
       return;

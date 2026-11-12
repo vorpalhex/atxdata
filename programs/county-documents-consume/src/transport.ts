@@ -1,3 +1,8 @@
+import {
+  cityDiscoveryScopeYear,
+  cityDiscoveryLinkSelected,
+  type CityDiscoveryScope,
+} from "./city-discovery-scope";
 import { load } from "cheerio";
 import { requireCurrentFinancial } from "./financial-period";
 import { requireLiveFormat } from "./producing-integrity";
@@ -575,7 +580,34 @@ export class Transport {
       return imported;
     });
   }
-  async discoverTree(source: Source, url: string) {
+  private discoveryYear(
+    source: Source,
+    url: string,
+    scope: CityDiscoveryScope,
+  ): string | undefined {
+    return cityDiscoveryScopeYear(source, url, scope);
+  }
+  private async enqueueDiscovery(
+    source: Source,
+    year: string | undefined,
+    visited: Set<string>,
+    pending: string[],
+  ): Promise<void> {
+    for (const link of await this.engine.discoveryPages(source)) {
+      if (!cityDiscoveryLinkSelected(source, link, year)) continue;
+      const retained = this.engine.db
+        .query("SELECT 1 FROM snapshots WHERE source=? AND url=? LIMIT 1")
+        .get(source, link.url);
+      if (!retained && !visited.has(link.url) && !pending.includes(link.url))
+        pending.push(link.url);
+    }
+  }
+  async discoverTree(
+    source: Source,
+    url: string,
+    scope: CityDiscoveryScope = {},
+  ) {
+    const year = this.discoveryYear(source, url, scope);
     const pending = [url],
       visited = new Set<string>(),
       snapshots = [];
@@ -584,13 +616,7 @@ export class Transport {
       if (visited.has(next)) continue;
       snapshots.push(await this.discover(source, next));
       visited.add(next);
-      for (const link of await this.engine.discoveryPages(source)) {
-        const retained = this.engine.db
-          .query("SELECT 1 FROM snapshots WHERE source=? AND url=? LIMIT 1")
-          .get(source, link.url);
-        if (!retained && !visited.has(link.url) && !pending.includes(link.url))
-          pending.push(link.url);
-      }
+      await this.enqueueDiscovery(source, year, visited, pending);
     }
     return { snapshots, complete: pending.length === 0, pending };
   }

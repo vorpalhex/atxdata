@@ -1,3 +1,5 @@
+import { cityPublication } from "./city-publications";
+import { archiveVersion } from "./schema";
 import { Database } from "bun:sqlite";
 import { join } from "node:path";
 import { statFile } from "../../civicclerk-consume/src/archive";
@@ -25,6 +27,10 @@ function selected(db: Database, source: Source, scope: Selection): Selected[] {
 }
 function current(rows: Selected[]): void {
   if (
+    rows.some((row) => cityPublication(row.source) && row.adapterSchema !== 6)
+  )
+    throw Error("City acquisition requires metadata6");
+  if (
     rows.some(
       (row) =>
         row.source === "austin-financial-publications" &&
@@ -41,6 +47,8 @@ function imported(db: Database, id: string): void {
       "SELECT o.source,m.adapter_schema FROM observations o JOIN snapshot_metadata m ON m.snapshot=o.snapshot WHERE o.id=?",
     )
     .get(id);
+  if (row && cityPublication(row.source) && row.adapter_schema !== 6)
+    throw Error("City import requires metadata6");
   if (
     row?.source === "austin-financial-publications" &&
     row.adapter_schema !== 5
@@ -61,6 +69,38 @@ function offlineOrCurrent(
     return true;
   return false;
 }
+function cityAdmission(
+  db: Database,
+  command: string,
+  source?: Source,
+  observation?: string,
+): void {
+  const target = observation
+    ? db
+        .query<{ source: string }, [string]>(
+          "SELECT source FROM observations WHERE id=?",
+        )
+        .get(observation)?.source
+    : source;
+  if (!target || !cityPublication(target)) return;
+  if (archiveVersion(db) !== 5)
+    throw Error("City publications require physical archive5; no migration");
+  if (command === "review-pdf")
+    throw Error("City text identity required; county review unsupported");
+}
+function currentCitySelection(
+  db: Database,
+  command: string,
+  source?: Source,
+  scope?: Selection,
+): void {
+  if (
+    source &&
+    cityPublication(source) &&
+    ["collect", "sync"].includes(command)
+  )
+    current(selected(db, source, scope!));
+}
 /** Admit new acquisition before writer lock/transport; legacy all-cache collect stays offline. */
 export async function admitLive(
   root: string,
@@ -70,7 +110,15 @@ export async function admitLive(
   observation?: string,
 ): Promise<void> {
   if (
-    !["discover", "collect", "sync", "archive", "import-pdf"].includes(command)
+    ![
+      "discover",
+      "collect",
+      "sync",
+      "archive",
+      "import-pdf",
+      "import-page",
+      "review-pdf",
+    ].includes(command)
   )
     return;
   if (!(await statFile(join(root, "documents.sqlite")))) return;
@@ -80,10 +128,13 @@ export async function admitLive(
   });
   try {
     verifySchema(db);
+    cityAdmission(db, command, source, observation);
+    if (["import-page", "review-pdf"].includes(command)) return;
     if (command === "import-pdf") {
       imported(db, observation!);
       return;
     }
+    currentCitySelection(db, command, source, scope);
     if (offlineOrCurrent(db, command, source, scope)) return;
     requireLiveFormat(db, "live-http");
     if (["collect", "sync"].includes(command))
