@@ -1,3 +1,4 @@
+import { inspectApp, verifyAppRuns } from "./app-metadata";
 import { Command as Commander, Option } from "commander";
 import { parseCLI as parseOptions } from "./cli-parser";
 import { isAbsolute } from "node:path";
@@ -11,6 +12,7 @@ import { ensure } from "./check";
 import { executeSelection, selectionOptions } from "./selection";
 import { statFile } from "../../civicclerk-consume/src/archive";
 const COMMANDS = [
+  "inspect-app",
   "list",
   "rules",
   "discover",
@@ -41,6 +43,12 @@ export function createProgram() {
   );
   program.addOption(
     new Option("--resume <value>", "Matching settled interrupted run ID"),
+  );
+  program.addOption(
+    new Option(
+      "--catalog-terms-sha256 <value>",
+      "Reviewed catalog terms SHA256 for inspect-app",
+    ),
   );
   program.addOption(new Option("--item <value>", "Catalog-backed item ID"));
   program.addOption(
@@ -118,7 +126,7 @@ function parseCLI(args: string[]) {
 }
 const help = `ArcGIS private, bounded catalog and item acquisition
 Usage: bun src/cli.ts COMMAND [options]
-Commands: list, rules, discover, collect, sync, status, verify
+Commands: list, rules, discover, inspect-app, collect, sync, status, verify
 Workflow (review terms before authorization):
   list -> rules/catalogTerms -> discover -> rules/item terms/layers -> collect
   bun src/cli.ts list
@@ -134,6 +142,7 @@ Water real acquisition remains pending: the observed outage polygon layer exceed
 --item selects a catalog-backed ID. --layer selects an advertised layer (zero allowed).
 --service asserts the matching service, never arbitrary URL permission.
 --fields comma-separated actual fields must include the actual OID.
+inspect-app: --source austin --item CATALOG_APP_ID --catalog-terms-sha256 CATALOG_TERMS_SHA256 --terms-sha256 ITEM_TERMS_SHA256; catalog traversal costs count against the same finite request/byte budgets. Fixture-only implementation; not live access authority.
 --terms-sha256: reviewed catalogTerms.sha256 for discover; selected item's terms.sha256 for collect/sync.
 --resume RUN_ID: repeat matching selection/budgets after a settled interruption; never steals locks or resets unknown transfers/cooldowns.
 Positive safe-integer defaults: --page-size 1000, --max-records 1000000, --max-pages 1000, --max-requests 1000, --max-bytes 268435456, --response-bytes 16777216, --raw-bytes 134217728, --expanded-bytes 536870912, --max-members 1000.
@@ -143,6 +152,8 @@ Default operational output is JSON; errors use stderr/status 1. No prompts or pa
 function commandHelp(command?: string): string {
   if (!command) return createProgram().helpInformation() + "\n" + help;
   const purpose: Record<string, string> = {
+    "inspect-app":
+      "Retain Austin catalog-backed public application metadata only, with separately reviewed --catalog-terms-sha256 and --terms-sha256. Requires explicit --item; no wrapper traversal or feature/file acquisition.",
     list: "List preset IDs and general/legacy defaults offline; no archive required.",
     rules:
       "Review catalogTerms and selected item terms; inspect advertised layers. Requires --source and --archive; optional --item.",
@@ -183,11 +194,39 @@ function validateSourceSelection(
   if (selected && flags["--service"])
     sourceService(flags["--service"], selected);
 }
+function validateAppFlags(
+  selected: Source | undefined,
+  command: string,
+  flags: Record<string, string>,
+) {
+  if (command === "inspect-app")
+    ensure(
+      selected === "austin" &&
+        flags["--item"] &&
+        !flags["--layer"] &&
+        !flags["--service"] &&
+        !flags["--fields"],
+      "inspect-app requires an Austin catalog item, not a service/layer/fields selection",
+    );
+  const catalogTermsSha256 = flags["--catalog-terms-sha256"];
+  if (command === "inspect-app")
+    ensure(
+      /^[a-f0-9]{64}$/.test(catalogTermsSha256 ?? ""),
+      "review catalog rules then provide --catalog-terms-sha256",
+    );
+  else
+    ensure(
+      catalogTermsSha256 === undefined,
+      "catalog terms assertion is inspect-app only",
+    );
+  return catalogTermsSha256;
+}
 export function parseArgs(args: string[]) {
   const parsed = parseCLI(args);
   const command = parsed.command ?? "";
   ensure(
     [
+      "inspect-app",
       "list",
       "rules",
       "discover",
@@ -209,8 +248,9 @@ export function parseArgs(args: string[]) {
   if (!["list", "status", "verify"].includes(command))
     selected = source(flags["--source"]);
   validateSourceSelection(selected, command, flags);
+  const catalogTermsSha256 = validateAppFlags(selected, command, flags);
   const termsSha256 = flags["--terms-sha256"];
-  if (["discover", "collect", "sync"].includes(command))
+  if (["discover", "collect", "sync", "inspect-app"].includes(command))
     ensure(
       /^[a-f0-9]{64}$/.test(termsSha256 ?? ""),
       "review rules then provide --terms-sha256",
@@ -222,6 +262,7 @@ export function parseArgs(args: string[]) {
     archive,
     source: selected,
     termsSha256,
+    catalogTermsSha256,
     resume,
     legacyPreset: Object.keys(flags).every((k) =>
       ["--source", "--archive", "--terms-sha256", "--resume"].includes(k),
@@ -251,8 +292,17 @@ async function executeArchive(
       integrity: archive.store.integrity(),
       limits,
     };
+  const appMetadata = await verifyAppRuns(archive);
+  if (options.command === "inspect-app")
+    return inspectApp(archive, options.source!, {
+      ...options.selection!,
+      termsSha256: options.termsSha256,
+      catalogTermsSha256: options.catalogTermsSha256,
+      resume: options.resume,
+    });
   const adapter = new Adapter(archive);
-  if (options.command === "verify") return await adapter.verify();
+  if (options.command === "verify")
+    return { ...(await adapter.verify()), appMetadata };
   if (legacyDispatch(options, archive))
     return await adapter.execute(
       options.source!,

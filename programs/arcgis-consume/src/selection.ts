@@ -227,7 +227,7 @@ async function robotsPolicy(a: Archive, run: string, origin: string) {
     throw e;
   }
 }
-async function gate(
+export async function gate(
   a: Archive,
   run: string,
   origins = ["https://www.arcgis.com", "https://gis.traviscountytx.gov"],
