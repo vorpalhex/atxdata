@@ -1,3 +1,21 @@
+import { originalStatus } from "./original-records";
+import {
+  legacyChoice,
+  legacySelection,
+  requireLegacyEvidence,
+  LEGACY_METADATA_RUN,
+} from "./legacy-edims";
+import {
+  ORIGINAL_POLICY,
+  ORIGINAL_QUALITY,
+  prepareCapture,
+  commitCapture,
+  verifyCaptureReceipt,
+  requireOriginalReceipt,
+  requireOriginalPolicy,
+  type CaptureRequest,
+} from "./original-retention";
+export { captureSelectionHash } from "./original-retention";
 import {
   cityPublication,
   requireCityEvidence,
@@ -49,6 +67,7 @@ import { verifyArtifacts, verifyRepresentations } from "./archive-verification";
 import {
   bodyEvidence,
   financialBodyEvidence,
+  inspectOriginal,
   legacyBodyEvidence,
   inspectPdf,
   requirePdf,
@@ -85,7 +104,7 @@ type SnapshotMeta = {
   headers: string | null;
   headers_hash: string | null;
 };
-function selectedIdentity(row: Evidence) {
+export function selectedIdentity(row: Evidence) {
   return {
     source: row.source,
     url: row.url,
@@ -95,6 +114,7 @@ function selectedIdentity(row: Evidence) {
     role: row.role,
     ...(Object.hasOwn(row, "fiscalPeriod") ? financialSelection(row) : {}),
     ...(cityPublication(row.source) ? citySelection(row) : {}),
+    ...legacySelection(row),
   };
 }
 function knownReceiptSchema(receipt: {
@@ -129,6 +149,10 @@ function requireSourceReceipt(
   row: Evidence,
   receipt: { schema?: number; identityPolicy?: string; quality?: string },
 ): void {
+  if (receipt.schema === 9) {
+    requireOriginalReceipt(row, receipt);
+    return;
+  }
   const policy = sourcePolicy(row);
   if (
     policy &&
@@ -150,10 +174,15 @@ export class Engine {
     private readonly release: () => Promise<void>,
     existing: boolean,
     readonly maxPdfBytes = DEFAULT_PDF_BYTES,
+    readonly readOnly = false,
   ) {
-    this.db = new Database(join(root, "documents.sqlite"), { strict: true });
+    this.db = new Database(join(root, "documents.sqlite"), {
+      strict: true,
+      readonly: readOnly,
+    });
     try {
-      initialize(this.db, existing);
+      if (readOnly) verifySchema(this.db);
+      else initialize(this.db, existing);
       this.policyIntegrity();
       if (
         this.db
@@ -204,6 +233,37 @@ export class Engine {
       await release();
       throw error;
     }
+  }
+  static async openReadOnly(
+    root: string,
+    options: { maxPdfBytes?: number } = {},
+  ) {
+    const max = positiveBudget(
+      options.maxPdfBytes ?? DEFAULT_PDF_BYTES,
+      "PDF byte",
+    );
+    if (root !== resolve(root))
+      throw Error("canonical absolute archive required");
+    const repository = resolve(import.meta.dir, "../../..");
+    if (root === repository || root.startsWith(repository + "/"))
+      throw Error("runtime must stay outside checkout");
+    if (!(await statFile(join(root, "documents.sqlite"))))
+      throw Error(
+        "existing archive required; retain-capture never initializes",
+      );
+    return new Engine(root, async () => {}, true, max, true);
+  }
+  async prepareCapture(
+    request: CaptureRequest,
+    options: Partial<import("./budgets").WorkBudget> = {},
+  ) {
+    return prepareCapture(this, request, options);
+  }
+  async retainCapture(
+    request: CaptureRequest,
+    options: Partial<import("./budgets").WorkBudget> = {},
+  ) {
+    return commitCapture(this, await prepareCapture(this, request, options));
   }
   private policyIntegrity(): void {
     verifySchema(this.db);
@@ -257,6 +317,7 @@ export class Engine {
   async artifact(
     bytes: Uint8Array,
     extension: string,
+    admission?: () => void,
   ): Promise<{ hash: string; path: string }> {
     if (!/^(html|pdf|candidate|wire|png|txt)$/.test(extension))
       throw new Error("unsafe artifact extension");
@@ -265,22 +326,26 @@ export class Engine {
       full = join(this.root, path);
     const existing = await statFile(full);
     this.policyIntegrity();
+    admission?.();
     if (existing) {
       if (sha(await this.readArtifact(path)) !== hash)
         throw new Error("artifact collision/corruption");
       this.policyIntegrity();
+      admission?.();
       return { hash, path };
     }
-    await this.promoteArtifact(path, hash, bytes);
+    await this.promoteArtifact(path, hash, bytes, admission);
     return { hash, path };
   }
   private async promoteArtifact(
     path: string,
     hash: string,
     bytes: Uint8Array,
+    admission?: () => void,
   ): Promise<void> {
     const partial = crypto.randomUUID() + ".part";
     this.policyIntegrity();
+    admission?.();
     this.db.run(
       "INSERT INTO artifact_checkpoints VALUES(?,?,?,'writing',?) ON CONFLICT(path) DO UPDATE SET status='writing',partial=excluded.partial",
       [path, hash, bytes.length, partial],
@@ -290,10 +355,13 @@ export class Engine {
       mode: 0o600,
     });
     this.policyIntegrity();
+    admission?.();
     await link(join(this.root, partial), join(this.root, path));
     this.policyIntegrity();
+    admission?.();
     await unlink(join(this.root, partial));
     this.policyIntegrity();
+    admission?.();
     this.db.run(
       "UPDATE artifact_checkpoints SET status='promoted' WHERE path=?",
       [path],
@@ -329,7 +397,9 @@ export class Engine {
     origin: string,
     headers: string | null = null,
     attempt?: string,
+    resolveLegacyEdims = false,
   ) {
+    legacyChoice(source, resolveLegacyEdims);
     this.requireMetadataFormat(source);
     const producing = producingReference(origin, attempt);
     requireLiveFormat(this.db, origin);
@@ -342,57 +412,71 @@ export class Engine {
     this.requireMetadataFormat(source);
     await this.preflight();
     await this.requireDiscoveryPage(source, url);
-    const rows = discover(source, url, html);
+    const rows = discover(
+      source,
+      url,
+      html,
+      resolveLegacyEdims ? 7 : undefined,
+    );
     this.aggregate(source, url, rows.length);
-    return this.run(source, "discover-import", async (run) => {
-      const artifact = await this.artifact(Buffer.from(html), "html"),
-        id = crypto.randomUUID();
-      this.db.transaction(() => {
-        this.policyIntegrity();
-        this.db.run("INSERT INTO snapshots VALUES(?,?,?,?,?,?,?,?)", [
-          id,
-          source,
-          url,
-          artifact.hash,
-          artifact.path,
-          origin,
-          new Date().toISOString(),
-          run,
-        ]);
-        this.db.run("INSERT INTO snapshot_metadata VALUES(?,?,?,?,?,?)", [
-          id,
-          cityPublication(source)
-            ? 6
-            : source === "austin-financial-publications"
-              ? 5
-              : 3,
-          rows.length,
-          headers,
-          headers === null ? null : sha(headers),
-          origin === "live-http" ? new Date().toISOString() : null,
-        ]);
-        if (archiveVersion(this.db) === 5)
-          this.db.run("INSERT INTO snapshot_producers VALUES(?,?,?,?)", [
-            id,
-            1,
-            origin,
-            producing.attempt,
-          ]);
-        for (const evidence of rows)
-          this.db.run("INSERT INTO observations VALUES(?,?,?,?,?,'pending')", [
-            crypto.randomUUID(),
+    return this.run(
+      source,
+      resolveLegacyEdims ? LEGACY_METADATA_RUN : "discover-import",
+      async (run) => {
+        const artifact = await this.artifact(Buffer.from(html), "html"),
+          id = crypto.randomUUID();
+        this.db.transaction(() => {
+          this.policyIntegrity();
+          this.db.run("INSERT INTO snapshots VALUES(?,?,?,?,?,?,?,?)", [
             id,
             source,
-            evidence.url,
-            JSON.stringify(evidence),
+            url,
+            artifact.hash,
+            artifact.path,
+            origin,
+            new Date().toISOString(),
+            run,
           ]);
-      })();
-      return {
-        snapshot: id,
-        occurrences: rows.length,
-        unique: new Set(rows.map((row) => row.url)).size,
-      };
-    });
+          this.db.run("INSERT INTO snapshot_metadata VALUES(?,?,?,?,?,?)", [
+            id,
+            resolveLegacyEdims
+              ? 7
+              : cityPublication(source)
+                ? 6
+                : source === "austin-financial-publications"
+                  ? 5
+                  : 3,
+            rows.length,
+            headers,
+            headers === null ? null : sha(headers),
+            origin === "live-http" ? new Date().toISOString() : null,
+          ]);
+          if (archiveVersion(this.db) === 5)
+            this.db.run("INSERT INTO snapshot_producers VALUES(?,?,?,?)", [
+              id,
+              1,
+              origin,
+              producing.attempt,
+            ]);
+          for (const evidence of rows)
+            this.db.run(
+              "INSERT INTO observations VALUES(?,?,?,?,?,'pending')",
+              [
+                crypto.randomUUID(),
+                id,
+                source,
+                evidence.url,
+                JSON.stringify(evidence),
+              ],
+            );
+        })();
+        return {
+          snapshot: id,
+          occurrences: rows.length,
+          unique: new Set(rows.map((row) => row.url)).size,
+        };
+      },
+    );
   }
   private redirectPages(source: Source, admitted: Set<string>): void {
     if (!cityPublication(source) || archiveVersion(this.db) !== 5) return;
@@ -459,17 +543,31 @@ export class Engine {
     return result;
   }
   list(source: Source, selection: Selection): Listed[] {
+    if (selection.captureOnly) requireOriginalPolicy(source, ORIGINAL_POLICY);
     const rows = this.db
       .query<{ id: string; evidence: string; status: string }, [string]>(
         "SELECT id,evidence,status FROM observations WHERE source=? ORDER BY rowid DESC",
       )
       .all(source);
     return select(
-      rows.map((row) => ({
-        ...JSON.parse(row.evidence),
-        id: row.id,
-        status: row.status,
-      })),
+      rows
+        .map((row) => ({
+          ...row,
+          status: originalStatus(this.db, row.id, row.status),
+        }))
+        .filter((row) => selection.captureOnly || row.status !== "captured")
+        .map((row) => ({
+          ...JSON.parse(row.evidence),
+          id: row.id,
+          status: row.status,
+          ...(row.status === "captured"
+            ? {
+                quality: ORIGINAL_QUALITY,
+                semanticIdentityValidated: false,
+                structuredInterpretation: false,
+              }
+            : {}),
+        })),
       selection,
     ) as Listed[];
   }
@@ -484,7 +582,18 @@ export class Engine {
     const evidence: Evidence = JSON.parse(row.evidence);
     if (evidence.source !== row.source || evidence.url !== row.url)
       throw new Error("observation identity mismatch");
-    return { ...evidence, id, status: row.status };
+    const metadata = this.db
+      .query<{ adapter_schema: number }, [string]>(
+        "SELECT m.adapter_schema FROM observations o JOIN snapshot_metadata m ON m.snapshot=o.snapshot WHERE o.id=?",
+      )
+      .get(id);
+    if (
+      metadata?.adapter_schema === 7 &&
+      (!evidence.publishedHref || !evidence.endpointPolicy)
+    )
+      throw Error("missing metadata7 published endpoint policy");
+    requireLegacyEvidence(evidence);
+    return { ...evidence, id, status: originalStatus(this.db, id, row.status) };
   }
   private async parsedPdf(bytes: Uint8Array, mime: string) {
     requirePdf(bytes, mime, this.maxPdfBytes);
@@ -543,6 +652,17 @@ export class Engine {
     origin: string,
     validation: string,
   ) {
+    if (
+      this.db
+        .query<{ validation: string }, [string, string]>(
+          "SELECT validation FROM versions WHERE source=? AND url=?",
+        )
+        .all(row.source, row.url)
+        .some((v) => JSON.parse(v.validation).schema === 9)
+    )
+      throw Error(
+        "original-only receipt cannot be overwritten by semantic import",
+      );
     if (archiveVersion(this.db) === 5 && !JSON.parse(validation).producing)
       validation = JSON.stringify({
         ...JSON.parse(validation),
@@ -597,6 +717,10 @@ export class Engine {
   ) {
     await this.preflight();
     const row = this.observation(id);
+    if (row.status === "captured")
+      throw Error(
+        "original-only receipt cannot be overwritten by semantic import",
+      );
     requireCityEvidence(row);
     requireCurrentFinancial(row);
     if (cityPublication(row.source) && archiveVersion(this.db) !== 5)
@@ -761,10 +885,20 @@ export class Engine {
     const selected = this.list(source, selection);
     if (!selected.length) throw new Error("no selected observations");
     let versions = 0;
-    for (const row of selected) versions += this.selectedHistory(row);
+    for (const row of selected)
+      versions += this.selectedHistory(row, selection.captureOnly === true);
+    if (selection.captureOnly)
+      return {
+        documents: selected.length,
+        versions,
+        httpRequests: 0,
+        quality: ORIGINAL_QUALITY,
+        semanticIdentityValidated: false,
+        structuredInterpretation: false,
+      };
     return { documents: selected.length, versions, httpRequests: 0 };
   }
-  private selectedHistory(row: Listed): number {
+  private selectedHistory(row: Listed, captureOnly = false): number {
     const oversized = this.db
       .query(
         "SELECT 1 FROM history h JOIN versions v ON h.source=v.source AND h.url=v.url AND h.sha=v.sha WHERE h.observation=? AND v.bytes>? LIMIT 1",
@@ -779,7 +913,7 @@ export class Engine {
         "SELECT COUNT(*) n FROM history WHERE observation=?",
       )
       .get(row.id)!.n;
-    if (row.status !== "downloaded" || !count)
+    if (row.status !== (captureOnly ? "captured" : "downloaded") || !count)
       throw new Error("selected download incomplete");
     return count;
   }
@@ -826,7 +960,10 @@ export class Engine {
       .get(version.source, version.url, version.sha)!.n;
     if (rows.length !== expected)
       throw new Error("history validation receipt missing");
-    const parsed = await inspectPdf(join(this.root, version.path));
+    const parsed =
+      JSON.parse(version.validation).schema === 9
+        ? await inspectOriginal(join(this.root, version.path))
+        : await inspectPdf(join(this.root, version.path));
     for (const row of rows)
       await this.verifyReceipt(version, bytes, parsed, row);
   }
@@ -841,6 +978,18 @@ export class Engine {
     const row = this.observation(history.observation),
       receipt = JSON.parse(history.receipt);
     requireSourceReceipt(row, receipt);
+    if (receipt.schema === 9) {
+      await verifyCaptureReceipt(
+        this,
+        row,
+        receipt,
+        join(this.root, version.path),
+        parsed,
+        bytes,
+        version.mime,
+      );
+      return;
+    }
     if (receipt.schema === undefined) {
       this.verifyLegacyReceipt(receipt, parsed, row);
       return;
@@ -987,7 +1136,7 @@ export class Engine {
         "SELECT * FROM snapshot_metadata WHERE snapshot=?",
       )
       .get(id);
-    if (!meta || ![1, 2, 3, 4, 5, 6].includes(meta.adapter_schema))
+    if (!meta || ![1, 2, 3, 4, 5, 6, 7].includes(meta.adapter_schema))
       throw new Error("snapshot schema receipt missing");
     if (
       (meta.headers === null ? null : sha(meta.headers)) !== meta.headers_hash
@@ -1003,7 +1152,10 @@ export class Engine {
       [4, 5].includes(meta.adapter_schema)
     )
       throw Error("source/adapter metadata version mismatch");
-    if (cityPublication(source) !== (meta.adapter_schema === 6))
+    if (
+      cityPublication(source) !== [6, 7].includes(meta.adapter_schema) ||
+      (meta.adapter_schema === 7 && source !== "austin-council-archives")
+    )
       throw Error("City source/adapter metadata6 mismatch");
   }
   private async verifySnapshot(snapshot: Snapshot): Promise<void> {
@@ -1011,6 +1163,21 @@ export class Engine {
     if (sha(bytes) !== snapshot.sha) throw new Error("snapshot hash mismatch");
     const meta = this.snapshotMeta(snapshot.id);
     this.requireSnapshotSource(snapshot.source, meta);
+    const policyRun = this.db
+      .query<{ kind: string; source: string; status: string }, [string]>(
+        "SELECT kind,source,status FROM runs WHERE id=?",
+      )
+      .get(snapshot.run);
+    if (
+      (meta.adapter_schema === 7) !==
+      (policyRun?.kind === LEGACY_METADATA_RUN)
+    )
+      throw Error("metadata7 endpoint-policy run/marker mismatch");
+    if (
+      meta.adapter_schema === 7 &&
+      (policyRun?.source !== snapshot.source || policyRun.status !== "complete")
+    )
+      throw Error("metadata7 current producing interpretation run mismatch");
     const expected = discover(
       snapshot.source,
       snapshot.url,

@@ -1,3 +1,4 @@
+import { originalStatus } from "./original-records";
 import { cityPublication } from "./city-publications";
 import { archiveVersion } from "./schema";
 import { Database } from "bun:sqlite";
@@ -10,24 +11,34 @@ type Selected = Evidence & { status: string; adapterSchema: number };
 function selected(db: Database, source: Source, scope: Selection): Selected[] {
   const rows = db
     .query<
-      { evidence: string; status: string; adapter_schema: number },
+      { id: string; evidence: string; status: string; adapter_schema: number },
       [string]
     >(
-      "SELECT o.evidence,o.status,m.adapter_schema FROM observations o JOIN snapshot_metadata m ON m.snapshot=o.snapshot WHERE o.source=? ORDER BY o.rowid DESC",
+      "SELECT o.id,o.evidence,o.status,m.adapter_schema FROM observations o JOIN snapshot_metadata m ON m.snapshot=o.snapshot WHERE o.source=? ORDER BY o.rowid DESC",
     )
     .all(source);
   return select(
-    rows.map((r) => ({
-      ...JSON.parse(r.evidence),
-      status: r.status,
-      adapterSchema: r.adapter_schema,
-    })),
+    rows
+      .map((r) => ({ ...r, status: originalStatus(db, r.id, r.status) }))
+      .filter((r) => scope.captureOnly || r.status !== "captured")
+      .map((r) => ({
+        ...JSON.parse(r.evidence),
+        status: r.status,
+        adapterSchema: r.adapter_schema,
+      })),
     scope,
   ) as Selected[];
 }
 function current(rows: Selected[]): void {
   if (
-    rows.some((row) => cityPublication(row.source) && row.adapterSchema !== 6)
+    rows.some(
+      (row) =>
+        cityPublication(row.source) &&
+        !(
+          row.adapterSchema === 6 ||
+          (row.adapterSchema === 7 && row.source === "austin-council-archives")
+        ),
+    )
   )
     throw Error("City acquisition requires metadata6");
   if (
@@ -42,12 +53,28 @@ function current(rows: Selected[]): void {
     );
 }
 function imported(db: Database, id: string): void {
+  const retained = db
+    .query<{ status: string }, [string]>(
+      "SELECT status FROM observations WHERE id=?",
+    )
+    .get(id);
+  if (retained && originalStatus(db, id, retained.status) === "captured")
+    throw Error(
+      "original-only receipt cannot be overwritten by semantic import",
+    );
   const row = db
     .query<{ source: Source; adapter_schema: number }, [string]>(
       "SELECT o.source,m.adapter_schema FROM observations o JOIN snapshot_metadata m ON m.snapshot=o.snapshot WHERE o.id=?",
     )
     .get(id);
-  if (row && cityPublication(row.source) && row.adapter_schema !== 6)
+  if (
+    row &&
+    cityPublication(row.source) &&
+    !(
+      row.adapter_schema === 6 ||
+      (row.adapter_schema === 7 && row.source === "austin-council-archives")
+    )
+  )
     throw Error("City import requires metadata6");
   if (
     row?.source === "austin-financial-publications" &&

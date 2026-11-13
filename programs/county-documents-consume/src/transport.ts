@@ -1,3 +1,10 @@
+import { legacyChoice } from "./legacy-edims";
+import {
+  requireOriginalPolicy,
+  ORIGINAL_POLICY,
+  captureSelectionHash,
+  requireNewCapture,
+} from "./original-retention";
 import {
   cityDiscoveryScopeYear,
   cityDiscoveryLinkSelected,
@@ -40,6 +47,8 @@ export class Transport {
   private queue = Promise.resolve();
   private readonly operation: OperationBudget;
   private readonly human: boolean;
+  private readonly resolveLegacyEdims: boolean;
+  private readonly captureOnly: boolean;
   private acknowledgement: HumanAcknowledgement | undefined;
   private postBody: string | undefined;
   private anonymous = false;
@@ -51,10 +60,21 @@ export class Transport {
     private readonly engine: Engine,
     dependencies: Partial<Dependencies> = {},
     budget: Partial<WorkBudget> = {},
-    options: { human?: boolean } = {},
+    options: {
+      human?: boolean;
+      resolveLegacyEdims?: boolean;
+      captureOnly?: boolean;
+    } = {},
   ) {
     requireLiveFormat(engine.db, "live-http");
     this.human = humanOption(options.human);
+    this.resolveLegacyEdims = options.resolveLegacyEdims ?? false;
+    this.captureOnly = options.captureOnly ?? false;
+    if (
+      typeof this.resolveLegacyEdims !== "boolean" ||
+      typeof this.captureOnly !== "boolean"
+    )
+      throw Error("explicit boolean original options required");
     this.operation = new OperationBudget({
       maxPdfBytes: engine.maxPdfBytes,
       ...budget,
@@ -561,6 +581,7 @@ export class Transport {
     });
   }
   discover(source: Source, url: string) {
+    legacyChoice(source, this.resolveLegacyEdims);
     return this.serial(async () => {
       await this.engine.preflight();
       await this.engine.requireDiscoveryPage(source, url);
@@ -575,6 +596,7 @@ export class Transport {
         "live-http",
         result.headers,
         result.attempt,
+        this.resolveLegacyEdims,
       );
       this.finishRedirect();
       return imported;
@@ -625,8 +647,32 @@ export class Transport {
       await this.engine.preflight();
       const row = this.engine.observation(id);
       requireCurrentFinancial(row);
+      if (!this.captureOnly && row.status === "captured")
+        throw Error(
+          "original-only record requires explicit capture-only reuse, not semantic collection",
+        );
+      if (this.captureOnly) {
+        requireOriginalPolicy(row.source, ORIGINAL_POLICY);
+        requireNewCapture(this.engine, row);
+      }
       const delay = await this.robots(row.source, row.url);
       const result = await this.request(row.source, row.url, "pdf", delay);
+      if (this.captureOnly) {
+        await this.wait();
+        const retained = await this.engine.retainCapture(
+          {
+            source: row.source,
+            observation: row.id,
+            captureAttempt: result.attempt,
+            documentSha256: sha(result.body),
+            selectionSha256: captureSelectionHash(row),
+            bodyPolicy: ORIGINAL_POLICY,
+          },
+          this.operation.limits,
+        );
+        this.finishRedirect();
+        return retained;
+      }
       const imported = await this.engine.importPdf(
         id,
         result.body,

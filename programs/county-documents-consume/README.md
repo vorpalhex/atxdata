@@ -209,3 +209,45 @@ Supported text PDFs must independently match a leading City of Austin publisher,
 HTTP eDIMS hrefs remain literal blocked evidence: they are not upgraded to HTTPS or guessed services routes. Widen/Acquia wrappers and the election-history search form remain unsupported navigation, not authorized submissions. The retained 1869 page advertises two HTTP originals; neither was acquired by this implementation. Current retained election HTML exposes four dated notice links. Counts are bounded source observations, not complete historical coverage or certification.
 
 Portable City tests use authored PDF/loopback fixtures and exact retained HTML named by the private `CITY_SOURCE_INPUTS` manifest (entries: label, URL, path, SHA-256). As with existing retained financial tests, configure that approved fixture manifest before running the whole suite. Worker tests make no publisher requests. Actual source original acquisition and independent review are separate, outstanding gates.
+
+## Explicit City original retention (not semantic identity)
+
+`discover` and `import-page --resolve-legacy-edims` accept this switch ONLY
+for `austin-council-archives`. Metadata7, inside unchanged physical5, records
+the exact published HTTP `href`/`publishedHref`, canonical HTTPSservices URL
+and `published-legacy-edims-https-services-v1` choice separately. Only exact
+official www/services eDIMS paths with a sole numeric id are resolved; no
+HTTP request or TLS-disable setting is used. New interpretation runs are
+marked, and replay recomputes the complete7inventory from raw HTML. Omitted
+flag retains old metadata6 behavior, including zero rows for legacy HTTP.
+
+For either City Council or municipal-election source, `collect --capture-only`
+uses the SAME policy/transport/robots/pacing/COMPLETE-producing-body engine
+and retains a structural original with receipt9, `publisher-linked-original-v1`,
+quality `original-integrity-only`, `semanticIdentityValidated=false` and
+`structuredInterpretation=false`. It checks MIME, magic, bounds, pdfinfo/page
+structure and full source/HTTP/hash/selection/producer binding, NOT body-title
+meaning. This is NOT final/notdraft/certified content or a malware-safety claim.
+
+`retain-capture --source SOURCE --observation UUID --capture-attempt UUID
+--document-sha SHA256 --selection-sha SHA256` is ALWAYS OFFLINE. Obtain its
+selection hash from `review-context` (`captureSelectionSha256`) or the exported
+`captureSelectionHash`. It reads an EXISTING complete native HTTP capture:
+no replacement input, header/origin override, network/retry or fresh archive.
+Current byte limits/manual holds/late gates apply. Strict INSERTs refuse any
+existing version/history; old failed semantic runs and HTTP facts are not rewritten.
+Only a new archival decision and current observation projection are appended.
+
+The physical5 CHECK remains unchanged: stored observation status is downloaded,
+but receipt9 projects as `captured` with explicit original-only guarantees.
+Default semantic list/verify/collect does not treat it as a validated identity.
+Use `list --capture-only`, `verify --capture-only` and cached
+`collect --capture-only --allow-network` for explicit0HTTP original reuse.
+Normal old7/financial6/manual County formats remain unchanged; no unsafe8
+classifier is included. Subsequent semantic overwrite of a raw-only receipt is
+not supported. Private originals are not public artifacts. No actual capture
+promotion or remote acquisition is established by authored loopback tests.
+
+Original-retention tests additionally require `CITY_NOTICE_INPUT` bound to
+the approved private PDF copy and admission JSON; no private PDF bytes or
+absolute fixture paths are embedded in the project.

@@ -1,3 +1,4 @@
+import { originalStatus } from "./original-records";
 import { Database } from "bun:sqlite";
 import { join } from "node:path";
 import { statFile } from "../../civicclerk-consume/src/archive";
@@ -39,16 +40,26 @@ export async function selectionBytes(
       )
       .all(source);
     const selected = select(
-      rows.map((row) => ({
-        ...JSON.parse(row.evidence),
-        id: row.id,
-        status: row.status,
-      })),
+      rows
+        .map((row) => ({
+          ...row,
+          status: originalStatus(db, row.id, row.status),
+        }))
+        .filter((row) => scope.captureOnly || row.status !== "captured")
+        .map((row) => ({
+          ...JSON.parse(row.evidence),
+          id: row.id,
+          status: row.status,
+        })),
       scope,
     ) as (Evidence & { id: string; status: string })[];
     let total = 0;
     for (const row of selected) {
-      if (row.status !== "downloaded") continue;
+      if (
+        row.status !== "downloaded" &&
+        !(scope.captureOnly && row.status === "captured")
+      )
+        continue;
       const versions = db
         .query<{ path: string; bytes: number }, [string]>(
           "SELECT v.path,v.bytes FROM history h JOIN versions v ON h.source=v.source AND h.url=v.url AND h.sha=v.sha WHERE h.observation=?",

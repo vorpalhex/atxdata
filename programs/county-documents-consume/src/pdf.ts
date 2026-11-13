@@ -130,6 +130,19 @@ export async function inspectPdf(path: string) {
     throw new Error("invalid PDF page count");
   return { info: info.text(), text: extracted.text(), pages };
 }
+export async function inspectOriginal(path: string) {
+  const result = await Bun.$`pdfinfo ${path}`.quiet().nothrow();
+  if (result.exitCode !== 0) throw Error("original PDF parser failed");
+  const info = result.text(),
+    pages = Number(/^Pages:\s+(\d+)/m.exec(info)?.[1]);
+  if (
+    !Number.isSafeInteger(pages) ||
+    pages < 1 ||
+    !/^Encrypted:\s+no\b/m.test(info)
+  )
+    throw Error("unsupported original PDF structure/pages/encryption");
+  return { info, pages, text: "" };
+}
 const ROLE_TEXT: Record<string, RegExp> = {
   "taxpayer-impact": /taxpayer\s+impact/i,
   "tax-rate": /tax|rate/i,

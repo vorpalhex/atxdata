@@ -1,3 +1,4 @@
+import { legacyEndpoint, LEGACY_EDIMS_POLICY } from "./legacy-edims";
 import { load } from "cheerio";
 import {
   cityPublication,
@@ -83,6 +84,13 @@ export type Evidence = {
   fiscalYear: string | null;
   taxYear: string | null;
   administeringCounty: "Travis" | null;
+  publishedHref?: string;
+  endpointPolicy?: {
+    schema: 1;
+    policy: string;
+    transportUrl: string;
+    legacyResolved: boolean;
+  };
   publisher?: "City of Austin";
   cityIdentity?: {
     profile: string;
@@ -95,6 +103,7 @@ export type Evidence = {
 };
 export type Selection = {
   limit: number;
+  captureOnly?: boolean;
   chapter?: string;
   year?: string;
   date?: string;
@@ -379,8 +388,9 @@ const adapters: Record<Source, (row: Evidence) => Evidence | null> = {
   "austin-financial-publications": austinFinancial,
 };
 type Candidate = { href: string; label: string; headings: string[] };
-function documentHref(href: string, austin: boolean): boolean {
+function documentHref(href: string, austin: boolean, legacy = false): boolean {
   return (
+    (legacy && legacyEndpoint(href) !== null) ||
     /\.pdf(?:[?#]|$)/i.test(href) ||
     (austin &&
       /^https:\/\/services\.austintexas\.gov\/edims\/document\.cfm\?id=\d+$/.test(
@@ -392,6 +402,7 @@ function pageCandidates(
   html: string,
   austin = false,
   city = false,
+  legacy = false,
 ): Candidate[] {
   const $ = load(cityContent(html, city)),
     headings: string[] = [],
@@ -410,7 +421,7 @@ function pageCandidates(
       return;
     }
     const href = node.attr("href");
-    if (!href || !documentHref(href, austin)) return;
+    if (!href || !documentHref(href, austin, legacy)) return;
     if (++links > 2000) throw new Error("link ceiling");
     const local = node
       .closest(".sow-accordion-panel,.accordion-group")
@@ -440,7 +451,9 @@ function parseCandidate(
     row = baseEvidence(
       source,
       pageUrl,
-      candidate.href,
+      schema === 7
+        ? (legacyEndpoint(candidate.href) ?? candidate.href)
+        : candidate.href,
       candidate.label,
       candidate.headings,
     );
@@ -458,6 +471,18 @@ function parseCandidate(
     /^Title\s+30\b/i.test(row.label)
   )
     return { ...row, role: "title-30" };
+  if (schema === 7)
+    row = {
+      ...row,
+      href: candidate.href,
+      publishedHref: candidate.href,
+      endpointPolicy: {
+        schema: 1,
+        policy: LEGACY_EDIMS_POLICY,
+        transportUrl: row.url,
+        legacyResolved: legacyEndpoint(candidate.href) !== null,
+      },
+    };
   return adaptedEvidence(source, schema, adapters[source](row));
 }
 function adaptedEvidence(
@@ -475,7 +500,10 @@ function requireAdapterPage(
   page: string,
   schema: number,
 ): void {
-  if (cityPublication(source) && schema !== 6)
+  if (
+    cityPublication(source) &&
+    !(schema === 6 || (schema === 7 && source === "austin-council-archives"))
+  )
     throw Error("City publications require adapter metadata6");
   if (source === "austin-financial-publications" && ![4, 5].includes(schema))
     throw Error("Austin requires adapter metadata schema4 or schema5");
@@ -503,6 +531,7 @@ export function discover(
     html,
     source === "austin-financial-publications" || cityPublication(source),
     cityPublication(source),
+    schema === 7,
   )
     .map((candidate) => parseCandidate(source, page, candidate, schema))
     .filter((row): row is Evidence => row !== null);

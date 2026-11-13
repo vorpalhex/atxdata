@@ -1,3 +1,13 @@
+import {
+  admitOriginal,
+  admitOriginalCollection,
+  captureSelectionHash,
+  validateCaptureRequest,
+  requireOriginalPolicy,
+  ORIGINAL_POLICY,
+  type CaptureRequest,
+} from "./original-retention";
+import { legacyChoice } from "./legacy-edims";
 import { cityDiscoveryScopeYear } from "./city-discovery-scope";
 import { Command as Commander, Option } from "commander";
 import { parseCLI as parseOptions } from "./cli-parser";
@@ -26,6 +36,7 @@ Usage: bun run src/cli.ts COMMAND [options]
   list|verify --source SOURCE --limit N [--year YYYY --chapter TOKEN --date YYYY-MM-DD --role ROLE --url EXACT_URL]
   import-page --source SOURCE --page EXACT_DISCOVERY_URL --input FILE --origin RETAINED_LABEL [--headers FILE]
   import-pdf --observation ID --input FILE --origin RETAINED_LABEL [--headers FILE]
+  retain-capture --source SOURCE --observation ID --capture-attempt UUID --document-sha SHA256 --selection-sha SHA256 (always offline original-integrity only)
   review-context --observation ID
   review-pdf --observation ID --input FILE (--image PNG | --images PATHS_JSON) --review JSON [--headers FILE]
   archive --source-href EXACT_PUBLISHED_HREF --page EXPLICIT_HTTPS_ENDPOINT [--archive-value VALUE] --allow-network [--human]
@@ -34,11 +45,12 @@ Usage: bun run src/cli.ts COMMAND [options]
 Help: -h, --help, help COMMAND; --version reports the declared package version offline.
 Examples (offline): status --root APPROVED_PRIVATE_DIRECTORY; list --root APPROVED_PRIVATE_DIRECTORY --source county-code --limit 1.
 Discovery workflow: import-page/discover -> catalog/list IDs -> review-context/import-pdf -> collect/verify. Explicit --allow-network is always required for network commands.
+Explicit originals: --resolve-legacy-edims on Council discover/import-page preserves published HTTP separately from HTTPS transport; --capture-only on collect/list/verify is structural receipt9, never semantic identity.
 Sources: county-code, budgets, meeting-archives, election-documents, austin-financial-publications, austin-council-archives, austin-election-publications.
 Work budgets: --max-requests N (100), --max-bytes N (536870912), --max-pdf-bytes N (134217728), --max-pages N (50). Positive safe integers, per operation, not archive-lifetime quotas. Import and collect share PDF bounds; import/review also honor aggregate body/image byte budgets. Metadata stays3MiB/page and aggregate2000 document occurrences/source.
 Discovery follows only actual retained links in relevant source paths; bounded traversal returns complete/pending. catalog reports retained links/selectors and blocked original hrefs, not fabricated routes.
 --human is a boolean default-false operator acknowledgement, not identity spoofing. Only the exact enCodePlus Travis County tenant robots disallow can be acknowledged; all other gates remain. archive currently obtains the published selector/catalog or applies its read-only filter with fresh own anonymous state and server-selected readback. It does NOT yet acquire historical PDF bodies.
-No retries/scheduler/server. Austin new-format archives retain bounded approved302 edges and services-to-www robots-policy bindings; no existing stopped attempts are rewritten. Council and municipal-election profiles preserve metadata6 and City text receipt7; unsupported scans remain unvalidated. Widen wrappers, HTTP original upgrades and election search submissions remain unsupported. Global durable >=3second completion pacing, robots, cooldowns, stop gates and history never reset between operations. collect verifies existing selected downloads without HTTP; sync explicitly requests new bytes. Interrupted artifacts/wire fail closed pending manual recovery.
+No retries/scheduler/server. Austin new-format archives retain bounded approved302 edges and services-to-www robots-policy bindings; no existing stopped attempts are rewritten. Default Council/election paths preserve metadata6 and semantic receipt7. Explicit Council resolution uses metadata7; capture-only uses structural original receipt9, never semantic identity. Widen wrappers and election search submissions remain unsupported. Global durable >=3second completion pacing, robots, cooldowns, stop gates and history never reset between operations. collect verifies existing selected downloads without HTTP; sync explicitly requests new bytes. Interrupted artifacts/wire fail closed pending manual recovery.
 review-pdf accepts explicit reviewed physical pages and image/selection hashes, preserving legacy one-page receipts. Not OCR, interpretation or unattended acceptance. See README for review JSON and source caveats.
 `;
 function commandHelp(command?: string): string {
@@ -63,6 +75,7 @@ const COMMANDS = [
   "collect",
   "sync",
   "archive",
+  "retain-capture",
 ] as const;
 type Command = (typeof COMMANDS)[number];
 const NETWORK = new Set<string>(["discover", "collect", "sync", "archive"]);
@@ -154,6 +167,25 @@ export function createProgram() {
       "Positive safe-integer operation budget; see defaults below",
     ),
   );
+  program.addOption(
+    new Option(
+      "--resolve-legacy-edims",
+      "Explicit Council metadata7 published HTTP to verified HTTPSservices endpoint policy",
+    ).default(false),
+  );
+  program.addOption(
+    new Option(
+      "--capture-only",
+      "Explicit structural original-integrity-only, not semantic validation",
+    ).default(false),
+  );
+  for (const name of ["capture-attempt", "document-sha", "selection-sha"])
+    program.addOption(
+      new Option(
+        "--" + name + " <value>",
+        "Exact retained complete-capture selector",
+      ),
+    );
   for (const name of COMMANDS)
     program.command(name).description(name.replaceAll("-", " "));
   return program;
@@ -186,6 +218,7 @@ function selection(opts: Options): Selection {
     throw new Error("invalid --limit");
   return {
     limit: Number(limit),
+    ...(opts["capture-only"] === "yes" ? { captureOnly: true } : {}),
     year: opts.year,
     chapter: opts.chapter,
     date: opts.date,
@@ -220,6 +253,8 @@ async function importPage(engine: Engine, opts: Options) {
     ).toString(),
     required(opts, "origin"),
     await headers(opts),
+    undefined,
+    opts["resolve-legacy-edims"] === "yes",
   );
 }
 async function importPdf(engine: Engine, opts: Options) {
@@ -290,7 +325,12 @@ async function collect(engine: Engine, opts: Options, refresh: boolean) {
   const cached = refresh
     ? 0
     : await selectionBytes(engine.root, source, scope, budget);
-  const transport = rows.every((row) => !refresh && row.status === "downloaded")
+  const transport = rows.every(
+      (row) =>
+        !refresh &&
+        (row.status === "downloaded" ||
+          (scope.captureOnly && row.status === "captured")),
+    )
       ? null
       : new Transport(
           engine,
@@ -298,11 +338,16 @@ async function collect(engine: Engine, opts: Options, refresh: boolean) {
           { ...budget, maxBytes: budget.maxBytes - cached },
           {
             human: opts.human === "yes",
+            captureOnly: opts["capture-only"] === "yes",
           },
         ),
     outcomes = [];
   for (const row of rows) {
-    if (!refresh && row.status === "downloaded")
+    if (
+      !refresh &&
+      (row.status === "downloaded" ||
+        (scope.captureOnly && row.status === "captured"))
+    )
       outcomes.push(
         await engine.verify(source, { ...scope, url: row.url, limit: 1 }),
       );
@@ -311,6 +356,8 @@ async function collect(engine: Engine, opts: Options, refresh: boolean) {
   return outcomes;
 }
 const ACTIONS: Record<Command, (engine: Engine, opts: Options) => unknown> = {
+  "retain-capture": (engine, opts) =>
+    engine.retainCapture(captureOptions(opts), budgets(opts)),
   archive: (engine, opts) =>
     new Transport(engine, {}, budgets(opts), {
       human: opts.human === "yes",
@@ -324,7 +371,13 @@ const ACTIONS: Record<Command, (engine: Engine, opts: Options) => unknown> = {
     engine.discoveryCatalog(sourceName(required(opts, "source"))),
   "review-context": (engine, opts) => {
     const row = engine.observation(required(opts, "observation"));
-    return { selectionSha256: reviewSelectionHash(row), evidence: row };
+    return {
+      selectionSha256: reviewSelectionHash(row),
+      ...(row.publisher === "City of Austin"
+        ? { captureSelectionSha256: captureSelectionHash(row) }
+        : {}),
+      evidence: row,
+    };
   },
   list: (engine, opts) =>
     engine.list(sourceName(required(opts, "source")), selection(opts)),
@@ -336,6 +389,7 @@ const ACTIONS: Record<Command, (engine: Engine, opts: Options) => unknown> = {
   discover: (engine, opts) =>
     new Transport(engine, {}, budgets(opts), {
       human: opts.human === "yes",
+      resolveLegacyEdims: opts["resolve-legacy-edims"] === "yes",
     }).discoverTree(
       sourceName(required(opts, "source")),
       required(opts, "page"),
@@ -344,6 +398,59 @@ const ACTIONS: Record<Command, (engine: Engine, opts: Options) => unknown> = {
   collect: (engine, opts) => collect(engine, opts, false),
   sync: (engine, opts) => collect(engine, opts, true),
 };
+function captureOptions(opts: Options): CaptureRequest {
+  return {
+    source: required(opts, "source"),
+    observation: required(opts, "observation"),
+    captureAttempt: required(opts, "capture-attempt"),
+    documentSha256: required(opts, "document-sha"),
+    selectionSha256: required(opts, "selection-sha"),
+    bodyPolicy: ORIGINAL_POLICY,
+  };
+}
+async function admitOriginalOperation(
+  command: string,
+  opts: Options,
+  budget: WorkBudget,
+): Promise<void> {
+  if (command === "retain-capture")
+    await admitOriginal(required(opts, "root"), captureOptions(opts), budget);
+  if (command === "collect" && opts["capture-only"] === "yes")
+    await admitOriginalCollection(
+      required(opts, "root"),
+      sourceName(required(opts, "source")),
+      selection(opts),
+      budget,
+    );
+}
+function originalOptions(command: string, opts: Options): void {
+  if (opts["resolve-legacy-edims"] === "yes") {
+    if (!["discover", "import-page"].includes(command))
+      throw Error("legacy resolution is discover/import-page only");
+    legacyChoice(required(opts, "source"), true);
+  }
+  if (opts["capture-only"] === "yes")
+    requireOriginalPolicy(required(opts, "source"), ORIGINAL_POLICY);
+  if (
+    opts["capture-only"] === "yes" &&
+    !["list", "verify", "collect"].includes(command)
+  )
+    throw Error("capture-only requires list/verify/collect");
+  if (command !== "retain-capture") return;
+  const allowed = new Set([
+    "root",
+    "source",
+    "observation",
+    "capture-attempt",
+    "document-sha",
+    "selection-sha",
+    "max-pdf-bytes",
+    "max-bytes",
+  ]);
+  for (const key of Object.keys(opts))
+    if (!allowed.has(key)) throw Error("retain-capture forbids " + key);
+  validateCaptureRequest(captureOptions(opts));
+}
 // Pure CLI requirements precede opening the archive; action/library guards remain.
 function validate(command: Command, opts: Options): void {
   required(opts, "root");
@@ -369,6 +476,7 @@ function validate(command: Command, opts: Options): void {
     "review-pdf": ["observation", "input", "review"],
   };
   for (const key of operands[command] ?? []) required(opts, key);
+  originalOptions(command, opts);
   validateTarget(command, opts);
   if (command === "review-pdf") validateReviewImages(opts);
 }
@@ -433,6 +541,7 @@ export async function run(args: string[]): Promise<unknown> {
       selection(opts),
       budget,
     );
+  await admitOriginalOperation(command, opts, budget);
   await admitLive(...admissionRequest(command, opts));
   const engine = await Engine.open(required(opts, "root"), {
     maxPdfBytes: budget.maxPdfBytes,
