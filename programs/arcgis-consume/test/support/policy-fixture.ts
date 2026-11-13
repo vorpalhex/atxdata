@@ -3,16 +3,18 @@ import { join, resolve } from "node:path";
 import { Database } from "bun:sqlite";
 import { configs } from "../../src/sources";
 import { terms } from "../../src/rules";
-export async function policyFixture() {
+export async function policyFixture(
+  options: { publishedURL?: string; id?: string; v1?: boolean } = {},
+) {
   const base = await mkdtemp(join(process.env.TMPDIR!, "policy-native-")),
     root = join(base, "archive"),
-    id = "d".repeat(32);
+    id = options.id ?? "d".repeat(32);
   const item = {
     id,
     title: "Policy fixture",
     type: "Web Mapping Application",
     access: "public",
-    url: "https://maps.austintexas.gov/FloodPro/",
+    url: options.publishedURL ?? "https://maps.austintexas.gov/FloodPro/",
     licenseInfo: "item fixture terms",
   };
   const site = {
@@ -124,8 +126,7 @@ export async function policyFixture() {
   async function produce() {
     const r = await invoke([
       "inspect-app",
-      "--app-data-format",
-      "json-or-empty-v2",
+      ...(options.v1 ? [] : ["--app-data-format", "json-or-empty-v2"]),
       "--source",
       "austin",
       "--item",

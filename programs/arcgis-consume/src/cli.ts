@@ -1,3 +1,9 @@
+import { wrapperFlags, waiverFlag } from "./wrapper-contract";
+import {
+  inspectWrapper,
+  readOnlyWrapperPreflight,
+  verifyWrapperRuns,
+} from "./wrapper";
 import { appRequestDependencies } from "./app-encoding";
 import { policyFlags } from "./policy-inspection-contract";
 import { inspectPolicy, readOnlyPolicyPreflight } from "./policy-inspection";
@@ -18,6 +24,7 @@ import { ensure } from "./check";
 import { executeSelection, selectionOptions } from "./selection";
 import { statFile } from "../../civicclerk-consume/src/archive";
 const COMMANDS = [
+  "inspect-wrapper",
   "inspect-policy",
   "inspect-app",
   "list",
@@ -67,6 +74,12 @@ export function createProgram() {
     new Option(
       "--app-data-format <value>",
       "Explicit inspect-app representation: json-or-empty-v2; omission is strict v1",
+    ),
+  );
+  program.addOption(
+    new Option(
+      waiverFlag,
+      "Explicitly omit maps robots for this literal wrapper HTML operation only",
     ),
   );
   program.addOption(new Option("--item <value>", "Catalog-backed item ID"));
@@ -157,7 +170,7 @@ function parseCLI(args: string[]) {
 }
 const help = `ArcGIS private, bounded catalog and item acquisition
 Usage: bun src/cli.ts COMMAND [options]
-Commands: list, rules, discover, inspect-app, collect, sync, status, verify
+Commands: list, rules, discover, inspect-app, inspect-policy, inspect-wrapper, collect, sync, status, verify
 Workflow (review terms before authorization):
   list -> rules/catalogTerms -> discover -> rules/item terms/layers -> collect
   bun src/cli.ts list
@@ -185,6 +198,8 @@ Default operational output is JSON; errors use stderr/status 1. No prompts or pa
 function commandHelp(command?: string): string {
   if (!command) return createProgram().helpInformation() + "\n" + help;
   const purpose: Record<string, string> = {
+    "inspect-wrapper":
+      "Acquire one literal catalog-bound maps wrapper HTML, not bootstrap assets or services. Requires --source austin --item --archive --app-run --app-item-sha256 --acknowledge-maps-robots-omission (bare boolean only). Defaults/maxima: one request, 1000000 decoded bytes total/response/raw, zero retries. Exact reuse and verify are offline. Other origins refused; no robots request, redirects, resume, or terms overrides.",
     "inspect-policy":
       "Inspect raw maps policy only from an existing v2 app run and exact --app-item-sha256. Two requests/one literal GeoHub edge maximum; defaults 2 requests/2000000 total/1000000 response and raw bytes. Every result has permission=false/navigation=false; never fetches the published application. Requires --source austin --item --archive --app-run --app-item-sha256. No resume, terms/header/bypass flags or new archive initialization.",
     "inspect-app":
@@ -288,6 +303,8 @@ function policyPayload(
   selected: Source | undefined,
   flags: Record<string, string>,
 ) {
+  const wrapper = wrapperFlags(command, selected, flags);
+  if (wrapper) return { wrapper };
   const policy = policyFlags(command, selected, flags);
   return policy ? { policy } : {};
 }
@@ -296,6 +313,7 @@ export function parseArgs(args: string[]) {
   const command = parsed.command ?? "";
   ensure(
     [
+      "inspect-wrapper",
       "inspect-policy",
       "inspect-app",
       "list",
@@ -344,10 +362,9 @@ export function parseArgs(args: string[]) {
     legacyPreset: Object.keys(flags).every((k) =>
       ["--source", "--archive", "--terms-sha256", "--resume"].includes(k),
     ),
-    selection:
-      command === "inspect-policy"
-        ? undefined
-        : presetSelection(selected, flags),
+    selection: ["inspect-policy", "inspect-wrapper"].includes(command)
+      ? undefined
+      : presetSelection(selected, flags),
   };
 }
 function legacyDispatch(
@@ -366,6 +383,8 @@ function inspectMetadata(
   options: ReturnType<typeof parseArgs>,
   archive: Archive,
 ) {
+  if (options.command === "inspect-wrapper")
+    return inspectWrapper(archive, options.wrapper!);
   if (options.command === "inspect-policy")
     return inspectPolicy(archive, options.policy!);
   return inspectApp(archive, options.source!, {
@@ -388,7 +407,12 @@ async function executeArchive(
     };
   const appMetadata = await verifyAppRuns(archive);
   await verifyPolicyRuns(archive.store.db, archive.root);
-  if (["inspect-policy", "inspect-app"].includes(options.command))
+  await verifyWrapperRuns(archive.store.db, archive.root);
+  if (
+    ["inspect-policy", "inspect-app", "inspect-wrapper"].includes(
+      options.command,
+    )
+  )
     return inspectMetadata(options, archive);
   if (
     options.command === "verify" &&
@@ -458,6 +482,7 @@ export async function main(
   if (["inspect-app", "verify"].includes(options.command))
     await readOnlyAppPreflight(root, options.command === "inspect-app");
   await readOnlyPolicyPreflight(root, options.policy);
+  await readOnlyWrapperPreflight(root, options.wrapper);
   const archive = await Archive.open(
     root,
     appRequestDependencies(options, dependencies),

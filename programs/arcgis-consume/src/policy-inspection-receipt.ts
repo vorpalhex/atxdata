@@ -1,3 +1,4 @@
+import { admittedWrapperURL } from "./wrapper-contract";
 import { type Database } from "bun:sqlite";
 import { readFile, lstat } from "node:fs/promises";
 import { join } from "node:path";
@@ -76,6 +77,7 @@ export async function sourceBinding(
   db: Database,
   root: string,
   options: PolicyOptions,
+  wrapper = false,
 ) {
   const r = policyRuns(db).find((r) => r.id === options.appRun);
   ensure(
@@ -84,18 +86,33 @@ export async function sourceBinding(
   );
   const intent = validateAppCheckpoint(r, JSON.parse(r.options));
   ensure(
-    intent.receiptVersion === 2 && intent.selection.item === options.item,
+    (wrapper || intent.receiptVersion === 2) &&
+      intent.selection.item === options.item,
     "policy source intent mismatch",
   );
-  await validateV2Ready(db, root, r, intent);
+  if (intent.receiptVersion === 2) await validateV2Ready(db, root, r, intent);
+  if (wrapper)
+    ensure(
+      r.summary &&
+        !String(object(JSON.parse(r.summary)).outcome).startsWith("item-"),
+      "wrapper requires matching catalog/app role and published URL",
+    );
   const o = sourceObservation(db, r.id, options);
   const a = producer(db, o);
   ensure(a.status === 200, "policy source producer mismatch");
   const item = publishedItem(
     JSON.parse((await body(root, o.path, o.bytes, o.sha256)).toString()),
     options.item,
+    wrapper,
   );
   return {
+    ...(wrapper
+      ? {
+          termsSha256: intent.termsSha256,
+          catalogTermsSha256: intent.catalogTermsSha256,
+          appReceiptVersion: intent.receiptVersion,
+        }
+      : {}),
     appRun: r.id,
     item: options.item,
     appItemSha256: o.sha256,
@@ -137,13 +154,15 @@ function producer(db: Database, o: Observation) {
   );
   return a;
 }
-function publishedItem(value: unknown, id: string) {
+function publishedItem(value: unknown, id: string, wrapper = false) {
   const item = object(value);
   ensure(
     item.id === id &&
       item.type === "Web Mapping Application" &&
       item.access === "public" &&
-      item.url === "https://maps.austintexas.gov/FloodPro/",
+      (wrapper
+        ? admittedWrapperURL(item.url)
+        : item.url === "https://maps.austintexas.gov/FloodPro/"),
     "policy inspection published source is outside approved route",
   );
   return item;
@@ -189,8 +208,28 @@ export async function hop(
   url: string,
   cap: number,
 ) {
-  const label = `policy-hop-${index}`;
-  const o = rawObservation(db, run, label, url, cap);
+  return rawCapture(
+    db,
+    root,
+    run,
+    `policy-hop-${index}`,
+    url,
+    policyKind,
+    cap,
+    index,
+  );
+}
+export async function rawCapture(
+  db: Database,
+  root: string,
+  run: string,
+  label: string,
+  url: string,
+  kind: string,
+  cap: number,
+  index = 0,
+) {
+  const o = rawObservation(db, run, label, url, cap, kind);
   const a = producer(db, o);
   ensure(a.status >= 200 && a.status <= 599, "policy producer status mismatch");
   return hopReceipt(db, root, o, a, index);
@@ -201,6 +240,7 @@ function rawObservation(
   label: string,
   url: string,
   cap: number,
+  kind: string = policyKind,
 ) {
   const rows = db
     .query<Attempt, [string, string]>(
@@ -218,7 +258,7 @@ function rawObservation(
       o.run === run &&
       o.label === label &&
       o.url === url &&
-      o.kind === policyKind &&
+      o.kind === kind &&
       o.status === "ready" &&
       o.bytes <= cap,
     "policy observation missing/downgraded",
@@ -270,7 +310,7 @@ async function hopReceipt(
     locationSha256: location === null ? null : hash(location),
     sha256: o.sha256,
     bytes: o.bytes,
-    wireKind: policyKind,
+    wireKind: o.kind,
     timing,
   };
   return {

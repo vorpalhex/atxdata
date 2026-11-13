@@ -1,3 +1,5 @@
+import { verifyRawWrapperSource } from "./wrapper";
+import { validateWrapperCapture } from "./wrapper-contract";
 import { createReadStream } from "node:fs";
 import { createHash } from "node:crypto";
 import { readFile, unlink, open } from "node:fs/promises";
@@ -26,7 +28,13 @@ export const limits = {
   zipMembers: 6,
 };
 export type Kind =
-  "json" | "text" | "zip" | "redirect" | "file" | "policy-raw-v1";
+  | "json"
+  | "text"
+  | "zip"
+  | "redirect"
+  | "file"
+  | "policy-raw-v1"
+  | "wrapper-raw-v1";
 export type Dependencies = {
   fetch: (url: string, init: RequestInit) => Promise<Response>;
   now: () => number;
@@ -271,6 +279,10 @@ export class Archive {
             policy.retries === 0,
           "raw policy capture requires explicit versioned zero-retry intent",
         );
+      if (kind === "wrapper-raw-v1") {
+        validateWrapperCapture(this.store.options(run), run, url, label);
+        await verifyRawWrapperSource(this, run);
+      }
       const old = this.store.observation(run, label);
       if (old) {
         ensure(
@@ -322,7 +334,8 @@ export class Archive {
       } catch (error) {
         // Raw capture performs no semantic validation. Any transfer failure is
         // an uncertified representation; finishAttempt has settled first.
-        if (kind === "policy-raw-v1") this.store.defer(Number.MAX_SAFE_INTEGER);
+        if (kind === "policy-raw-v1" || kind === "wrapper-raw-v1")
+          this.store.defer(Number.MAX_SAFE_INTEGER);
         if (attempt >= policy.retries || !retryable(error)) throw error;
         this.store.defer(
           Math.ceil(
@@ -424,7 +437,7 @@ export class Archive {
   }
   private responseCap(run: string, kind: Kind, remaining: number) {
     const policy = this.policy(run);
-    if (kind === "policy-raw-v1")
+    if (kind === "policy-raw-v1" || kind === "wrapper-raw-v1")
       return Math.min(remaining, policy.zipBytes, policy.responseBytes);
     return Math.min(
       remaining,
@@ -434,7 +447,7 @@ export class Archive {
     );
   }
   private rawFraming(kind: Kind, headers: Headers) {
-    if (kind !== "policy-raw-v1") return;
+    if (kind !== "policy-raw-v1" && kind !== "wrapper-raw-v1") return;
     const declared = headers.get("content-length"),
       transfer = headers.get("transfer-encoding");
     ensure(
@@ -444,7 +457,7 @@ export class Archive {
     );
   }
   private rawLength(kind: Kind, headers: Headers, bytes: number) {
-    if (kind !== "policy-raw-v1") return;
+    if (kind !== "policy-raw-v1" && kind !== "wrapper-raw-v1") return;
     const declared = headers.get("content-length");
     if (declared !== null && !headers.has("content-encoding"))
       ensure(bytes === Number(declared), "raw policy Content-Length mismatch");
@@ -503,7 +516,7 @@ export class Archive {
     );
     try {
       const request =
-        kind === "policy-raw-v1"
+        kind === "policy-raw-v1" || kind === "wrapper-raw-v1"
           ? http.captureResponse.bind(http)
           : http.request.bind(http);
       return await request(url, (response) =>
