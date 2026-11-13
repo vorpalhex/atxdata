@@ -281,3 +281,36 @@ export async function inspectWrapper(a: Archive, value: WrapperOptions) {
     a.guard = oldGuard;
   }
 }
+
+/** Verified immutable wrapper body for a separately versioned derived operation. */
+export async function retainedWrapper(
+  db: Database,
+  root: string,
+  run: string,
+  sha256: string,
+) {
+  const c = await closure(root, db);
+  const r = policyRuns(db).find((r) => r.id === run);
+  ensure(
+    r && r.command === "inspect-wrapper" && r.status === "succeeded",
+    "complete wrapper parent required",
+  );
+  const result = await summary(db, root, r);
+  ensure(result.capture.sha256 === sha256, "wrapper parent SHA mismatch");
+  const captured = await rawCapture(
+    db,
+    root,
+    run,
+    "wrapper-html",
+    String(result.binding.publishedURL),
+    wrapperKind,
+    1000000,
+  );
+  c.evidence.assertCurrent();
+  return {
+    raw: captured.raw,
+    capture: captured.receipt,
+    binding: result.binding,
+    publishedURL: String(result.binding.publishedURL),
+  };
+}

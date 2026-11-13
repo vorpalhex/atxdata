@@ -30,6 +30,7 @@ export function wrapperFlags(
   source: unknown,
   flags: Record<string, string>,
 ) {
+  if (command === "resolve-app" || command === "collect-app-layer") return;
   if (command !== "inspect-wrapper") {
     ensure(
       flags[waiverFlag] === undefined,

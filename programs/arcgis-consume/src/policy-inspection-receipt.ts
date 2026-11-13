@@ -31,12 +31,13 @@ export async function body(
   path: string,
   size: number,
   sha: string,
+  ceiling = 1000000,
 ) {
   ensure(
     /^[a-f0-9-]{36}\.body$/.test(path) &&
       Number.isSafeInteger(size) &&
       size >= 0 &&
-      size <= 1000000,
+      size <= ceiling,
     "unsafe policy body binding",
   );
   const p = join(root, path),
@@ -232,7 +233,14 @@ export async function rawCapture(
   const o = rawObservation(db, run, label, url, cap, kind);
   const a = producer(db, o);
   ensure(a.status >= 200 && a.status <= 599, "policy producer status mismatch");
-  return hopReceipt(db, root, o, a, index);
+  return hopReceipt(
+    db,
+    root,
+    o,
+    a,
+    index,
+    kind === "app-reference-raw-v1" ? cap : 1000000,
+  );
 }
 function rawObservation(
   db: Database,
@@ -272,8 +280,9 @@ async function hopReceipt(
   o: Observation,
   a: Attempt,
   index: number,
+  ceiling = 1000000,
 ) {
-  const raw = await body(root, o.path, o.bytes, o.sha256),
+  const raw = await body(root, o.path, o.bytes, o.sha256, ceiling),
     headers = new Headers(
       object(JSON.parse(a.headers)) as Record<string, string>,
     );

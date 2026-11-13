@@ -1,3 +1,15 @@
+import {
+  layerOptions,
+  collectAppLayer,
+  readOnlyLayerPreflight,
+  verifyLayerRuns,
+} from "./app-layer";
+import { referenceOptions } from "./reference-contract";
+import {
+  resolveApp,
+  readOnlyReferencePreflight,
+  verifyReferenceRuns,
+} from "./app-reference";
 import { wrapperFlags, waiverFlag } from "./wrapper-contract";
 import {
   inspectWrapper,
@@ -24,6 +36,8 @@ import { ensure } from "./check";
 import { executeSelection, selectionOptions } from "./selection";
 import { statFile } from "../../civicclerk-consume/src/archive";
 const COMMANDS = [
+  "resolve-app",
+  "collect-app-layer",
   "inspect-wrapper",
   "inspect-policy",
   "inspect-app",
@@ -161,6 +175,23 @@ export function createProgram() {
       "Positive safe-integer operation budget; see defaults below",
     ),
   );
+  for (const name of [
+    "layer-url",
+    "layer-terms-sha256",
+    "wrapper-run",
+    "wrapper-sha256",
+    "parent-run",
+    "reference-sha256",
+    "helper-run",
+    "dependency-terms-sha256",
+    "max-references",
+  ])
+    program.addOption(
+      new Option(
+        "--" + name + " <value>",
+        "Exact publisher-derived source selection",
+      ),
+    );
   for (const name of COMMANDS)
     program.command(name).description(name.replaceAll("-", " "));
   return program;
@@ -198,6 +229,10 @@ Default operational output is JSON; errors use stderr/status 1. No prompts or pa
 function commandHelp(command?: string): string {
   if (!command) return createProgram().helpInformation() + "\n" + help;
   const purpose: Record<string, string> = {
+    "collect-app-layer":
+      "Collect a whole bounded exact published WebMap layer. Requires --layer-url, --layer-terms-sha256, source/wrapper/parent producer selectors and explicit maps omission. Native schema/CRS/IDs retained; no catalog membership invented.",
+    "resolve-app":
+      "Versioned publisher-derived reference capture/context. Requires --source austin --wrapper-run UUID --wrapper-sha256 HASH --acknowledge-maps-robots-omission; --parent-run selects a completed child; --reference-sha256 explicitly selects a source-derived child. No arbitrary URL/automatic feature export.",
     "inspect-wrapper":
       "Acquire one literal catalog-bound maps wrapper HTML, not bootstrap assets or services. Requires --source austin --item --archive --app-run --app-item-sha256 --acknowledge-maps-robots-omission (bare boolean only). Defaults/maxima: one request, 1000000 decoded bytes total/response/raw, zero retries. Exact reuse and verify are offline. Other origins refused; no robots request, redirects, resume, or terms overrides.",
     "inspect-policy":
@@ -313,6 +348,8 @@ export function parseArgs(args: string[]) {
   const command = parsed.command ?? "";
   ensure(
     [
+      "resolve-app",
+      "collect-app-layer",
       "inspect-wrapper",
       "inspect-policy",
       "inspect-app",
@@ -327,6 +364,52 @@ export function parseArgs(args: string[]) {
     "commands: list, rules, discover, collect, sync, status, verify",
   );
   const flags = parsed.flags;
+  if (command === "collect-app-layer") {
+    const appLayer = layerOptions(flags);
+    ensure(
+      flags["--archive"] && isAbsolute(flags["--archive"]),
+      "absolute archive required",
+    );
+    return {
+      command,
+      appLayer,
+      reference: undefined,
+      archive: flags["--archive"],
+      source: "austin" as const,
+      legacyPreset: false,
+      selection: undefined,
+      termsSha256: undefined,
+      catalogTermsSha256: undefined,
+      appDataFormat: undefined,
+      appOnly: false,
+      resume: undefined,
+      policy: undefined,
+      wrapper: undefined,
+    };
+  }
+  if (command === "resolve-app") {
+    const reference = referenceOptions(flags);
+    ensure(
+      flags["--archive"] && isAbsolute(flags["--archive"]),
+      "absolute archive required",
+    );
+    return {
+      command,
+      reference,
+      appLayer: undefined,
+      archive: flags["--archive"],
+      source: "austin" as const,
+      legacyPreset: false,
+      selection: undefined,
+      termsSha256: undefined,
+      catalogTermsSha256: undefined,
+      appDataFormat: undefined,
+      appOnly: false,
+      resume: undefined,
+      policy: undefined,
+      wrapper: undefined,
+    };
+  }
   const appDataFormat = validateAppDataFormat(command, flags);
   const archive = flags["--archive"];
   if (command !== "list")
@@ -351,6 +434,8 @@ export function parseArgs(args: string[]) {
   if (resume) ensure(/^[a-f0-9-]{36}$/.test(resume), "invalid run identifier");
   return {
     command,
+    appLayer: undefined,
+    reference: undefined,
     ...policy,
     archive,
     source: selected,
@@ -399,6 +484,12 @@ async function executeArchive(
   options: ReturnType<typeof parseArgs>,
   archive: Archive,
 ): Promise<unknown> {
+  if (options.command === "collect-app-layer")
+    return collectAppLayer(archive, options.appLayer!);
+  const appLayers = await verifyLayerRuns(archive.store.db, archive.root);
+  if (options.command === "resolve-app")
+    return resolveApp(archive, options.reference!);
+  await verifyReferenceRuns(archive.store.db, archive.root);
   if (options.command === "status")
     return {
       ...archive.store.status(),
@@ -421,7 +512,8 @@ async function executeArchive(
   )
     return {
       ...(await archive.verify()),
-      collections: 0,
+      collections: appLayers,
+      ...(appLayers ? { appLayerCollections: appLayers } : {}),
       status: archive.store.status(),
       appMetadata,
     };
@@ -481,6 +573,10 @@ export async function main(
     );
   if (["inspect-app", "verify"].includes(options.command))
     await readOnlyAppPreflight(root, options.command === "inspect-app");
+  await readOnlyLayerPreflight(root, options.appLayer);
+  if (options.command === "resolve-app")
+    await readOnlyReferencePreflight(root, options.reference);
+  if (options.command === "verify") await readOnlyReferencePreflight(root);
   await readOnlyPolicyPreflight(root, options.policy);
   await readOnlyWrapperPreflight(root, options.wrapper);
   const archive = await Archive.open(

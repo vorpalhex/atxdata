@@ -225,3 +225,54 @@ Successful v2 replay requires coherent mode/version/source/format/summary, actua
 The validated Austin `inspect-app --app-data-format json-or-empty-v2` CLI requests `Accept-Encoding: identity` only for the exact selected Portal itemData URL. This is advisory, not route permission or a changed response contract. A publisher ignoring it with empty gzip remains rejected/held; nonempty gzip JSON follows the existing strict JSON path. No receipt/version/options fields change. Old v2 receipts prove response evidence, not emission of this request header; do not backfill that claim.
 
 Already-open `inspectApp` calls retain their response-bound behavior and cannot retrofit a fetch dependency. Library callers may explicitly install `identityAppData(existingFetch, itemUrl(selectedID, true))` in `Archive.open` dependencies, after their normal selection/permission validation. The helper changes no global transport and preserves other dependencies. It cannot repair, promote or resume held evidence; both operational stops remain independent of this hint.
+
+## Unreleased publisher-derived applications and layers
+
+`resolve-app` starts only from an existing successful native wrapper and its
+exact SHA, using strict boolean `--acknowledge-maps-robots-omission`. Supply
+`--source austin --archive PRIVATE_ROOT --wrapper-run UUID --wrapper-sha256 SHA`.
+Omit `--reference-sha256` for readonly-derived reference context; explicitly
+select a returned reference SHA to acquire ONE parent-published frame/script
+or typed config/Portal resource. `--parent-run` selects a completed descendant,
+`--helper-run` binds the actual same-document published resolver module.
+No scripts are executed. Actual document-relative base and app query spelling
+are preserved. Declared Portal config, public typed metadata and separate
+`--dependency-terms-sha256` admission precede app/WebMap data. Unknown roles
+remain unsupported, not inferred sources. Old wrapper-v1 receipts are unchanged.
+
+New references use separate versioned intents/derivation2 and the existing
+Archive RAW original-response queue. Lowlevel source fences rederive actual
+parent bytes/producer closure BEFORE cache recovery/reservation/HTTP. No
+metadata-only derived Portal item is asserted to be a GeoHub catalog member.
+Nonmaps origins use the strict water-profile REP check, not legacy Austin
+fallback; this does not classify their data as Water. The explicit maps
+resource omission never permits another-origin robots omission.
+
+`collect-app-layer` requires the same source/wrapper selectors, `--parent-run`
+pointing to completed WebMap data, an exact published `--layer-url` and reviewed
+`--layer-terms-sha256`. Choose finite `--max-records`, `--page-size`, `--max-pages`
+and request/decoded-byte caps. It collects a WHOLE bounded selected layer,
+not a silent first-N sample: count/IDs before+after, pages, native schema before+after
+and duplicate IDs must agree. Native SHAPE stays geometry, not a scalar field.
+A missing objectIdField may be explicitly derived ONLY from one native OID
+field definition; raw metadata remains unchanged. Native schema/CRS/XY and
+source pointers are retained. No outSR conversion, service equivalence or
+MapServer->FeatureServer rewrite. Exact custom `/gis/rest/...` routes are kept
+as published; `/services/` is not added. Duplicate source pointers are preserved
+and exact whole-selection reuse performs0HTTP. Changing selection/options
+requires explicit review, not implicit new acquisition.
+
+Defaults/ceilings: zero retries, up to16requests,12MiB total decoded bytes,
+6MiB per response/raw body,256reference rows by default (ceiling4096). Feature
+selection is explicit; unselected remote content/history remains unknown.
+No provider/Store/DDL/protectedrules edits. Still requires independent review
+and chief live authority; authored native fixture execution is not public proof.
+
+Layer terms prerequisite (app-derived): in WebMap `resolve-app` context, select
+the returned layer reference SHA. Its literal/publishedLayerURL and JSON
+metadata target are distinct: the target is derived with existing
+queryUrl(publishedLayerURL,{}). Resolve the returned successful inspection run
+without a child SHA to view original nativeSchema and layerTermsSha256. Review
+that metadata/terms, then explicitly supply the returned hash to
+collect-app-layer with the original published layer URL. Inspection acquires
+metadata only; it never exports features or implies catalog membership.

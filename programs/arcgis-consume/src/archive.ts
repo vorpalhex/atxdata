@@ -1,3 +1,6 @@
+import { layerMode, verifyRawLayerSource } from "./app-layer";
+import { verifyRawReferenceSource } from "./app-reference";
+import { referenceMode, referenceKind } from "./reference-contract";
 import { verifyRawWrapperSource } from "./wrapper";
 import { validateWrapperCapture } from "./wrapper-contract";
 import { createReadStream } from "node:fs";
@@ -34,7 +37,8 @@ export type Kind =
   | "redirect"
   | "file"
   | "policy-raw-v1"
-  | "wrapper-raw-v1";
+  | "wrapper-raw-v1"
+  | "app-reference-raw-v1";
 export type Dependencies = {
   fetch: (url: string, init: RequestInit) => Promise<Response>;
   now: () => number;
@@ -283,6 +287,13 @@ export class Archive {
         validateWrapperCapture(this.store.options(run), run, url, label);
         await verifyRawWrapperSource(this, run);
       }
+      if (this.store.options(run)?.mode === layerMode)
+        await verifyRawLayerSource(this, run, label, url, kind);
+      else if (
+        kind === referenceKind ||
+        this.store.options(run)?.mode === referenceMode
+      )
+        await verifyRawReferenceSource(this, run, label, url, kind);
       const old = this.store.observation(run, label);
       if (old) {
         ensure(
@@ -334,7 +345,11 @@ export class Archive {
       } catch (error) {
         // Raw capture performs no semantic validation. Any transfer failure is
         // an uncertified representation; finishAttempt has settled first.
-        if (kind === "policy-raw-v1" || kind === "wrapper-raw-v1")
+        if (
+          kind === "policy-raw-v1" ||
+          kind === "wrapper-raw-v1" ||
+          kind === referenceKind
+        )
           this.store.defer(Number.MAX_SAFE_INTEGER);
         if (attempt >= policy.retries || !retryable(error)) throw error;
         this.store.defer(
@@ -437,7 +452,11 @@ export class Archive {
   }
   private responseCap(run: string, kind: Kind, remaining: number) {
     const policy = this.policy(run);
-    if (kind === "policy-raw-v1" || kind === "wrapper-raw-v1")
+    if (
+      kind === "policy-raw-v1" ||
+      kind === "wrapper-raw-v1" ||
+      kind === referenceKind
+    )
       return Math.min(remaining, policy.zipBytes, policy.responseBytes);
     return Math.min(
       remaining,
@@ -447,7 +466,12 @@ export class Archive {
     );
   }
   private rawFraming(kind: Kind, headers: Headers) {
-    if (kind !== "policy-raw-v1" && kind !== "wrapper-raw-v1") return;
+    if (
+      kind !== "policy-raw-v1" &&
+      kind !== "wrapper-raw-v1" &&
+      kind !== referenceKind
+    )
+      return;
     const declared = headers.get("content-length"),
       transfer = headers.get("transfer-encoding");
     ensure(
@@ -457,7 +481,12 @@ export class Archive {
     );
   }
   private rawLength(kind: Kind, headers: Headers, bytes: number) {
-    if (kind !== "policy-raw-v1" && kind !== "wrapper-raw-v1") return;
+    if (
+      kind !== "policy-raw-v1" &&
+      kind !== "wrapper-raw-v1" &&
+      kind !== referenceKind
+    )
+      return;
     const declared = headers.get("content-length");
     if (declared !== null && !headers.has("content-encoding"))
       ensure(bytes === Number(declared), "raw policy Content-Length mismatch");
@@ -516,7 +545,9 @@ export class Archive {
     );
     try {
       const request =
-        kind === "policy-raw-v1" || kind === "wrapper-raw-v1"
+        kind === "policy-raw-v1" ||
+        kind === "wrapper-raw-v1" ||
+        kind === referenceKind
           ? http.captureResponse.bind(http)
           : http.request.bind(http);
       return await request(url, (response) =>
