@@ -1,6 +1,63 @@
 # arcgis-consume
 
-Read-only Bun/SQLite acquisition from the TNR and Voter Maps hub catalogs. `tnr` and `voter` are convenience presets, not the item allowlist. The shipped CLI accepts catalog-backed `--item`, explicit `--layer`, an optional matching `--service`, selected metadata fields, and configurable finite operation budgets.
+## Explicit maps wrapper HTML operation
+
+`inspect-wrapper --source austin --archive ABSOLUTE_PRIVATE_DIRECTORY --item CATALOG_APP_ID --app-run SUCCESSFUL_APP_RUN --app-item-sha256 RETAINED_ITEM_BODY_SHA256 --acknowledge-maps-robots-omission`
+
+The acknowledgement is a bare boolean switch. Omission, `=true`, `=false`, string operands and use on other commands are refused. The library requires `acknowledgeMapsRobotsOmission === true`. This records an operator decision to omit exactly `https://maps.austintexas.gov/robots.txt` for this wrapper operation; it does not convert the old maps/GeoHub HTML policy receipt into permission. Existing policy receipts are verified without new policy requests or rewritten outcomes. Portal source-policy/terms verification remains required.
+
+The existing complete readonly app/source verifier runs before opening a native writer and before any direct API mutation or request. The selected successful v1/v2 app must have matching retained public Web Mapping Application catalog membership, item role, terms, published URL and producer body SHA. No proof-item ID or FloodPro path allowlist: this mode admits literal canonical HTTPS application URLs on maps.austintexas.gov, without credentials/query/fragment; other origins and the robots path are refused rather than waived. The versioned decision binds source, item, app producer, terms, published URL and wrapper operation run.
+
+Exactly one literal wrapper GET is allowed, zero retries, minimum 3 seconds completion spacing plus stricter recorded server obligations. Default and maximum limits are 1 request and 1,000,000 fetch-decoded bytes for total, response and raw capture; use existing `--max-requests`, `--max-bytes`, `--response-bytes`, `--raw-bytes` only to tighten limits. The same original-Response queue, body persistence, framing/length guards, status/header/Location ledger and unknown-transfer holds are used. Non-200, challenge/denial, non-HTML, held, partial, oversized or unsupported-framing responses cannot become successful wrapper receipts. A complete diagnostic error body may remain retained with its original status and a failed run. No redirect is followed and no robots request is made.
+
+A successful `app-wrapper-v1` / `wrapperReceiptVersion: 1` receipt binds `wrapper-raw-v1` HTML bytes and records script-src, link-href and base-href attribute values using Bun's non-executing HTMLRewriter. These are parser-decoded attribute literals, not resolved URLs or service equivalence. Base elements are recorded, not applied to future navigation. Cross-origin, credential/query/fragment-bearing references remain in the original private body, with only hashes in CLI output. Nothing executes JavaScript or requests these references. `wrapperHtmlCaptured=true` does not set `wrapperResolved`, bootstrap/feature/file acquisition or semantic service equivalence. General `permission` and further `navigation` remain false; the explicit scoped waiver is the authority for this one HTML acquisition only.
+
+Repeat the identical command for verified offline reuse; `verify --archive ABSOLUTE_PRIVATE_DIRECTORY` also reconstructs the receipt with no HTTP. Missing/corrupt/downgraded waivers, source changes, unfinished runs, unknown holds and altered selections or budgets are refused. There is no resume, fresh-root initializer, user URL/header override, blanket robots bypass or new schema. Independent review and operational release are still required before live use of newly changed code.
+
+Read-only Bun/SQLite acquisition from the TNR, Voter Maps and Austin GeoHub catalogs, plus explicitly item-linked public layers discovered through the official Austin Water dashboard. Sources are `tnr`, `voter`, `austin` and `water`. County presets remain compatible; city collect/sync requires an explicit catalog-backed `--item` and advertised `--layer`. `--service` is only a matching assertion, not arbitrary URL permission. Fields and finite operating budgets are configurable; proof budgets are not production caps.
+
+## Austin and Water source scope
+
+`austin` derives its catalog groups from the published GeoHub site configuration. Compatible selected services are scoped to `maps.austintexas.gov/arcgis/rest/services/` or hosted city tenant `services.arcgis.com/0L95CJ0VTaxqcmED/arcgis/rest/services/`. Catalog/item agreement, advertised layer membership, native schema/CRS, complete before/after counts and IDs remain required. Catalog membership does not authorize personal records or every listed dataset. Select only approved public data and safe attributes.
+
+`water` retains the official water-leaks page's dashboard association, the dashboard's explicit map widgets, public Web Map definitions and their item-linked numeric layer endpoints, including grouped layers. Repeated aliases for the same item/layer are deduplicated; distinct publisher item identities remain distinct. Unlinked layers and dashboard chart expressions are not collected. Hosted service access is scoped to `services1.arcgis.com/PuB3FWUAxkScvfQy/`. No account, owner, service-address or private-infrastructure enrichment occurs. Original metadata remains private even when a safe attribute projection is selected.
+
+A real shipped-CLI Water run acquired the complete current seven-feature `LWOPR_View` point layer, map-linked public item `3817d04dbb29486e9469510fe1e63156`, advertised layer `0`. The explicit projection is `OBJECTID,COMPFLAG,STARTFLAG`, retaining native XY geometry and CRS `102100` / latest `3857`; no address, work-order, creator/editor or contact attributes were selected. These are public operational incident locations, not anonymous aggregate areas. Native offline verification and exact reuse added no requests. This is one current observation, not all Water holdings or history.
+
+The separate outage polygon layer was observed as 7,775 records during count-only reconnaissance. Its map-linked item `60736b279f964313a52e768f81a76109` was inaccessible; the distinct serviceItemId was not substituted and no polygon prefix was collected. PropertyProfile/FloodPro wrappers remain catalogued but their underlying acquisition routes are unresolved; wrapper traversal is not claimed. City evidence remains one complete ten-boundary observation acquired as originals and replayed through the CLI, not a fully-live City CLI invocation or all city GIS.
+
+For these two hosted city/Water authorities only, a completed HTTP403 at the exact `/robots.txt` route can be recorded as an explicitly approved RFC9309 unavailable-policy outcome. The original failed status, headers and provider timing remain unchanged; no successful robots body is synthesized. Error bodies are not retained by the shared provider, so `bodyRetained:false` is explicit; retained reconnaissance bodies are separate evidence. Actual-resource403,429,5xx, unknown transfers, malformed holds and manual stops do not gain permission. The separate maps-authority robots redirect to HTML remains unresolved. Operator-owned `rules.ts` and its two inherited Disallow failures are unchanged.
+
+Native source-run examples (Bun and the sibling modules described below are required):
+
+```sh
+cd programs/arcgis-consume
+bun src/cli.ts list
+: "${ARCHIVE:?Choose an absolute private archive outside every checkout}"
+bun src/cli.ts rules --source austin --archive "$ARCHIVE"
+: "${CATALOG_TERMS_SHA256:?Review catalogTerms.sha256 from rules}"
+bun src/cli.ts discover --source austin --archive "$ARCHIVE" \
+  --terms-sha256 "$CATALOG_TERMS_SHA256" --max-pages 1000
+: "${ITEM_ID:?Choose an approved item returned by discover}"
+bun src/cli.ts rules --source austin --item "$ITEM_ID" --archive "$ARCHIVE"
+: "${LAYER_ID:?Choose an actual advertised layer ID}"
+: "${FIELDS:?Choose safe actual attributes including the native OID}"
+: "${ITEM_TERMS_SHA256:?Review the selected item terms.sha256}"
+bun src/cli.ts collect --source austin --item "$ITEM_ID" --layer "$LAYER_ID" \
+  --fields "$FIELDS" --archive "$ARCHIVE" --terms-sha256 "$ITEM_TERMS_SHA256" \
+  --max-records 1000000 --page-size 1000 --max-requests 1000 --max-bytes 268435456
+# Repeat collect for verified offline reuse; use sync explicitly for freshness.
+bun src/cli.ts verify --archive "$ARCHIVE"
+
+# Water metadata discovery only; this is not approval to collect the large layer.
+bun src/cli.ts rules --source water --archive "$ARCHIVE"
+# Review the Water dashboard catalogTerms separately, then:
+: "${WATER_CATALOG_TERMS_SHA256:?Review Water catalogTerms.sha256}"
+bun src/cli.ts discover --source water --archive "$ARCHIVE" \
+  --terms-sha256 "$WATER_CATALOG_TERMS_SHA256" --max-pages 1000
+```
+
+Use one designated serial archive/request owner per source authority. Independent roots do not coordinate cooldowns. The examples expose the shipped interface; no fresh public requests were made during quality repair. Native fixture tests exercise the selection/reuse path, and retained city/county bytes are replayed into NEW ledgers under public-network denial, not represented as recovered old timing history or a fully-live CLI run. Optional `ARCGIS_CITY_INPUTS` enables the retained-city regression alongside `ARCGIS_ORIGINAL_INPUTS` for county originals.
 
 ## CLI frontend contract
 
@@ -27,7 +84,7 @@ Plain invocation intentionally retains status 1/stderr, now with useful full usa
 - Ordered pagination is used only when the layer advertises pagination and ordering. Page size is capped by `maxRecordCount`. Otherwise the complete authoritative ID set is queried in bounded batches, independent of response order. Truncated/missing/duplicate batches fail. A service that cannot supply complete count/ID evidence is unsupported rather than silently sampled.
 - Published item downloads use the selected item's actual advertised name, size, identity and timestamps. Direct bodies and manually validated `www.arcgis.com/itemdata/.../<advertised-name>` redirects are supported. Signed access URLs remain private provenance, never permanent source identities.
 - Shapefile interpretation supports one flat, matching-basename polygon SHP/SHX/DBF/PRJ group, optional encoding/metadata files and additional safe members. It validates all member CRCs, bounded declared/actual expansion, dynamic DBF fields/record lengths/counts, sequential SHP/SHX identities and polygon geometry. Records are identified by their native record ordinals, not an assumed unique Precinct column. Original DBF/PRJ/CPG and other components remain inside the unchanged ZIP; native PRJ text is retained, not transformed. Complete nonpolygon, Z/M or multiple-shapefile groups can be retained raw with `semanticStatus: unsupported`, `records: null`: only the ZIP container/CRC, component presence and basic SHP/SHX headers are checked, not their geometry, DBF records or CRS semantics. Invalid containers, unsafe members, CRC failures, missing components and invalid/mismatched headers still fail; corrupt supported polygon semantics are not downgraded to unsupported. Unsupported encodings and incompatible interpreted schemas fail explicitly. This is not a general shapefile/WKT topology parser.
-- Other advertised file formats may be retained with `semanticStatus: opaque-unsupported`, `records: null`; this is byte acquisition, not validated geometry. Missing/unsafe filenames or incompatible metadata fail. HTML challenge bodies are not accepted as data. Web maps/apps are not traversed to acquire referenced personal datasets.
+- Other advertised file formats may be retained with `semanticStatus: opaque-unsupported`, `records: null`; this is byte acquisition, not validated geometry. Missing/unsafe filenames or incompatible metadata fail. HTML challenge bodies are not accepted as data. Web maps/apps are not generally traversed: only the explicitly scoped Water dashboard-to-Web-Map discovery described above is implemented, without personal-dataset enrichment.
 
 Catalog inclusion is not authorization to collect address points, owners, forms or individual voters. Review the subject, fields, current usage terms and operational permission before collecting. There is no authentication, cookie import, challenge bypass, arbitrary URL scraping, editing, scheduler, service or historical backfill.
 
@@ -140,3 +197,82 @@ Historical evidence, not a fresh acquisition: the previous implementation retain
 Run tests with a private external TMPDIR and an OS outbound-network denial boundary that permits localhost fixtures. Keep coverage/metrics/mutation workers outside every checkout, in a private repository-layout mirror. Frozen offline installation succeeded; all changed files remain local and unstaged. Full-suite/typecheck, scoped mutation/CRAP/dryer receipts and residual classifications accompany the handoff. Independent review and acceptance remain chief-owned.
 
 The unchanged policy exceptions are exactly `robots longest-match rules, agent groups and stricter crawl-delay are respected` and `robots /query disallow is enforced before any feature query`. No other failures are accepted as policy exceptions.
+
+### Application metadata development slice (not acceptance clearance)
+
+`inspect-app --source austin --item CATALOG_APP_ID --archive ABSOLUTE_PRIVATE_DIRECTORY --catalog-terms-sha256 CATALOG_TERMS_SHA256 --terms-sha256 ITEM_TERMS_SHA256` is a metadata-only operation for arbitrary public Web Mapping Application members of the complete source catalog. Review actual native `rules` catalog terms, run `discover` with that catalog hash, and review selected-item `rules` before supplying the separate item hash. Existing positive finite budget flags apply to policy, site, complete paginated catalog, item and itemData together. A one-page fixture costs six requests; a four-page catalog costs nine, not five.
+
+This slice has only injected-fixture evidence, no authorization for a live Portal request or new live root. It retains JSON representation bytes through existing text observations so arrays, scalars and null can have honest versioned metadata dispositions; only JSON syntax runs inside transfer validation. Semantic error, empty and unsupported data are not parsed as apps/maps. Metadata-only summaries expose no records count, and explicitly deny wrapper resolution and feature/file acquisition. The two known catalog IDs are not an allowlist. Existing native legacy/Water behavior and maps robots restrictions are unchanged.
+
+Native verify/reuse dispatch is separate from feature and published-file completion. Receipts bind producing observations/attempts and historical route policy. Metadata receipts remain private. This is an unfinished development slice: complete policy/budget/lock/replay adversarial coverage, quality metrics, causal omissions, sanitizer, independent review and real-source proof remain gates. Do not treat successful metadata fixtures as wrapper or City acquisition acceptance.
+
+Application eligibility requires a represented absolute HTTP(S) published URL, with a nonempty authority and no credentials, literal whitespace/control characters or backslash repair. The item must match the exact original catalog URL string; validation does not normalize or follow it. Invalid catalog eligibility fails before app itemData, after retaining complete catalog JSON, without an unknown-wire hold. A completed but mismatched item remains metadata-only item-unavailable with no itemData request. A published URL is metadata, never permission for application navigation.
+
+For Portal-only application terms review use `rules --app-only --source austin --item CATALOG_APP_ID --archive ABSOLUTE_PRIVATE_DIRECTORY`. This public CLI flag requires an explicit catalog member and reads only source policy, site, complete catalog and current item JSON. Both catalog and current item must remain public Web Mapping Applications with the reviewed exact published-URL eligibility. A complete non-app/current-role response is retained, then rejected semantically before service-origin policy, service metadata, HTML, app itemData or features. Distinct current catalog/item terms are returned without automatic acceptance. Ordinary `rules` retains its existing service-inspection behavior when the flag is omitted. The flag is immutable on same-run resume and grants no live-source or navigation permission.
+
+### Explicit app-data representation v2 (fixture implementation)
+
+`inspect-app --source austin --item CATALOG_APP_ID --archive ABSOLUTE_PRIVATE_DIRECTORY --catalog-terms-sha256 CATALOG_TERMS_SHA256 --terms-sha256 ITEM_TERMS_SHA256 --app-data-format json-or-empty-v2` opts into mode `app-metadata-v2`, receiptVersion2 and an immutable format discriminator. Omission remains genuine strict-JSON v1; there is no upgrade/adoption of old failed or pending data. The flag is invalid on other commands/sources and v2 requires zero retries. Existing published app/catalog identity and reviewed distinct terms remain prerequisites.
+
+Only app-data may produce `outcome: raw-empty`, `representation: empty-body`. This requires an actual completed fresh HTTP200 transfer, accepted explicit zero framing (Content-Length0 or properly terminated chunked), bounded supported media/headers, no credentials/challenge/redirect indicators or ambiguous encoding, then an exact successful producer/ready canonical body with zero bytes and empty-body hash. Headers remain private but are hash-bound to the producer receipt. Nonempty bytes retain strict JSON parsing without trimming; JSON null/string-empty/object-empty/array-empty are representation `json`, never raw-empty. A nonempty retained Portal policy is a conservative v2 prerequisite; provider/legacy policy handling is unchanged. No reference traversal, endpoint-availability success, wrapper absence, features or files are inferred.
+
+For inspect-app and app-bearing verification, a consumer pre-open read-only gate snapshots main database plus WAL bytes, validates checksum/salt/committed frames within64MiB-per-file bounds, and queries a read-only in-memory SQLite view. It never connects SQLite to those source files, creates SHM, recovers/promotes a body, changes a gate, or writes source schema. Missing/inconsistent metadata, unsupported/incomplete WAL snapshots, manual holds and owned locks fail closed. Snapshot reads are not a substitute for later normal locked/runtime checks; concurrent state can still change and remains subject to those checks. Already-open inspectApp callers receive a no-further-mutation preflight, not a promise that their caller never opened a writer.
+
+Successful v2 replay requires coherent mode/version/source/format/summary, actual ready body and exact successful producing attempt including status/error/bytes and private-header hash. Missing or conflicting markers do not fall back to v1. Hashes are not signatures against wholesale evidence reconstruction. The actual held source root is not admitted or repaired by this feature. An old v1 pending0/error is not EOF, a raw-empty receipt or wrapper absence. Native tests use local authored servers and separately named copied inputs only; no live traffic is authorized.
+
+### Advisory app-data encoding preference
+
+The validated Austin `inspect-app --app-data-format json-or-empty-v2` CLI requests `Accept-Encoding: identity` only for the exact selected Portal itemData URL. This is advisory, not route permission or a changed response contract. A publisher ignoring it with empty gzip remains rejected/held; nonempty gzip JSON follows the existing strict JSON path. No receipt/version/options fields change. Old v2 receipts prove response evidence, not emission of this request header; do not backfill that claim.
+
+Already-open `inspectApp` calls retain their response-bound behavior and cannot retrofit a fetch dependency. Library callers may explicitly install `identityAppData(existingFetch, itemUrl(selectedID, true))` in `Archive.open` dependencies, after their normal selection/permission validation. The helper changes no global transport and preserves other dependencies. It cannot repair, promote or resume held evidence; both operational stops remain independent of this hint.
+
+## Unreleased publisher-derived applications and layers
+
+`resolve-app` starts only from an existing successful native wrapper and its
+exact SHA, using strict boolean `--acknowledge-maps-robots-omission`. Supply
+`--source austin --archive PRIVATE_ROOT --wrapper-run UUID --wrapper-sha256 SHA`.
+Omit `--reference-sha256` for readonly-derived reference context; explicitly
+select a returned reference SHA to acquire ONE parent-published frame/script
+or typed config/Portal resource. `--parent-run` selects a completed descendant,
+`--helper-run` binds the actual same-document published resolver module.
+No scripts are executed. Actual document-relative base and app query spelling
+are preserved. Declared Portal config, public typed metadata and separate
+`--dependency-terms-sha256` admission precede app/WebMap data. Unknown roles
+remain unsupported, not inferred sources. Old wrapper-v1 receipts are unchanged.
+
+New references use separate versioned intents/derivation2 and the existing
+Archive RAW original-response queue. Lowlevel source fences rederive actual
+parent bytes/producer closure BEFORE cache recovery/reservation/HTTP. No
+metadata-only derived Portal item is asserted to be a GeoHub catalog member.
+Nonmaps origins use the strict water-profile REP check, not legacy Austin
+fallback; this does not classify their data as Water. The explicit maps
+resource omission never permits another-origin robots omission.
+
+`collect-app-layer` requires the same source/wrapper selectors, `--parent-run`
+pointing to completed WebMap data, an exact published `--layer-url` and reviewed
+`--layer-terms-sha256`. Choose finite `--max-records`, `--page-size`, `--max-pages`
+and request/decoded-byte caps. It collects a WHOLE bounded selected layer,
+not a silent first-N sample: count/IDs before+after, pages, native schema before+after
+and duplicate IDs must agree. Native SHAPE stays geometry, not a scalar field.
+A missing objectIdField may be explicitly derived ONLY from one native OID
+field definition; raw metadata remains unchanged. Native schema/CRS/XY and
+source pointers are retained. No outSR conversion, service equivalence or
+MapServer->FeatureServer rewrite. Exact custom `/gis/rest/...` routes are kept
+as published; `/services/` is not added. Duplicate source pointers are preserved
+and exact whole-selection reuse performs0HTTP. Changing selection/options
+requires explicit review, not implicit new acquisition.
+
+Defaults/ceilings: zero retries, up to16requests,12MiB total decoded bytes,
+6MiB per response/raw body,256reference rows by default (ceiling4096). Feature
+selection is explicit; unselected remote content/history remains unknown.
+No provider/Store/DDL/protectedrules edits. Still requires independent review
+and chief live authority; authored native fixture execution is not public proof.
+
+Layer terms prerequisite (app-derived): in WebMap `resolve-app` context, select
+the returned layer reference SHA. Its literal/publishedLayerURL and JSON
+metadata target are distinct: the target is derived with existing
+queryUrl(publishedLayerURL,{}). Resolve the returned successful inspection run
+without a child SHA to view original nativeSchema and layerTermsSha256. Review
+that metadata/terms, then explicitly supply the returned hash to
+collect-app-layer with the original published layer URL. Inspection acquires
+metadata only; it never exports features or implies catalog membership.

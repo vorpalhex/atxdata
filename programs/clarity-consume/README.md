@@ -22,6 +22,13 @@ Run `bun run format` or `bun run format:check` for the explicit CLI/frontend,
 output-helper, related test and documentation file set. Prettier 3.9.10 uses
 its defaults; collector/domain files and generated lockfiles are not formatted.
 
+## Austin municipal contests
+
+[AUSTIN-CONTESTS.md](AUSTIN-CONTESTS.md) explains reusing the Travis collector for
+Austin contests while retaining county, election, observation and contest keys.
+Hays/Williamson results and City Clerk publications remain separate sources;
+Travis-only coverage must not be presented as complete municipal results.
+
 ## Run
 
 Requires Bun and project dependencies. From this program directory:

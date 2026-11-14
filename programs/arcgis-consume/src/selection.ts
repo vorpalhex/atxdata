@@ -1,4 +1,12 @@
+import { appRules } from "./app-metadata";
 import { acquirePublished, verifyPublished } from "./published";
+import { waterCatalog } from "./water";
+import {
+  unavailablePolicy,
+  sourcePolicy,
+  profileAllowed,
+  verifyProfilePolicy,
+} from "./profile-policy";
 import { Archive } from "./archive";
 import { array, ensure, integer, object, same } from "./check";
 import {
@@ -8,10 +16,17 @@ import {
   queryUrl,
   sharing,
   validateItem,
+  stableItem,
   source as validateSource,
   type Source,
 } from "./sources";
-import { validateCatalogPage, serviceUrl, serviceRoute } from "./catalog";
+import {
+  validateCatalogPage,
+  serviceUrl,
+  serviceRoute,
+  sourceService,
+  catalogEntry,
+} from "./catalog";
 import { allowed, terms } from "./rules";
 import { layerSchema, featurePage, featureIds } from "./schema";
 import { validateBudget } from "./policy";
@@ -120,7 +135,7 @@ export function selectionOptions(
   };
 }
 export async function readCatalog(
-  a: Archive,
+  a: Pick<Archive, "request" | "read" | "readExpected">,
   run: string,
   source: Source,
   maxPages: number,
@@ -148,6 +163,13 @@ export async function readCatalog(
     itemUrl(config.site, true),
     "json",
   );
+  if (source === "water") {
+    ensure(
+      object(await a.read(run, "site-item")).type === "Dashboard",
+      "Water root is not a dashboard",
+    );
+    return waterCatalog(request, run, data, maxPages);
+  }
   const q = catalogQuery(source, data, true),
     seen = new Set<string>(),
     items: unknown[] = [];
@@ -184,44 +206,87 @@ export async function readCatalog(
     "catalog page budget exhausted; resume same run with unchanged budget or start an explicitly larger operation; not complete",
   );
 }
-async function gate(a: Archive, run: string, vendor = false) {
+function httpStatus(error: unknown, status: number) {
+  return error instanceof Error && "status" in error && error.status === status;
+}
+async function robotsPolicy(a: Archive, run: string, origin: string) {
+  const policyUrl = origin + "/robots.txt";
+  if (unavailablePolicy(a, run, policyUrl)) return undefined;
+  try {
+    return String(
+      await a.request(
+        run,
+        "robots-" + new URL(origin).hostname,
+        policyUrl,
+        "text",
+      ),
+    );
+  } catch (e) {
+    if (httpStatus(e, 403) && unavailablePolicy(a, run, policyUrl))
+      return undefined;
+    if (httpStatus(e, 404)) return "";
+    throw e;
+  }
+}
+export async function gate(
+  a: Archive,
+  run: string,
+  origins = ["https://www.arcgis.com", "https://gis.traviscountytx.gov"],
+) {
   a.guard = undefined;
   a.setSpacing(3000);
-  const rules: Record<string, string> = {};
-  for (const origin of [
-    "https://www.arcgis.com",
-    "https://gis.traviscountytx.gov",
-    ...(vendor ? ["https://services1.arcgis.com"] : []),
-  ]) {
-    let text = "";
-    try {
-      text = String(
-        await a.request(
-          run,
-          "robots-" + new URL(origin).hostname,
-          origin + "/robots.txt",
-          "text",
-        ),
-      );
-    } catch (e) {
-      if (!(e instanceof Error && "status" in e && e.status === 404)) throw e;
-    }
+  const source = a.store.options(run)?.source;
+  const rules: Record<string, string | undefined> = {};
+  for (const origin of origins) {
+    const text = await robotsPolicy(a, run, origin);
     rules[origin] = text;
-    a.setSpacing(allowed(origin + "/robots.txt", text, origin + "/"));
+    if (text !== undefined)
+      a.setSpacing(
+        allowed(origin + "/robots.txt", text, origin + "/robots.txt"),
+      );
   }
   a.guard = (url) => {
     const origin = new URL(url).origin;
     ensure(origin in rules, "authority missing robots gate");
-    a.setSpacing(allowed(origin + "/robots.txt", rules[origin], url));
+    const text = rules[origin];
+    if (text !== undefined)
+      a.setSpacing(profileAllowed(source, origin + "/robots.txt", text, url));
   };
+}
+function validateAppOnlyInvocation(
+  source: Source,
+  command: string,
+  options: Selection & { appOnly?: boolean },
+) {
+  ensure(
+    options.appOnly === undefined || typeof options.appOnly === "boolean",
+    "invalid app-only option",
+  );
+  if (!options.appOnly) return;
+  ensure(
+    source === "austin" && command === "rules",
+    "app-only requires Austin rules",
+  );
+  ensure(
+    [options.layer, options.service, options.fields].every(
+      (value) => value === undefined,
+    ),
+    "app-only does not accept service/layer/fields selections",
+  );
 }
 function validateInvocation(
   source: Source,
   command: string,
-  options: Selection & { termsSha256?: string; resume?: string },
+  options: Selection & {
+    termsSha256?: string;
+    resume?: string;
+    appOnly?: boolean;
+  },
 ) {
   validateSelection(options);
   validateSource(source);
+  validateAppOnlyInvocation(source, command, options);
+  if (options.service) sourceService(options.service, source);
   ensure(
     ["collect", "sync", "rules", "discover"].includes(command),
     "unsupported selection command",
@@ -240,6 +305,13 @@ function validateInvocation(
 }
 function featureItem(item: unknown) {
   return ["Feature Service", "Map Service"].includes(String(object(item).type));
+}
+function admitProfileItem(source: Source, item: unknown) {
+  ensure(
+    source !== "water" || featureItem(item),
+    "Water catalog feature identity mismatch",
+  );
+  if (featureItem(item)) sourceService(object(item).url, source);
 }
 function selectionKey(source: Source, s: Selection) {
   return `${source}:${s.item}:${s.layer ?? "file"}:${s.fields?.join(",") ?? "*"}`;
@@ -269,6 +341,12 @@ async function inspectRules(
     "json",
   );
 }
+function sourceOrigins(source: Source) {
+  if (source === "water")
+    return ["https://www.arcgis.com", "https://www.austintexas.gov"];
+  if (source === "austin") return ["https://www.arcgis.com"];
+  return ["https://www.arcgis.com", "https://gis.traviscountytx.gov"];
+}
 async function performSelection(
   a: Archive,
   run: string,
@@ -277,8 +355,10 @@ async function performSelection(
   command: string,
   selected: Selection,
   termsSha256?: string,
+  appOnly = false,
 ) {
-  await gate(a, run);
+  const origins = sourceOrigins(source);
+  await gate(a, run, origins);
   const catalog = await readCatalog(a, run, source, selected.maxPages);
   const catalogTerms = terms(await a.read(run, "site-item"));
   if (command === "discover") {
@@ -288,7 +368,8 @@ async function performSelection(
     );
     return catalog;
   }
-  const entry = catalog.items.map(object).find((v) => v.id === selected.item);
+  if (appOnly) return appRules(a, run, selected, catalog, catalogTerms);
+  const entry = catalogEntry(catalog.items, selected.item, selected.layer);
   if (command === "rules" && !entry)
     return {
       source,
@@ -305,9 +386,11 @@ async function performSelection(
     "json",
     (v) => validateItem(v, selected.item),
   );
+  admitProfileItem(source, item);
   const original = originalSource(item, entry, selected);
-  if (new URL(original).hostname === "services1.arcgis.com")
-    await gate(a, run, true);
+  const serviceOrigin = new URL(original).origin;
+  if (!origins.includes(serviceOrigin))
+    await gate(a, run, [...origins, serviceOrigin]);
   a.store.source(key, String(object(item).title), original);
   if (command === "rules")
     return {
@@ -326,14 +409,29 @@ async function performSelection(
   else await acquirePublished(a, run, selected, item);
   return verifySelection(a, run);
 }
+function validateCachedRecords(
+  summary: Record<string, unknown>,
+  maxRecords: number,
+) {
+  ensure(
+    !("records" in summary) ||
+      summary.records === null ||
+      integer(summary.records, 0, Number.MAX_SAFE_INTEGER) <= maxRecords,
+    "cached selection exceeds current record bound",
+  );
+}
 export async function executeSelection(
   a: Archive,
   source: Source,
   command: string,
-  options: Selection & { termsSha256?: string; resume?: string },
+  options: Selection & {
+    termsSha256?: string;
+    resume?: string;
+    appOnly?: boolean;
+  },
 ) {
   validateInvocation(source, command, options);
-  const { termsSha256, resume, ...selection } = options;
+  const { termsSha256, resume, appOnly, ...selection } = options;
   // Only persist the explicit immutable selection, not CLI bookkeeping.
   const selected: Selection = {
     item: selection.item,
@@ -347,6 +445,9 @@ export async function executeSelection(
     maxMembers: selection.maxMembers,
     budget: selection.budget,
   };
+  const saved = appOnly
+    ? { ...selected, source, appOnly: true }
+    : { ...selected, source };
   const key = selectionKey(source, selected);
   if (!a.store.db.query("SELECT 1 FROM sources WHERE id=?").get(key))
     a.store.source(
@@ -358,11 +459,12 @@ export async function executeSelection(
     const prior = a.store.latestCollection(key);
     if (prior) {
       await a.verify();
-      const summary = await verifySelection(a, prior.id);
+      const summary = await verifySelection(a, prior.id, selected);
       ensure(
         same(summary, JSON.parse(prior.summary)),
         "stored summary differs from original content",
       );
+      validateCachedRecords(summary, selected.maxRecords);
       await validateCachedAssertion(a, prior.id, selected);
       return { run: prior.id, reused: true, summary };
     }
@@ -370,13 +472,13 @@ export async function executeSelection(
   let run: string;
   if (resume) {
     ensure(
-      same(a.store.options(resume), { ...selected, source }),
+      same(a.store.options(resume), saved),
       "resume selection/budget changed",
     );
     run = a.store.resume(resume, key, command);
   } else {
     run = a.store.start(key, command);
-    a.store.saveOptions(run, { ...selected, source });
+    a.store.saveOptions(run, saved);
   }
   try {
     const summary = await performSelection(
@@ -387,6 +489,7 @@ export async function executeSelection(
       command,
       selected,
       termsSha256,
+      appOnly,
     );
     a.store.finish(run, "succeeded", undefined, summary);
     return { run, reused: false, summary };
@@ -400,6 +503,13 @@ function queries(base: string) {
     queryUrl(base + "/query", { where: "1=1", ...params });
 }
 async function validateCachedAssertion(a: Archive, run: string, s: Selection) {
+  for (const row of a.store.observations().filter((v) => v.run === run)) {
+    const cap =
+      row.kind === "zip" || row.kind === "file"
+        ? s.budget.zipBytes
+        : s.budget.responseBytes;
+    ensure(row.bytes <= cap, "cached selection exceeds current response bound");
+  }
   if (!s.service) return;
   const item = object(
     await a.readExpected(run, "item-before", itemUrl(s.item), "json"),
@@ -413,7 +523,15 @@ function selectedService(
 ) {
   const route = serviceRoute(object(item).url);
   ensure(
-    entry.url === route.original &&
+    s.layer === undefined ||
+      serviceRoute(entry.url).layer === undefined ||
+      serviceRoute(entry.url).layer === s.layer,
+    "caller/advertised layer mismatch",
+  );
+  ensure(
+    (entry.map
+      ? serviceRoute(entry.url).root === route.root
+      : entry.url === route.original) &&
       (!s.service || s.service === route.root || s.service === route.original),
     "catalog/item/service identity mismatch",
   );
@@ -527,11 +645,30 @@ async function acquireFeatures(
   await a.request(run, "service-after", queryUrl(base, {}), "json");
   await a.request(run, "item-after", itemUrl(s.item), "json");
 }
-export async function verifySelection(a: Archive, run: string) {
+type InterpretationBounds = Pick<Selection, "expandedBytes" | "maxMembers">;
+function interpretationBounds(
+  s: Selection,
+  current?: InterpretationBounds,
+): Selection {
+  return {
+    ...s,
+    expandedBytes: Math.min(
+      s.expandedBytes,
+      current?.expandedBytes ?? s.expandedBytes,
+    ),
+    maxMembers: Math.min(s.maxMembers, current?.maxMembers ?? s.maxMembers),
+  };
+}
+export async function verifySelection(
+  a: Archive,
+  run: string,
+  current?: InterpretationBounds,
+) {
   const s = a.store.options(run) as Selection & { source: Source };
   ensure(s, "missing selection checkpoint");
   validateSelection(s);
   validateSource(s.source);
+  await verifyProfilePolicy(a, run);
   const expected: Record<string, string> = {
     "item-before": itemUrl(s.item),
     "item-after": itemUrl(s.item),
@@ -542,11 +679,16 @@ export async function verifySelection(a: Archive, run: string) {
   };
   const item = validateItem(await read("item-before"), s.item),
     after = validateItem(await read("item-after"), s.item);
-  ensure(same(item, after), "item metadata changed during observation");
+  ensure(
+    stableItem(item, after, s.source),
+    "item metadata changed during observation",
+  );
   const catalog = await readCatalog(a, run, s.source, s.maxPages, true);
-  const entry = catalog.items.map(object).find((v) => v.id === s.item);
+  const entry = catalogEntry(catalog.items, s.item, s.layer);
   ensure(entry, "item missing from retained catalog");
+  admitProfileItem(s.source, item);
   if (["Feature Service", "Map Service"].includes(String(item.type))) {
+    sourceService(item.url, s.source);
     const base = selectedService(item, entry, s).root;
     ensure(s.layer !== undefined, "missing selected layer");
     const layer = base + "/" + s.layer,
@@ -569,7 +711,16 @@ export async function verifySelection(a: Archive, run: string) {
     );
   }
   if (!["Feature Service", "Map Service"].includes(String(item.type)))
-    return { source: s.source, ...(await verifyPublished(a, run, s, item)) };
+    return {
+      source: s.source,
+      ...sourcePolicy(a, run),
+      ...(await verifyPublished(
+        a,
+        run,
+        interpretationBounds(s, current),
+        item,
+      )),
+    };
   ensure(
     same(await read("service"), await read("service-after")),
     "service identity/version changed during observation",
@@ -617,6 +768,7 @@ export async function verifySelection(a: Archive, run: string) {
   }
   return {
     source: s.source,
+    ...sourcePolicy(a, run),
     strategy: "catalog-feature-query",
     catalogItem: s.item,
     layer: s.layer,

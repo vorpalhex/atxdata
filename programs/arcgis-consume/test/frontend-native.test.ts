@@ -28,6 +28,9 @@ test("native contextual help/version bypass unusable configuration and never rei
         cwd,
         env: {
           ...process.env,
+          // Parent/candidate cold-HOME probes isolate Bun dependency transpilation
+          // (zip.js + commander). Disable only that runtime cache; keep HOME empty.
+          BUN_RUNTIME_TRANSPILER_CACHE_PATH: "0",
           HOME: cwd,
           XDG_CONFIG_HOME: cwd,
           TERM: "dumb",

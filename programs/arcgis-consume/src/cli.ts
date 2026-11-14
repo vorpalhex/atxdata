@@ -1,3 +1,28 @@
+import {
+  layerOptions,
+  collectAppLayer,
+  readOnlyLayerPreflight,
+  verifyLayerRuns,
+} from "./app-layer";
+import { referenceOptions } from "./reference-contract";
+import {
+  resolveApp,
+  readOnlyReferencePreflight,
+  verifyReferenceRuns,
+} from "./app-reference";
+import { wrapperFlags, waiverFlag } from "./wrapper-contract";
+import {
+  inspectWrapper,
+  readOnlyWrapperPreflight,
+  verifyWrapperRuns,
+} from "./wrapper";
+import { appRequestDependencies } from "./app-encoding";
+import { policyFlags } from "./policy-inspection-contract";
+import { inspectPolicy, readOnlyPolicyPreflight } from "./policy-inspection";
+import { verifyPolicyRuns } from "./policy-inspection-receipt";
+import { readOnlyAppPreflight } from "./app-preopen";
+import { v2Format } from "./app-intent";
+import { inspectApp, verifyAppRuns } from "./app-metadata";
 import { Command as Commander, Option } from "commander";
 import { parseCLI as parseOptions } from "./cli-parser";
 import { isAbsolute } from "node:path";
@@ -5,11 +30,17 @@ import metadata from "../package.json";
 import { writeStdout } from "./cli-output";
 import { type Dependencies, Archive, limits } from "./archive";
 import { Adapter, type Command } from "./adapter";
+import { sourceService } from "./catalog";
 import { configs, source, type Source } from "./sources";
 import { ensure } from "./check";
 import { executeSelection, selectionOptions } from "./selection";
 import { statFile } from "../../civicclerk-consume/src/archive";
 const COMMANDS = [
+  "resolve-app",
+  "collect-app-layer",
+  "inspect-wrapper",
+  "inspect-policy",
+  "inspect-app",
   "list",
   "rules",
   "discover",
@@ -34,6 +65,12 @@ export function createProgram() {
   program.addOption(new Option("--source <value>", "Exact source ID"));
   program.addOption(
     new Option(
+      "--app-only",
+      "Restrict rules to Portal-only public application terms",
+    ),
+  );
+  program.addOption(
+    new Option(
       "--terms-sha256 <value>",
       "Reviewed catalog or item terms SHA256",
     ),
@@ -41,7 +78,37 @@ export function createProgram() {
   program.addOption(
     new Option("--resume <value>", "Matching settled interrupted run ID"),
   );
+  program.addOption(
+    new Option(
+      "--catalog-terms-sha256 <value>",
+      "Reviewed catalog terms SHA256 for inspect-app",
+    ),
+  );
+  program.addOption(
+    new Option(
+      "--app-data-format <value>",
+      "Explicit inspect-app representation: json-or-empty-v2; omission is strict v1",
+    ),
+  );
+  program.addOption(
+    new Option(
+      waiverFlag,
+      "Explicitly omit maps robots for this literal wrapper HTML operation only",
+    ),
+  );
   program.addOption(new Option("--item <value>", "Catalog-backed item ID"));
+  program.addOption(
+    new Option(
+      "--app-run <value>",
+      "Existing successful v2 app run for policy inspection",
+    ),
+  );
+  program.addOption(
+    new Option(
+      "--app-item-sha256 <value>",
+      "Exact retained app-item body SHA256 for policy inspection",
+    ),
+  );
   program.addOption(
     new Option("--layer <value>", "Advertised layer ID (zero allowed)"),
   );
@@ -108,6 +175,23 @@ export function createProgram() {
       "Positive safe-integer operation budget; see defaults below",
     ),
   );
+  for (const name of [
+    "layer-url",
+    "layer-terms-sha256",
+    "wrapper-run",
+    "wrapper-sha256",
+    "parent-run",
+    "reference-sha256",
+    "helper-run",
+    "dependency-terms-sha256",
+    "max-references",
+  ])
+    program.addOption(
+      new Option(
+        "--" + name + " <value>",
+        "Exact publisher-derived source selection",
+      ),
+    );
   for (const name of COMMANDS)
     program.command(name).description(name.replaceAll("-", " "));
   return program;
@@ -117,7 +201,7 @@ function parseCLI(args: string[]) {
 }
 const help = `ArcGIS private, bounded catalog and item acquisition
 Usage: bun src/cli.ts COMMAND [options]
-Commands: list, rules, discover, collect, sync, status, verify
+Commands: list, rules, discover, inspect-app, inspect-policy, inspect-wrapper, collect, sync, status, verify
 Workflow (review terms before authorization):
   list -> rules/catalogTerms -> discover -> rules/item terms/layers -> collect
   bun src/cli.ts list
@@ -125,11 +209,17 @@ Workflow (review terms before authorization):
   bun src/cli.ts discover --source tnr --archive ABSOLUTE_PRIVATE_DIRECTORY --terms-sha256 CATALOG_TERMS_SHA256
   bun src/cli.ts rules --source tnr --item CATALOG_ITEM_ID --archive ABSOLUTE_PRIVATE_DIRECTORY
   bun src/cli.ts collect --source tnr --item CATALOG_ITEM_ID --layer ADVERTISED_LAYER_ID --archive ABSOLUTE_PRIVATE_DIRECTORY --terms-sha256 ITEM_TERMS_SHA256
-Sources: tnr, voter. list returns preset IDs, defaults and legacyArchiveLimits.
+Sources: tnr, voter, austin, water. list returns source IDs, defaults and legacyArchiveLimits.
+City workflow: rules --source austin -> discover --source austin -> rules --source austin --item CATALOG_ITEM_ID -> collect with explicit --item/--layer/--fields.
+Water discovery: rules --source water -> discover --source water; follows only the official dashboard's item-linked Web Map layers. No arbitrary URL or guessed layer0.
+Water real acquisition remains pending: the observed outage polygon layer exceeds the approved proof scope and its map-linked item is inaccessible. Point incidents are not aggregate areas. PropertyProfile/FloodPro wrappers remain unresolved.
 --archive is required except list: canonical absolute private directory outside source.
 --item selects a catalog-backed ID. --layer selects an advertised layer (zero allowed).
 --service asserts the matching service, never arbitrary URL permission.
 --fields comma-separated actual fields must include the actual OID.
+inspect-app --app-data-format json-or-empty-v2: explicit app-data-only HTTP200 empty-body capture; omission is strict v1. No old pending adoption, source permission or wrapper inference.
+inspect-app: --source austin --item CATALOG_APP_ID --catalog-terms-sha256 CATALOG_TERMS_SHA256 --terms-sha256 ITEM_TERMS_SHA256; catalog traversal costs count against the same finite request/byte budgets. Fixture-only implementation; not live access authority.
+rules --app-only: Portal-only app terms with --source austin and explicit --item; rejects changed/non-app roles before another origin or service/itemData requests. Ordinary rules remains unrestricted by this option when omitted.
 --terms-sha256: reviewed catalogTerms.sha256 for discover; selected item's terms.sha256 for collect/sync.
 --resume RUN_ID: repeat matching selection/budgets after a settled interruption; never steals locks or resets unknown transfers/cooldowns.
 Positive safe-integer defaults: --page-size 1000, --max-records 1000000, --max-pages 1000, --max-requests 1000, --max-bytes 268435456, --response-bytes 16777216, --raw-bytes 134217728, --expanded-bytes 536870912, --max-members 1000.
@@ -139,6 +229,16 @@ Default operational output is JSON; errors use stderr/status 1. No prompts or pa
 function commandHelp(command?: string): string {
   if (!command) return createProgram().helpInformation() + "\n" + help;
   const purpose: Record<string, string> = {
+    "collect-app-layer":
+      "Collect a whole bounded exact published WebMap layer. Requires --layer-url, --layer-terms-sha256, source/wrapper/parent producer selectors and explicit maps omission. Native schema/CRS/IDs retained; no catalog membership invented.",
+    "resolve-app":
+      "Versioned publisher-derived reference capture/context. Requires --source austin --wrapper-run UUID --wrapper-sha256 HASH --acknowledge-maps-robots-omission; --parent-run selects a completed child; --reference-sha256 explicitly selects a source-derived child. No arbitrary URL/automatic feature export.",
+    "inspect-wrapper":
+      "Acquire one literal catalog-bound maps wrapper HTML, not bootstrap assets or services. Requires --source austin --item --archive --app-run --app-item-sha256 --acknowledge-maps-robots-omission (bare boolean only). Defaults/maxima: one request, 1000000 decoded bytes total/response/raw, zero retries. Exact reuse and verify are offline. Other origins refused; no robots request, redirects, resume, or terms overrides.",
+    "inspect-policy":
+      "Inspect raw maps policy only from an existing v2 app run and exact --app-item-sha256. Two requests/one literal GeoHub edge maximum; defaults 2 requests/2000000 total/1000000 response and raw bytes. Every result has permission=false/navigation=false; never fetches the published application. Requires --source austin --item --archive --app-run --app-item-sha256. No resume, terms/header/bypass flags or new archive initialization.",
+    "inspect-app":
+      "Retain Austin catalog-backed public application metadata only, with separately reviewed --catalog-terms-sha256 and --terms-sha256. Requires explicit --item; no wrapper traversal or feature/file acquisition.",
     list: "List preset IDs and general/legacy defaults offline; no archive required.",
     rules:
       "Review catalogTerms and selected item terms; inspect advertised layers. Requires --source and --archive; optional --item.",
@@ -163,11 +263,96 @@ function presetSelection(
     ...flags,
   });
 }
+function validateSourceSelection(
+  selected: Source | undefined,
+  command: string,
+  flags: Record<string, string>,
+) {
+  if (
+    (selected === "austin" || selected === "water") &&
+    ["collect", "sync"].includes(command)
+  )
+    ensure(
+      flags["--item"],
+      "city collection requires explicit --item from discover",
+    );
+  if (selected && flags["--service"])
+    sourceService(flags["--service"], selected);
+}
+function validateAppFlags(
+  selected: Source | undefined,
+  command: string,
+  flags: Record<string, string>,
+) {
+  if (command === "inspect-app")
+    ensure(
+      selected === "austin" &&
+        flags["--item"] &&
+        !flags["--layer"] &&
+        !flags["--service"] &&
+        !flags["--fields"],
+      "inspect-app requires an Austin catalog item, not a service/layer/fields selection",
+    );
+  const catalogTermsSha256 = flags["--catalog-terms-sha256"];
+  if (command === "inspect-app")
+    ensure(
+      /^[a-f0-9]{64}$/.test(catalogTermsSha256 ?? ""),
+      "review catalog rules then provide --catalog-terms-sha256",
+    );
+  else
+    ensure(
+      catalogTermsSha256 === undefined,
+      "catalog terms assertion is inspect-app only",
+    );
+  return catalogTermsSha256;
+}
+function validateAppOnlyFlags(
+  selected: Source | undefined,
+  command: string,
+  flags: Record<string, string>,
+) {
+  if (flags["--app-only"] === undefined) return false;
+  ensure(
+    command === "rules" && selected === "austin" && flags["--item"],
+    "--app-only requires rules --source austin and an explicit --item",
+  );
+  ensure(
+    !["--layer", "--service", "--fields"].some(
+      (key) => flags[key] !== undefined,
+    ),
+    "--app-only does not accept service/layer/fields selections",
+  );
+  return true;
+}
+function validateAppDataFormat(command: string, flags: Record<string, string>) {
+  const value = flags["--app-data-format"];
+  if (value === undefined) return;
+  ensure(
+    command === "inspect-app" && value === v2Format,
+    "--app-data-format is inspect-app json-or-empty-v2 only",
+  );
+  return value;
+}
+function policyPayload(
+  command: string,
+  selected: Source | undefined,
+  flags: Record<string, string>,
+) {
+  const wrapper = wrapperFlags(command, selected, flags);
+  if (wrapper) return { wrapper };
+  const policy = policyFlags(command, selected, flags);
+  return policy ? { policy } : {};
+}
 export function parseArgs(args: string[]) {
   const parsed = parseCLI(args);
   const command = parsed.command ?? "";
   ensure(
     [
+      "resolve-app",
+      "collect-app-layer",
+      "inspect-wrapper",
+      "inspect-policy",
+      "inspect-app",
       "list",
       "rules",
       "discover",
@@ -179,6 +364,53 @@ export function parseArgs(args: string[]) {
     "commands: list, rules, discover, collect, sync, status, verify",
   );
   const flags = parsed.flags;
+  if (command === "collect-app-layer") {
+    const appLayer = layerOptions(flags);
+    ensure(
+      flags["--archive"] && isAbsolute(flags["--archive"]),
+      "absolute archive required",
+    );
+    return {
+      command,
+      appLayer,
+      reference: undefined,
+      archive: flags["--archive"],
+      source: "austin" as const,
+      legacyPreset: false,
+      selection: undefined,
+      termsSha256: undefined,
+      catalogTermsSha256: undefined,
+      appDataFormat: undefined,
+      appOnly: false,
+      resume: undefined,
+      policy: undefined,
+      wrapper: undefined,
+    };
+  }
+  if (command === "resolve-app") {
+    const reference = referenceOptions(flags);
+    ensure(
+      flags["--archive"] && isAbsolute(flags["--archive"]),
+      "absolute archive required",
+    );
+    return {
+      command,
+      reference,
+      appLayer: undefined,
+      archive: flags["--archive"],
+      source: "austin" as const,
+      legacyPreset: false,
+      selection: undefined,
+      termsSha256: undefined,
+      catalogTermsSha256: undefined,
+      appDataFormat: undefined,
+      appOnly: false,
+      resume: undefined,
+      policy: undefined,
+      wrapper: undefined,
+    };
+  }
+  const appDataFormat = validateAppDataFormat(command, flags);
   const archive = flags["--archive"];
   if (command !== "list")
     ensure(
@@ -188,8 +420,12 @@ export function parseArgs(args: string[]) {
   let selected: Source | undefined;
   if (!["list", "status", "verify"].includes(command))
     selected = source(flags["--source"]);
+  const policy = policyPayload(command, selected, flags);
+  validateSourceSelection(selected, command, flags);
+  const appOnly = validateAppOnlyFlags(selected, command, flags);
+  const catalogTermsSha256 = validateAppFlags(selected, command, flags);
   const termsSha256 = flags["--terms-sha256"];
-  if (["discover", "collect", "sync"].includes(command))
+  if (["discover", "collect", "sync", "inspect-app"].includes(command))
     ensure(
       /^[a-f0-9]{64}$/.test(termsSha256 ?? ""),
       "review rules then provide --terms-sha256",
@@ -198,14 +434,22 @@ export function parseArgs(args: string[]) {
   if (resume) ensure(/^[a-f0-9-]{36}$/.test(resume), "invalid run identifier");
   return {
     command,
+    appLayer: undefined,
+    reference: undefined,
+    ...policy,
     archive,
     source: selected,
     termsSha256,
+    catalogTermsSha256,
+    appDataFormat,
+    appOnly,
     resume,
     legacyPreset: Object.keys(flags).every((k) =>
       ["--source", "--archive", "--terms-sha256", "--resume"].includes(k),
     ),
-    selection: presetSelection(selected, flags),
+    selection: ["inspect-policy", "inspect-wrapper"].includes(command)
+      ? undefined
+      : presetSelection(selected, flags),
   };
 }
 function legacyDispatch(
@@ -220,18 +464,62 @@ function legacyDispatch(
         archive.store.latestCollection(options.source!)))
   );
 }
+function inspectMetadata(
+  options: ReturnType<typeof parseArgs>,
+  archive: Archive,
+) {
+  if (options.command === "inspect-wrapper")
+    return inspectWrapper(archive, options.wrapper!);
+  if (options.command === "inspect-policy")
+    return inspectPolicy(archive, options.policy!);
+  return inspectApp(archive, options.source!, {
+    ...options.selection!,
+    termsSha256: options.termsSha256,
+    catalogTermsSha256: options.catalogTermsSha256,
+    appDataFormat: options.appDataFormat,
+    resume: options.resume,
+  });
+}
 async function executeArchive(
   options: ReturnType<typeof parseArgs>,
   archive: Archive,
 ): Promise<unknown> {
+  if (options.command === "collect-app-layer")
+    return collectAppLayer(archive, options.appLayer!);
+  const appLayers = await verifyLayerRuns(archive.store.db, archive.root);
+  if (options.command === "resolve-app")
+    return resolveApp(archive, options.reference!);
+  await verifyReferenceRuns(archive.store.db, archive.root);
   if (options.command === "status")
     return {
       ...archive.store.status(),
       integrity: archive.store.integrity(),
       limits,
     };
+  const appMetadata = await verifyAppRuns(archive);
+  await verifyPolicyRuns(archive.store.db, archive.root);
+  await verifyWrapperRuns(archive.store.db, archive.root);
+  if (
+    ["inspect-policy", "inspect-app", "inspect-wrapper"].includes(
+      options.command,
+    )
+  )
+    return inspectMetadata(options, archive);
+  if (
+    options.command === "verify" &&
+    appMetadata > 0 &&
+    archive.store.completed().length === 0
+  )
+    return {
+      ...(await archive.verify()),
+      collections: appLayers,
+      ...(appLayers ? { appLayerCollections: appLayers } : {}),
+      status: archive.store.status(),
+      appMetadata,
+    };
   const adapter = new Adapter(archive);
-  if (options.command === "verify") return await adapter.verify();
+  if (options.command === "verify")
+    return { ...(await adapter.verify()), appMetadata };
   if (legacyDispatch(options, archive))
     return await adapter.execute(
       options.source!,
@@ -283,7 +571,18 @@ export async function main(
       await statFile(root + "/state.sqlite"),
       "archive state does not exist",
     );
-  const archive = await Archive.open(root, dependencies);
+  if (["inspect-app", "verify"].includes(options.command))
+    await readOnlyAppPreflight(root, options.command === "inspect-app");
+  await readOnlyLayerPreflight(root, options.appLayer);
+  if (options.command === "resolve-app")
+    await readOnlyReferencePreflight(root, options.reference);
+  if (options.command === "verify") await readOnlyReferencePreflight(root);
+  await readOnlyPolicyPreflight(root, options.policy);
+  await readOnlyWrapperPreflight(root, options.wrapper);
+  const archive = await Archive.open(
+    root,
+    appRequestDependencies(options, dependencies),
+  );
   try {
     return await executeArchive(options, archive);
   } finally {

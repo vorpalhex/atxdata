@@ -1,3 +1,8 @@
+import { layerMode, verifyRawLayerSource } from "./app-layer";
+import { verifyRawReferenceSource } from "./app-reference";
+import { referenceMode, referenceKind } from "./reference-contract";
+import { verifyRawWrapperSource } from "./wrapper";
+import { validateWrapperCapture } from "./wrapper-contract";
 import { createReadStream } from "node:fs";
 import { createHash } from "node:crypto";
 import { readFile, unlink, open } from "node:fs/promises";
@@ -25,7 +30,15 @@ export const limits = {
   expandedBytes: 2_000_000,
   zipMembers: 6,
 };
-export type Kind = "json" | "text" | "zip" | "redirect" | "file";
+export type Kind =
+  | "json"
+  | "text"
+  | "zip"
+  | "redirect"
+  | "file"
+  | "policy-raw-v1"
+  | "wrapper-raw-v1"
+  | "app-reference-raw-v1";
 export type Dependencies = {
   fetch: (url: string, init: RequestInit) => Promise<Response>;
   now: () => number;
@@ -263,6 +276,24 @@ export class Archive {
     this.busy = true;
     try {
       const policy = this.policy(run);
+      if (kind === "policy-raw-v1")
+        ensure(
+          this.store.options(run)?.mode === "wrapper-policy-v1" &&
+            this.store.options(run)?.policyReceiptVersion === 1 &&
+            policy.retries === 0,
+          "raw policy capture requires explicit versioned zero-retry intent",
+        );
+      if (kind === "wrapper-raw-v1") {
+        validateWrapperCapture(this.store.options(run), run, url, label);
+        await verifyRawWrapperSource(this, run);
+      }
+      if (this.store.options(run)?.mode === layerMode)
+        await verifyRawLayerSource(this, run, label, url, kind);
+      else if (
+        kind === referenceKind ||
+        this.store.options(run)?.mode === referenceMode
+      )
+        await verifyRawReferenceSource(this, run, label, url, kind);
       const old = this.store.observation(run, label);
       if (old) {
         ensure(
@@ -275,37 +306,62 @@ export class Archive {
         return value;
       }
       this.guard?.(url);
-      for (let attempt = 0; ; attempt++) {
-        await this.wait();
-        const used = this.store.budget(run);
-        ensure(
-          used.requests < policy.requests && used.bytes < policy.totalBytes,
-          "run request/byte ceiling exceeded",
-        );
-        try {
-          return await this.transfer(
-            run,
-            label,
-            url,
-            kind,
-            policy.totalBytes - used.bytes,
-            validate,
-          );
-        } catch (error) {
-          if (attempt >= policy.retries || !retryable(error)) throw error;
-          this.store.defer(
-            Math.ceil(
-              this.deps.now() +
-                Math.max(
-                  limits.spacingMs,
-                  2 ** attempt * 1000 + this.deps.random() * 1000,
-                ),
-            ),
-          );
-        }
-      }
+      return await this.requestAttempts(
+        run,
+        label,
+        url,
+        kind,
+        validate,
+        policy,
+      );
     } finally {
       this.busy = false;
+    }
+  }
+  private async requestAttempts(
+    run: string,
+    label: string,
+    url: string,
+    kind: Kind,
+    validate: (value: unknown) => unknown | Promise<unknown>,
+    policy: { requests: number; totalBytes: number; retries: number },
+  ): Promise<unknown> {
+    for (let attempt = 0; ; attempt++) {
+      await this.wait();
+      const used = this.store.budget(run);
+      ensure(
+        used.requests < policy.requests && used.bytes < policy.totalBytes,
+        "run request/byte ceiling exceeded",
+      );
+      try {
+        return await this.transfer(
+          run,
+          label,
+          url,
+          kind,
+          policy.totalBytes - used.bytes,
+          validate,
+        );
+      } catch (error) {
+        // Raw capture performs no semantic validation. Any transfer failure is
+        // an uncertified representation; finishAttempt has settled first.
+        if (
+          kind === "policy-raw-v1" ||
+          kind === "wrapper-raw-v1" ||
+          kind === referenceKind
+        )
+          this.store.defer(Number.MAX_SAFE_INTEGER);
+        if (attempt >= policy.retries || !retryable(error)) throw error;
+        this.store.defer(
+          Math.ceil(
+            this.deps.now() +
+              Math.max(
+                limits.spacingMs,
+                2 ** attempt * 1000 + this.deps.random() * 1000,
+              ),
+          ),
+        );
+      }
     }
   }
   private async persist(
@@ -336,13 +392,9 @@ export class Archive {
         ),
         "unexpected ZIP content type",
       );
-    const cap = Math.min(
-      remaining,
-      kind === "zip" || kind === "file"
-        ? this.policy(run).zipBytes
-        : this.policy(run).responseBytes,
-    );
+    const cap = this.responseCap(run, kind, remaining);
     const declared = response.headers.get("content-length");
+    this.rawFraming(kind, response.headers);
     if (declared !== null)
       ensure(
         /^\d+$/.test(declared) && Number(declared) <= cap,
@@ -379,6 +431,7 @@ export class Archive {
       await handle.close();
     }
     const raw = await readFile(path + ".pending");
+    this.rawLength(kind, response.headers, raw.length);
     const value = decode(kind, raw);
     await validate(value);
     const row: Observation = {
@@ -396,6 +449,47 @@ export class Archive {
     await promote(path);
     this.store.ready(row);
     return value;
+  }
+  private responseCap(run: string, kind: Kind, remaining: number) {
+    const policy = this.policy(run);
+    if (
+      kind === "policy-raw-v1" ||
+      kind === "wrapper-raw-v1" ||
+      kind === referenceKind
+    )
+      return Math.min(remaining, policy.zipBytes, policy.responseBytes);
+    return Math.min(
+      remaining,
+      kind === "zip" || kind === "file"
+        ? policy.zipBytes
+        : policy.responseBytes,
+    );
+  }
+  private rawFraming(kind: Kind, headers: Headers) {
+    if (
+      kind !== "policy-raw-v1" &&
+      kind !== "wrapper-raw-v1" &&
+      kind !== referenceKind
+    )
+      return;
+    const declared = headers.get("content-length"),
+      transfer = headers.get("transfer-encoding");
+    ensure(
+      (declared !== null && transfer === null) ||
+        (declared === null && transfer?.toLowerCase() === "chunked"),
+      "raw policy requires unambiguous bounded framing",
+    );
+  }
+  private rawLength(kind: Kind, headers: Headers, bytes: number) {
+    if (
+      kind !== "policy-raw-v1" &&
+      kind !== "wrapper-raw-v1" &&
+      kind !== referenceKind
+    )
+      return;
+    const declared = headers.get("content-length");
+    if (declared !== null && !headers.has("content-encoding"))
+      ensure(bytes === Number(declared), "raw policy Content-Length mismatch");
   }
   private async recordHeaders(
     id: string,
@@ -423,12 +517,7 @@ export class Archive {
     remaining: number,
     validate: (value: unknown) => unknown | Promise<unknown>,
   ) {
-    const allowance = Math.min(
-      remaining,
-      kind === "zip" || kind === "file"
-        ? this.policy(run).zipBytes
-        : this.policy(run).responseBytes,
-    );
+    const allowance = this.responseCap(run, kind, remaining);
     const id = this.store.attempt(run, label, url, allowance),
       path = join(this.root, id + ".body");
     let status: number | null = null,
@@ -455,7 +544,13 @@ export class Archive {
       },
     );
     try {
-      return await http.request(url, (response) =>
+      const request =
+        kind === "policy-raw-v1" ||
+        kind === "wrapper-raw-v1" ||
+        kind === referenceKind
+          ? http.captureResponse.bind(http)
+          : http.request.bind(http);
+      return await request(url, (response) =>
         this.persist(
           response,
           run,

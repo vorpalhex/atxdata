@@ -1,6 +1,18 @@
 # County document collector
 
-Bun/TypeScript and SQLite-backed, private HTML/PDF acquisition with four explicit source adapters sharing one engine, transport and archive lock. LLM-assisted implementation. The original implementation received source/runtime rechecks; this source-wide repair still requires independent review. Supported scope and limits are below. No deployed web server, scheduler, credentials or JSON-manifest state.
+Bun/TypeScript and SQLite-backed, private HTML/PDF acquisition with five explicit source adapters sharing one engine, transport and archive lock. LLM-assisted implementation. The original implementation received source/runtime rechecks; this source-wide repair still requires independent review. Supported scope and limits are below. No deployed web server, scheduler, credentials or JSON-manifest state.
+
+## Current Austin financial scope and version disposition
+
+`austin-financial-publications` is the fifth source, alongside the four County sources below. It discovers narrowly admitted City of Austin financial publication pages and source-linked HTTPS eDIMS originals. Publisher and jurisdiction are City of Austin, not administering Travis County. Widen wrappers, Council archives, election features and broad navigation are not added by this period repair. No actual Austin PDF acquisition is established by the retained-HTML regression or authored PDF fixtures.
+
+Physical archive schema remains 5; no DDL or migration is introduced. New Austin snapshots carry adapter metadata5 and may coexist with unchanged metadata4 snapshots, even when both reference identical HTML bytes. Each import/discovery creates a fresh snapshot and producer reference. Metadata4 replays its original first-year scalar interpretation; it is not relabelled complete span identity. New Austin PDF receipts use schema6 / `austin-period-quarter-title-v2`; genuine identity5 receipts remain verifiable with their weaker original fiscal-title interpretation. County adapter and receipt versions are unchanged.
+
+Current Austin metadata retains an explicit `fiscalPeriod` single-year/span with literal published token and label/heading provenance. Spans preserve both complete four-digit endpoints while `year` and `fiscalYear` remain null: neither first year nor end year is inferred to be the canonical fiscal year. Explicit quarter tokens retain original text, ordinal and provenance; dates do not invent quarters. Missing, conflicting, abbreviated or reversed periods require review instead of guessed identity. An explicit selected quarter must agree with the bounded body title as well as City publisher, publication role and full period. Exact `--url`, role and finite-limit selection remain available; there is no new period flag or broad parser framework.
+
+New pending collection, sync and PDF imports selected from legacy metadata4 refuse before writer/transport; refresh does not upgrade historical rows. Append a new metadata5 discovery/import explicitly before selecting new acquisition. Legacy downloaded all-cache collection, list and offline verification remain supported under their recorded weaker guarantee. No stop, reservation or policy history is cleared. Austin manual/rendered review remains unsupported; the four County workflows retain their existing separately labelled review paths.
+
+The retained-original regression requires `FINANCIAL_PERIOD_INPUT` pointing to the approved two-body input manifest and `FINANCIAL_LEGACY_ROOT` pointing to a genuine baseline producer archive5/metadata4 fixture. Physical mirrors also require `ADMISSION_GIT_ROOT` bound to the source repository for the existing old-producer regression. Missing evidence is an explicit test failure, not a skip or fabricated original. Keep all fixtures and runtime output outside the checkout under an approved private root.
 
 ## Setup
 
@@ -100,7 +112,7 @@ PDFs require expected MIME, magic, byte bounds, Poppler parsing and scoped body 
 
 ## Explicit selected-page rendered identity review
 
-Empty/corrupt text is not silent success. A trusted reviewer must actually inspect identity-bearing physical pages and submit an explicit private assertion. This is not OCR, financial/election interpretation, or unattended acceptance. Automatic scoped text validators are unchanged; manual review is a separately labeled trust path for all four adapters.
+Empty/corrupt text is not silent success. A trusted reviewer must actually inspect identity-bearing physical pages and submit an explicit private assertion. This is not OCR, financial/election interpretation, or unattended acceptance. Automatic scoped text validators are unchanged; manual review is a separately labeled trust path for the four County adapters only; Austin rejects it.
 
 First obtain the exact selection hash and original evidence:
 
@@ -132,7 +144,7 @@ SQLite stores sources, observations, immutable snapshots, versions/history, per-
 
 Zero-HTTP verify checks required schema/version markers, SQLite integrity/FKs, every promoted checkpoint AND each required artifact's exact promoted path/hash/size (PDF, snapshot, wire/decoded body, candidate and rendered image), exact reparsed source inventories and snapshot counts/headers, bidirectional observation/version/history identity, validation-receipt hashes/schema/selection, PDF bytes/parser results, and rendered evidence where applicable. Transport attempts and representations/resolutions are checked in both directions, including known wire accounting, original legacy classifier failure identity and full unknown-wire reservations; unknown failed/inflight bodies require a stop gate. Budget checks refuse damaged accounting before another request. Missing files, removed observations, orphan versions or coordinated metadata/receipt drift fail. Legacy normalization and validation receipts are retained/versioned rather than silently rewritten.
 
-Fresh archives initialize archive schema 3 once, including all three transport tables, even for offline-only imports. The required cooldown contract includes `id`, `not_before` and `blocked`, with exactly one row at id 1. Its persisted timestamp must be a nonnegative safe integer (therefore finite); `blocked` is either null or a nonempty, non-whitespace string. Opening, offline verification and transport gates validate this same state before requests or budget changes. Missing columns, ambiguous text/numeric values, invalid stop reasons or missing/extra rows fail closed without resetting, coercing or repairing the durable wait. Distinct transport instances share the completion-to-next-start wait, including time spent consuming the entire body. Existing archives must already contain the full schema; neither opening nor constructing transport recreates missing established tables. Schema 2 and earlier archives require a separately evidenced, manual migration on a private backup. There is no automatic migration/repair CLI. Recover missing transport state from prior durable evidence or refuse continuation; a version-marker update alone is not a migration.
+Fresh archives initialize archive schema 5 once, including all three transport tables, even for offline-only imports. The required cooldown contract includes `id`, `not_before` and `blocked`, with exactly one row at id 1. Its persisted timestamp must be a nonnegative safe integer (therefore finite); `blocked` is either null or a nonempty, non-whitespace string. Opening, offline verification and transport gates validate this same state before requests or budget changes. Missing columns, ambiguous text/numeric values, invalid stop reasons or missing/extra rows fail closed without resetting, coercing or repairing the durable wait. Distinct transport instances share the completion-to-next-start wait, including time spent consuming the entire body. Existing archives must already contain the full schema; neither opening nor constructing transport recreates missing established tables. Schema 2 and earlier archives require a separately evidenced, manual migration on a private backup. There is no automatic migration/repair CLI. Recover missing transport state from prior durable evidence or refuse continuation; a version-marker update alone is not a migration.
 
 The generic cooldown integrity check also rejects a well-typed deadline below independently retained successful completion, robots-policy/observation or server-header obligations. It runs on reopen, preflight (including local cache/offline operations), and pacing/reservation gates, including after awaited sleep. Common preflight revalidates after its final awaited representation read; shared run/artifact/commit mutation points synchronously recheck cooldown integrity after further awaits, including failure bookkeeping, so an intervening gate fault is rejected without adding local writes. It never silently advances a damaged deadline, shortens a longer hold, clears a manual stop, releases an unknown reservation or rewrites original evidence. Existing unversioned attempts retain their historical 2000ms minimum; operation-versioned attempts require 3000ms, with stricter robots delays in both cases.
 
@@ -169,6 +181,73 @@ The bounded public metadata exercise used 12 serial attempts: three robots, six 
 - Historical minutes yielded 988 occurrences/987 URLs; election publications yielded 207 occurrences. Any source years/dates/roles actually discovered remain selectable; malformed or conflicting dates stay unresolved.
 - Three retained originals were imported and verified in the same metadata archive with zero additional HTTP: Chapters 2 and 464 and January 5, 2010 minutes. Original hashes were unchanged. The title/opening-prose January 5/January 2 conflict was preserved.
 
-Archive schema remains 3: no automatic migration, historical-row rewriting or policy reset is required for this repair. New snapshots use adapter parser schema 3; schemas 1/2 retain the prior direct-page inventory semantics when reverified. New selected-page visual review uses a separately labeled schema4 validation quality; legacy one-page receipts retain their existing validation path.
+The historical source-wide repair used archive schema 3 (current fresh archives use 5): no automatic migration, historical-row rewriting or policy reset is required for this repair. New snapshots use adapter parser schema 3; schemas 1/2 retain the prior direct-page inventory semantics when reverified. New selected-page visual review uses a separately labeled schema4 validation quality; legacy one-page receipts retain their existing validation path.
 
 Quality gates were run on an external private source mirror preserving sibling imports. CRAP was measured from fresh Bun LCOV for all 148 own functions: maximum 9, strictly below 10. Dryer found no candidates at similarity 0.8. Scoped budget mutation testing executed 32 sites: 30 killed, two surviving boundary cases; it is not a whole-program mutation score. Unchanged-worker tests passed and a known disabled-request-limit defect failed after a conflated request/byte-bound test was separated. Remaining survivors concern one-byte PDF reservation and a later metadata-reservation arithmetic boundary, not evidence of complete branch coverage. Independent review and acceptance remain outstanding.
+
+## City Council archives and municipal election publications
+
+Two distinct profiles reuse the document engine, private SQLite archive, source-link closure, operation budgets, pacing, robots and version replay:
+
+- `austin-council-archives`: starts at the official Council archive. Catalog retains publisher year labels and exact source hrefs; indexed years are not proof of surviving minutes. Source-linked year routes and evidenced same-year canonical 302s are supported. Committee/corporation entry links are discoverable; their deeper meeting-page layouts are not yet verified. This is not Legistar history equivalence.
+- `austin-election-publications`: starts at the City Clerk elections page and follows literal linked election/ballot pages. Notices, official-return labels, sample ballots, election calendars and ballot-related publications have separate City roles. This is not the Travis voter-PDF profile, Clarity exports or financial publications.
+
+For example, with `APPROVED_PRIVATE_DIRECTORY` replaced by an approved private archive:
+
+```sh
+bun run src/cli.ts discover --root APPROVED_PRIVATE_DIRECTORY --source austin-council-archives --page https://www.austintexas.gov/council/archive/city_council_meeting_archives --year 2030 --max-pages 2 --allow-network
+bun run src/cli.ts catalog --root APPROVED_PRIVATE_DIRECTORY --source austin-council-archives
+bun run src/cli.ts list --root APPROVED_PRIVATE_DIRECTORY --source austin-council-archives --year 2030 --limit 10
+```
+
+Use publisher-indexed years actually shown by `catalog`; the example year is not a coverage assertion. City discovery `--year` or the year portion of `--date` restricts traversal of indexed-year links; date/year conflicts reject before HTTP. The existing `--max-pages` bound returns explicit pending URLs. Date/role/year/URL selection applies to list/collect/sync/verify; discovery does not infer an exact meeting day from a year index.
+
+New City metadata uses adapter6 and PDF validation receipt7 in physical archive5. Financial metadata5/receipt6 and older county formats retain their existing dispatch. City records preserve City publisher/jurisdiction, null administering county/fiscal fields, and literal label-based role/date/year provenance. New City mutations refuse older physical archives; no migration or historical receipt rewrite is performed.
+
+Supported text PDFs must independently match a leading City of Austin publisher, selected date and supported meeting/election title role. No county rendered-attestation fallback is permitted. Calendar/packet/ballot-process roles without supported date/body identity remain discovery evidence, not accepted PDFs. Unsupported scans/text gaps cause explicit identity failure: available candidate/wire bytes and failed observation remain private, with no validated version created. This is not a general raw-only capture command or semantic interpretation.
+
+HTTP eDIMS hrefs remain literal blocked evidence: they are not upgraded to HTTPS or guessed services routes. Widen/Acquia wrappers and the election-history search form remain unsupported navigation, not authorized submissions. The retained 1869 page advertises two HTTP originals; neither was acquired by this implementation. Current retained election HTML exposes four dated notice links. Counts are bounded source observations, not complete historical coverage or certification.
+
+Portable City tests use authored PDF/loopback fixtures and exact retained HTML named by the private `CITY_SOURCE_INPUTS` manifest (entries: label, URL, path, SHA-256). As with existing retained financial tests, configure that approved fixture manifest before running the whole suite. Worker tests make no publisher requests. Actual source original acquisition and independent review are separate, outstanding gates.
+
+## Explicit City original retention (not semantic identity)
+
+`discover` and `import-page --resolve-legacy-edims` accept this switch ONLY
+for `austin-council-archives`. Metadata7, inside unchanged physical5, records
+the exact published HTTP `href`/`publishedHref`, canonical HTTPSservices URL
+and `published-legacy-edims-https-services-v1` choice separately. Only exact
+official www/services eDIMS paths with a sole numeric id are resolved; no
+HTTP request or TLS-disable setting is used. New interpretation runs are
+marked, and replay recomputes the complete7inventory from raw HTML. Omitted
+flag retains old metadata6 behavior, including zero rows for legacy HTTP.
+
+For either City Council or municipal-election source, `collect --capture-only`
+uses the SAME policy/transport/robots/pacing/COMPLETE-producing-body engine
+and retains a structural original with receipt9, `publisher-linked-original-v1`,
+quality `original-integrity-only`, `semanticIdentityValidated=false` and
+`structuredInterpretation=false`. It checks MIME, magic, bounds, pdfinfo/page
+structure and full source/HTTP/hash/selection/producer binding, NOT body-title
+meaning. This is NOT final/notdraft/certified content or a malware-safety claim.
+
+`retain-capture --source SOURCE --observation UUID --capture-attempt UUID
+--document-sha SHA256 --selection-sha SHA256` is ALWAYS OFFLINE. Obtain its
+selection hash from `review-context` (`captureSelectionSha256`) or the exported
+`captureSelectionHash`. It reads an EXISTING complete native HTTP capture:
+no replacement input, header/origin override, network/retry or fresh archive.
+Current byte limits/manual holds/late gates apply. Strict INSERTs refuse any
+existing version/history; old failed semantic runs and HTTP facts are not rewritten.
+Only a new archival decision and current observation projection are appended.
+
+The physical5 CHECK remains unchanged: stored observation status is downloaded,
+but receipt9 projects as `captured` with explicit original-only guarantees.
+Default semantic list/verify/collect does not treat it as a validated identity.
+Use `list --capture-only`, `verify --capture-only` and cached
+`collect --capture-only --allow-network` for explicit0HTTP original reuse.
+Normal old7/financial6/manual County formats remain unchanged; no unsafe8
+classifier is included. Subsequent semantic overwrite of a raw-only receipt is
+not supported. Private originals are not public artifacts. No actual capture
+promotion or remote acquisition is established by authored loopback tests.
+
+Original-retention tests additionally require `CITY_NOTICE_INPUT` bound to
+the approved private PDF copy and admission JSON; no private PDF bytes or
+absolute fixture paths are embedded in the project.
