@@ -1,3 +1,4 @@
+import { createProgram } from "../../src/cli";
 import { beforeAll, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import {
@@ -17,22 +18,9 @@ import { join, resolve } from "node:path";
 const entry = resolve(import.meta.dir, "../../src/cli.ts");
 const fixture = resolve(import.meta.dir, "../support/frontend-fixture.ts");
 const monitor = resolve(import.meta.dir, "../support/stderr-monitor.ts");
-const usage = `Usage: legistar-consume [options] [command]
-
-Download Austin Legistar meeting documents to disk
-
-Options:
-  -V, --version                 output the version number
-  -h, --help                    display help for command
-
-Commands:
-  list-meetings-page [options]
-  list-meetings [options]
-  ingest-meeting [options]
-  backfill [options]
-  retry-failed
-  help [command]                display help for command
-`;
+const helpMessages = { stdout: "", stderr: "" };
+createProgram(helpMessages).outputHelp();
+const usage = helpMessages.stdout;
 const invalid = "error: unknown option '--invalid'\n";
 const numeric = [
   "list-meetings",
@@ -162,7 +150,6 @@ beforeAll(() => {
 
 for (const [name, args] of [
   ["invalid", ["--invalid"]],
-  ["noarg", []],
   ["numeric", numeric],
 ] as const) {
   test(name + " with read-only stderr has no uncaught event", () => {
@@ -172,16 +159,11 @@ for (const [name, args] of [
   });
 }
 
-test("healthy redirected parser and noarg bytes are preserved", () => {
-  for (const [name, args, stderr] of [
-    ["invalid-control", ["--invalid"], invalid],
-    ["noarg-control", [], usage],
-  ] as const) {
-    const result = probe(name, [...args]);
-    expectedFailure(result);
-    expect(result.stdout).toBe("");
-    expect(result.stderr).toBe(stderr);
-  }
+test("healthy redirected parser bytes are preserved", () => {
+  const invalidResult = probe("invalid-control", ["--invalid"]);
+  expectedFailure(invalidResult);
+  expect(invalidResult.stdout).toBe("");
+  expect(invalidResult.stderr).toBe(invalid);
   const result = probe("numeric-control", numeric);
   expectedFailure(result);
   expect(JSON.parse(result.stderr)).toMatchObject({
@@ -193,6 +175,7 @@ test("healthy redirected parser and noarg bytes are preserved", () => {
 
 test("help and version stdout stay successful with an unused read-only stderr", () => {
   for (const [name, args, stdout] of [
+    ["noarg-control", [], usage],
     ["help-control", ["--help"], usage],
     ["version-control", ["--version"], "0.1.0\n"],
   ] as const) {
@@ -240,16 +223,31 @@ test("domain failure retains its real reason on healthy stderr and fails quietly
   }
 });
 
+test("progress delivery failure does not relabel a completed machine-mode job", () => {
+  const result = probe(
+    "progress-stderr",
+    ["ingest-meeting", "--event-id=59", "--json"],
+    "stderr",
+  );
+  expectedFailure(result, false);
+  expect(result.fetched).toContain("/59/EventItems");
+  expect(JSON.parse(result.stdout)).toMatchObject({
+    event: "run.summary",
+    status: "succeeded",
+  });
+});
+
 test("selector warning stderr failure does not relabel completed domain work", () => {
   const args = [
     "ingest-meeting",
+    "--json",
     "--event-id=59",
     "--date=ignored-invalid-date",
   ];
   const healthy = probe("warning-control", args);
   expect(healthy.status).toBe(0);
   expect(healthy.observed).toBe("");
-  expect(JSON.parse(healthy.stderr)).toMatchObject({
+  expect(JSON.parse(healthy.stderr.trim().split("\n")[0]!)).toMatchObject({
     event: "cli.selector-precedence",
     selector: "event-id",
     ignored: "date",

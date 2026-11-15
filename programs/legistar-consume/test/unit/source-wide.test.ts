@@ -11,7 +11,7 @@ test("native Legistar CLI persists and resumes a capped collection", async () =>
     return Response.json(n<3 ? [event(n+1)] : []);
   }});
   async function run(extra:string[]) {
-    const child=Bun.spawn([process.execPath,"run","src/cli.ts","list-meetings-page","--from","2030-03-04","--to","2030-03-04","--page-size","5",...extra],{cwd:import.meta.dir+"/../..",env:{...process.env,DATA_PATH:join(folder,"data"),LEGISTAR_API_BASE:`${server.url}v1`,MAX_DOWNLOAD_RETRIES:"0"},stdout:"pipe",stderr:"pipe"});
+    const child=Bun.spawn([process.execPath,"run","src/cli.ts","--json","list-meetings-page","--from","2030-03-04","--to","2030-03-04","--page-size","5",...extra],{cwd:import.meta.dir+"/../..",env:{...process.env,DATA_PATH:join(folder,"data"),LEGISTAR_API_BASE:`${server.url}v1`,MAX_DOWNLOAD_RETRIES:"0"},stdout:"pipe",stderr:"pipe"});
     const error=await new Response(child.stderr).text(); expect({code:await child.exited,error}).toEqual({code:0,error:""});
     return JSON.parse(await new Response(child.stdout).text());
   }
