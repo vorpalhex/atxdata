@@ -14,18 +14,13 @@ import { load } from "cheerio";
 import { requireCurrentFinancial } from "./financial-period";
 import { requireLiveFormat } from "./producing-integrity";
 import { archiveForm, requireArchiveEndpoint } from "./historical";
-import {
-  humanScope,
-  humanOption,
-  robotsDecision,
-  type HumanAcknowledgement,
-} from "./human-policy";
+import { archiveScope } from "./archive-scope";
 import { OperationBudget, type WorkBudget } from "./budgets";
 import { PoliteHttpClient } from "../../civicclerk-consume/src/http";
 import { Engine, sha } from "./engine";
 import { transportUrl, sources, type Source } from "./adapters";
 import { consumeEncoded, rawFetch } from "./encoding";
-import { cooldown, robotsPolicy } from "./policy";
+import { cooldown } from "./policy";
 import { verifySchema, readCooldown } from "./schema";
 import { verifyRepresentations } from "./archive-verification";
 import { verifyTransportLedger } from "./transport-integrity";
@@ -37,7 +32,7 @@ type Dependencies = {
   now: () => number;
   sleep: (ms: number) => Promise<void>;
 };
-type Kind = "robots" | "page" | "pdf";
+type Kind = "page" | "pdf";
 type Attempt = { id: string; run: string; cap: number };
 
 export class Transport {
@@ -46,28 +41,25 @@ export class Transport {
   private readonly statuses = new WeakMap<Response, number>();
   private queue = Promise.resolve();
   private readonly operation: OperationBudget;
-  private readonly human: boolean;
   private readonly resolveLegacyEdims: boolean;
   private readonly captureOnly: boolean;
-  private acknowledgement: HumanAcknowledgement | undefined;
   private postBody: string | undefined;
   private anonymous = false;
   private redirectStop: string | undefined;
   private pendingEdge: string | undefined;
-  private chainRoot: string | undefined;
   private readonly cookies = new Map<string, string>();
   constructor(
     private readonly engine: Engine,
     dependencies: Partial<Dependencies> = {},
     budget: Partial<WorkBudget> = {},
     options: {
+      /** @deprecated Ignored; robots acknowledgements are no longer used. */
       human?: boolean;
       resolveLegacyEdims?: boolean;
       captureOnly?: boolean;
     } = {},
   ) {
     requireLiveFormat(engine.db, "live-http");
-    this.human = humanOption(options.human);
     this.resolveLegacyEdims = options.resolveLegacyEdims ?? false;
     this.captureOnly = options.captureOnly ?? false;
     if (
@@ -102,7 +94,7 @@ export class Transport {
   }
   private anonymousInit(url: string, init: RequestInit): RequestInit {
     const headers = new Headers(init.headers);
-    if (this.anonymous && humanScope(url)) {
+    if (this.anonymous && archiveScope(url)) {
       if (this.cookies.size)
         headers.set("Cookie", [...this.cookies.values()].join("; "));
       if (this.postBody !== undefined)
@@ -121,7 +113,7 @@ export class Transport {
     init: RequestInit,
   ): Promise<Response> {
     const original = await this.deps.fetch(url, this.anonymousInit(url, init));
-    if (this.anonymous && humanScope(url))
+    if (this.anonymous && archiveScope(url))
       for (const cookie of original.headers.getSetCookie()) {
         const pair = cookie.split(";")[0]!;
         if (
@@ -173,11 +165,7 @@ export class Transport {
     const cap = this.budget(source, kind),
       run = this.engine.start(
         source,
-        this.operation.receipt(
-          kind,
-          cap,
-          kind === "robots" ? undefined : this.acknowledgement,
-        ),
+        this.operation.receipt(kind, cap),
         (source.startsWith("austin-")
           ? "transport-work-v3:"
           : "transport-work-v2:") + crypto.randomUUID(),
@@ -303,14 +291,13 @@ export class Transport {
         attempt.id,
         redirect,
       ]);
-      this.chainRoot ??= attempt.id;
       this.redirectStop ??= "redirect chain pending: " + attempt.id;
       this.pendingEdge = attempt.id;
     } else if (status !== 200)
       throw new Error(`HTTP ${status}; no redirect/retry fanout`);
     return redirect;
   }
-  private end(attempt: Attempt, delay: number, error?: unknown) {
+  private end(attempt: Attempt, error?: unknown) {
     this.engine.db.run("UPDATE attempts SET ended=?,error=? WHERE id=?", [
       this.deps.now(),
       error ? String(error) : null,
@@ -318,7 +305,7 @@ export class Transport {
     ]);
     this.engine.db.run(
       "UPDATE cooldowns SET not_before=MAX(not_before,?) WHERE id=1",
-      [this.deps.now() + Math.max(3000, delay)],
+      [this.deps.now() + 3000],
     );
     if (!error)
       this.engine.db.run("UPDATE cooldowns SET blocked=? WHERE id=1", [
@@ -326,12 +313,7 @@ export class Transport {
       ]);
     this.engine.finish(attempt.run, error);
   }
-  private async requestOne(
-    source: Source,
-    url: string,
-    kind: Kind,
-    delay: number,
-  ) {
+  private async requestOne(source: Source, url: string, kind: Kind) {
     transportUrl(source, url, kind);
     await this.engine.preflight();
     await this.wait();
@@ -341,25 +323,20 @@ export class Transport {
       const result = await this.http.request(url, (response) =>
         this.consume(attempt, response, kind),
       );
-      this.end(attempt, delay);
+      this.end(attempt);
       return result;
     } catch (error) {
-      this.end(attempt, delay, error);
+      this.end(attempt, error);
       throw error;
     }
   }
-  private async request(
-    source: Source,
-    url: string,
-    kind: Kind,
-    delay: number,
-  ) {
+  private async request(source: Source, url: string, kind: Kind) {
     const visited = new Set<string>();
     for (;;) {
       if (visited.has(url) || visited.size >= 4)
         throw Error("redirect cycle/hop ceiling");
       visited.add(url);
-      const result = await this.requestOne(source, url, kind, delay);
+      const result = await this.requestOne(source, url, kind);
       if (!result.redirect) return { ...result, url };
       url = result.redirect;
     }
@@ -372,70 +349,6 @@ export class Transport {
       throw Error("redirect stop changed; operator review");
     this.engine.db.run("UPDATE cooldowns SET blocked=NULL WHERE id=1");
     this.redirectStop = undefined;
-    this.chainRoot = undefined;
-  }
-  private saveRobots(origin: string, body: string, observed: number): number {
-    const delay = robotsPolicy(body, "/robots.txt");
-    const old = this.engine.db
-      .query<{ sha: string }, [string]>("SELECT sha FROM robots WHERE origin=?")
-      .get(origin);
-    if (old && old.sha !== sha(body))
-      throw Error("changed retained policy requires operator review");
-    if (!old)
-      this.engine.db.run("INSERT INTO robots VALUES(?,?,?,?,?)", [
-        origin,
-        body,
-        sha(body),
-        delay,
-        observed,
-      ]);
-    this.engine.db.run(
-      "UPDATE cooldowns SET not_before=MAX(not_before,?) WHERE id=1",
-      [observed + delay],
-    );
-    return delay;
-  }
-  private async robots(source: Source, url: string): Promise<number> {
-    const parsed = new URL(url),
-      origin = parsed.origin;
-    let row = this.engine.db
-      .query<{ body: string; sha: string }, [string]>(
-        "SELECT * FROM robots WHERE origin=?",
-      )
-      .get(origin);
-    if (!row) {
-      const result = await this.request(
-        source,
-        origin + "/robots.txt",
-        "robots",
-        2000,
-      );
-      if (!/^text\/plain(?:;|$)/i.test(result.mime))
-        throw new Error("robots MIME unresolved");
-      this.engine.db.transaction(() => {
-        const observed = this.deps.now();
-        this.saveRobots(
-          new URL(result.url).origin,
-          result.body.toString(),
-          observed,
-        );
-        if (this.chainRoot) {
-          this.saveRobots(origin, result.body.toString(), observed);
-          this.engine.db.run("INSERT INTO robots_bindings VALUES(?,?,?)", [
-            origin,
-            this.chainRoot,
-            result.attempt,
-          ]);
-        }
-      })();
-      this.finishRedirect();
-      row = { body: result.body.toString(), sha: sha(result.body) };
-    }
-    if (sha(row.body) !== row.sha)
-      throw new Error("robots provenance corrupted");
-    const decision = robotsDecision(row.body, row.sha, url, this.human);
-    this.acknowledgement = decision.acknowledgement;
-    return decision.delay;
   }
   async resolveDecodedRobots(id: string, reason: string) {
     await this.engine.archiveIntegrity();
@@ -464,7 +377,6 @@ export class Transport {
       throw new Error("retained decoded robots mismatch");
     const gate = readCooldown(this.engine.db);
     if (!gate.blocked) throw new Error("no failed gate to resolve");
-    robotsPolicy(body.toString(), "/robots.txt");
     this.engine.db.transaction(() => {
       this.engine.db.run(
         "INSERT INTO classifier_resolutions VALUES(?,?,?,?,?)",
@@ -480,7 +392,6 @@ export class Transport {
           `${row.sha}.html`,
         ],
       );
-      this.saveRobots(new URL(row.url).origin, body.toString(), row.ended);
       this.engine.db.run("UPDATE cooldowns SET blocked=NULL WHERE id=1");
     })();
     return {
@@ -537,10 +448,9 @@ export class Transport {
     throw Error("archive endpoint lacks retained official source href");
   }
   private async archivePage(url: string, body?: string) {
-    const delay = await this.robots("county-code", url);
     this.postBody = body;
     try {
-      const result = await this.request("county-code", url, "page", delay);
+      const result = await this.request("county-code", url, "page");
       if (!/^text\/html(?:;|$)/i.test(result.mime))
         throw Error("HTML MIME mismatch");
       return { ...result, url, html: result.body.toString() };
@@ -585,8 +495,7 @@ export class Transport {
     return this.serial(async () => {
       await this.engine.preflight();
       await this.engine.requireDiscoveryPage(source, url);
-      const delay = await this.robots(source, url);
-      const result = await this.request(source, url, "page", delay);
+      const result = await this.request(source, url, "page");
       if (!/^text\/html(?:;|$)/i.test(result.mime))
         throw new Error("HTML MIME mismatch");
       const imported = await this.engine.importPage(
@@ -655,8 +564,7 @@ export class Transport {
         requireOriginalPolicy(row.source, ORIGINAL_POLICY);
         requireNewCapture(this.engine, row);
       }
-      const delay = await this.robots(row.source, row.url);
-      const result = await this.request(row.source, row.url, "pdf", delay);
+      const result = await this.request(row.source, row.url, "pdf");
       if (this.captureOnly) {
         await this.wait();
         const retained = await this.engine.retainCapture(

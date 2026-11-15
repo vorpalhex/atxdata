@@ -99,8 +99,6 @@ async function fixture(
     },
     random: () => 0,
     fetch: async (url) => {
-      if (url.endsWith("/robots.txt"))
-        return new Response("", { headers: { "content-type": "text/plain" } });
       if (url === OFFICIAL)
         return new Response(`<a href="${COUNTY}">Results</a>`, {
           headers: { "content-type": "text/html" },

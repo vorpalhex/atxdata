@@ -114,7 +114,6 @@ for (const fault of [
   "producer",
   "history",
   "unknown-intent",
-  "rehashed-policy",
   "rehashed-catalog",
 ])
   test(`complete source ledger refuses ${fault} with no further mutation`, async () => {
@@ -142,13 +141,6 @@ for (const fault of [
           row.run,
         );
       }
-      if (fault === "rehashed-policy")
-        await rewrite(
-          f.root,
-          db,
-          "robots-www.arcgis.com",
-          "User-agent: *\nDisallow: /\n",
-        );
       if (fault === "rehashed-catalog") {
         const row = db
           .query<{ path: string }, []>(
@@ -182,8 +174,6 @@ for (const fault of [
       expect(error).not.toBe("");
       expect(error).not.toContain("UNEXPECTED_TRANSPORT");
       if (fault === "producer") expect(error).toContain("producer binding");
-      if (fault === "rehashed-policy")
-        expect(error).toContain("historical robots disallows");
       if (fault === "rehashed-catalog")
         expect(error).toContain("catalog member");
       expect(calls).toBe(0);

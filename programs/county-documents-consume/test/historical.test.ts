@@ -22,11 +22,11 @@ test('anonymous source-linked archive selection follows only published form and 
  let now=10000;const calls:{url:string;method:string;body:string}[]=[];
  try {
   await engine.importPage('county-code',sources['county-code'].pages[0],`<a href="${href}">Archives</a>`,'authored');
-  const transport=new Transport(engine,{now:()=>now,sleep:async(ms)=>{now+=ms;},fetch:async(url,init)=>{calls.push({url,method:init.method??'GET',body:String(init.body??'')});return new Response(url.endsWith('/robots.txt')?'User-agent: *\nDisallow: /regs/':form(calls.length>2),{headers:{'content-type':url.endsWith('/robots.txt')?'text/plain':'text/html','set-cookie':'anonymous=own; Path=/regs/traviscounty-tx/; Secure'}});}},{},{human:true});
+  const transport=new Transport(engine,{now:()=>now,sleep:async(ms)=>{now+=ms;},fetch:async(url,init)=>{calls.push({url,method:init.method??'GET',body:String(init.body??'')});return new Response(url.endsWith('/robots.txt')?'User-agent: *\nDisallow: /regs/':form(calls.length>1),{headers:{'content-type':url.endsWith('/robots.txt')?'text/plain':'text/html','set-cookie':'anonymous=own; Path=/regs/traviscounty-tx/; Secure'}});}},{},{});
   const result=await transport.archive(href,page,'unusual-91');
   expect(result.aliases).toEqual(['2000-01-02 Ch811']);
-  expect(calls.map(c=>c.method)).toEqual(['GET','GET','POST','GET']);
-  expect(calls[2]!.body).toBe('effectiveDate=&ordinance=unusual-91');
+  expect(calls.map(c=>c.method)).toEqual(['GET','POST','GET']);
+  expect(calls[1]!.body).toBe('effectiveDate=&ordinance=unusual-91');
   expect(result.sourceHref).toBe(href);expect(result.endpoint).toBe(page);
  }finally {await engine.close();await rm(root,{recursive:true,force:true});}
 });

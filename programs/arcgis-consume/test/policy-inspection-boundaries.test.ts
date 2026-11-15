@@ -56,7 +56,7 @@ for (const [status, outcome] of [
         expect(s.navigation).toBe(false);
         expect(s.outcome).toBe(outcome);
         expect(s.chain[0].status).toBe(status);
-        expect(f.wire.length).toBe(status === 302 ? 8 : 7);
+        expect(f.wire.length).toBe(status === 302 ? 7 : 6);
         const stable = await logical(f.root);
         expect(
           (await f.invoke(["verify", "--archive", f.root], true)).exit,
@@ -93,7 +93,7 @@ for (const location of [
         const r = await f.invoke(args);
         expect(r.exit).toBe(0);
         expect(JSON.parse(r.out).summary.outcome).toBe("redirect-unapproved");
-        expect(f.wire.length).toBe(7);
+        expect(f.wire.length).toBe(6);
         expect(r.out).not.toContain("token=fixture");
       } finally {
         f.close();
@@ -118,7 +118,7 @@ for (const headers of headerCases)
         const r = await f.invoke(args);
         expect(r.exit).toBe(0);
         expect(JSON.parse(r.out).summary.chain.length).toBe(1);
-        expect(f.wire.length).toBe(7);
+        expect(f.wire.length).toBe(6);
       } finally {
         f.close();
       }
@@ -133,7 +133,7 @@ test("native bad source SHA refuses before writer and HTTP", async () => {
     const before = await physical(f.root);
     const r = await f.invoke(args);
     expect(r.exit).toBe(1);
-    expect(f.wire.length).toBe(6);
+    expect(f.wire.length).toBe(5);
     expect(await physical(f.root)).toEqual(before);
   } finally {
     f.close();
@@ -215,7 +215,7 @@ for (const fault of [
         const r = await f.invoke(["verify", "--archive", f.root], true);
         expect(r.exit).toBe(1);
         expect(await physical(f.root)).toEqual(before);
-        expect(f.wire.length).toBe(8);
+        expect(f.wire.length).toBe(7);
       } finally {
         f.close();
       }

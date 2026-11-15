@@ -35,7 +35,7 @@ for (const extra of [
           before = await state(f.root);
         const r = await f.invoke([...args, ...extra]);
         expect(r.exit).toBe(1);
-        expect(f.wire.length).toBe(6);
+        expect(f.wire.length).toBe(5);
         expect(await state(f.root)).toEqual(before);
       } finally {
         f.close();
@@ -51,7 +51,7 @@ test("policy cannot initialize a new archive", async () => {
     args[args.indexOf("--archive") + 1] = absent;
     expect((await f.invoke(args)).exit).toBe(1);
     await expect(lstat(absent)).rejects.toThrow();
-    expect(f.wire.length).toBe(6);
+    expect(f.wire.length).toBe(5);
   } finally {
     f.close();
   }
@@ -64,7 +64,7 @@ test("policy refuses locked owner before mutation", async () => {
     const before = await state(f.root);
     expect((await f.invoke(args)).exit).toBe(1);
     expect(await state(f.root)).toEqual(before);
-    expect(f.wire.length).toBe(6);
+    expect(f.wire.length).toBe(5);
   } finally {
     f.close();
   }
@@ -75,7 +75,7 @@ test("one-request allocation stops after redirect without next dispatch", async 
     const args = await f.produce();
     const r = await f.invoke([...args, "--max-requests", "1"]);
     expect(r.exit).toBe(1);
-    expect(f.wire.length).toBe(7);
+    expect(f.wire.length).toBe(6);
     const before = await state(f.root);
     expect((await f.invoke(["verify", "--archive", f.root], true)).exit).toBe(
       1,
@@ -118,7 +118,7 @@ test("parseable robots text remains inspection-only", async () => {
       permission: false,
       navigation: false,
     });
-    expect(f.wire.length).toBe(7);
+    expect(f.wire.length).toBe(6);
   } finally {
     f.close();
   }
@@ -136,7 +136,7 @@ test("simulated crash between ready capture and final summary cannot be reused",
     const before = await state(f.root);
     expect((await f.invoke(args, true)).exit).toBe(1);
     expect(await state(f.root)).toEqual(before);
-    expect(f.wire.length).toBe(8);
+    expect(f.wire.length).toBe(7);
   } finally {
     f.close();
   }

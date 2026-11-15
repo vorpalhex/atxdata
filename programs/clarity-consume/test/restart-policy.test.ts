@@ -33,7 +33,7 @@ test('retry attempt number and jitter cooldown survive interruption before the n
  let c=await Collector.open(root,deps);
  try{
   await expect(c.collect('125662')).rejects.toThrow('local interruption');expect(starts).toEqual([100_000]);await c.close();interrupt=false;c=await Collector.open(root,deps);
-  await expect(c.collect('125662')).rejects.toThrow('review');expect(starts).toEqual([100_000,103_500,108_000,116_500]);
+  await expect(c.collect('125662')).rejects.toThrow('unexpected MIME');expect(starts).toEqual([100_000,103_500,108_000,116_500]);
   expect(c.db.query('SELECT count(*) n FROM files').get()).toEqual({n:4});
  }finally{await c.close();await rm(root,{recursive:true,force:true});}
 });

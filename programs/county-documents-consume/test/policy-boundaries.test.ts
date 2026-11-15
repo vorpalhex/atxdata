@@ -34,7 +34,7 @@ for(const entrypoint of ['import','preflight'] as const) for(const fault of [fal
   };
   const operation=entrypoint==='import'?e.importPage('budgets',sources.budgets.pages[0],html,'authored-offline'):e.preflight();
   if(fault) await expect(operation).rejects.toThrow(/cooldown/);else await operation;
-  expect(armed).toBe(false);expect(before).toBeDefined();expect(calls()).toBe(2);
+  expect(armed).toBe(false);expect(before).toBeDefined();expect(calls()).toBe(1);
   if(fault) {expect(logical(e.db)).toEqual(before!);expect(e.db.query<{not_before:number},[]>('SELECT not_before FROM cooldowns').get()!.not_before).toBe(0);}
   else {if(entrypoint==='import')expect(logical(e.db)).not.toEqual(before!);else expect(logical(e.db)).toEqual(before!);await e.preflight();}
  }finally{await e.close();await rm(root,{recursive:true,force:true});}
@@ -52,7 +52,7 @@ for(const stage of ['discovery','artifact','reuse'] as const) for(const fault of
   }
   const operation=stage==='reuse'?e.artifact(Buffer.from(html),'html'):e.importPage('budgets',sources.budgets.pages[0],html,'authored-offline');
   if(fault)await expect(operation).rejects.toThrow(/cooldown/);else await operation;
-  expect(armed).toBe(false);expect(before).toBeDefined();expect(calls()).toBe(2);
+  expect(armed).toBe(false);expect(before).toBeDefined();expect(calls()).toBe(1);
   if(fault)expect(logical(e.db)).toEqual(before!);else await e.preflight();
  }finally{await e.close();await rm(root,{recursive:true,force:true});}
 });
@@ -91,7 +91,7 @@ for(const mutation of ['wrong-kind','receipt-version','run-version','cap','limit
   const status=await cliStatus(f.root),check=new Database(join(f.root,'documents.sqlite'));
   try{expect(logical(check)).toEqual(before);}finally{check.close();}
   expect({preflight,open,status:status.exit}).toEqual({preflight:true,open:true,status:1});
-  expect(f.calls()).toBe(2);
+  expect(f.calls()).toBe(1);
  }finally{await e?.close();await rm(f.root,{recursive:true,force:true});}
 });
 for(const version of ['uuid','v1'] as const) test(`F6-B genuine ${version} compatibility open/preflight/CLI status`,async()=>{

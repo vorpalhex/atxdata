@@ -22,12 +22,11 @@ for(const kind of ['EOF','read-error','overflow','cancel-error','release-error']
 test('native localhost bodies lock before filesystem awaits and do not cancel after EOF',async()=>{
  const base=multiReplay(),server=Bun.serve({hostname:'127.0.0.1',port:0,async fetch(req){
   const url=new URL(req.url).searchParams.get('url')!;
-  if(url.endsWith('clarityelections.com/robots.txt'))return new Response('x'.repeat(2616),{status:404,headers:{'content-type':'text/html','content-length':'2616'}});
   const r=await base.fetch(url);
   if(url.includes('election-results-and-reconciliation-forms'))return new Response((await r.text())+' '.repeat(228759),{headers:{'content-type':'text/html'}});
   return r;
  }});
  const root=await mkdtemp(join(await realpath(process.env.TMPDIR!),'clarity-native-'));let clock=0,calls=0;
  const c=await Collector.open(root,{now:()=>clock,sleep:async ms=>{clock+=ms;},random:()=>0,fetch:(url,init)=>{calls++;return Bun.fetch(`http://127.0.0.1:${server.port}/?url=${encodeURIComponent(url)}`,{...init,decompress:false});}});
- try{await c.collect('009876');await c.verify();await c.collectDate('2026-11-03');expect(calls).toBe(12);}finally{await c.close();server.stop(true);await rm(root,{recursive:true,force:true});}
+ try{await c.collect('009876');await c.verify();await c.collectDate('2026-11-03');expect(calls).toBe(10);}finally{await c.close();server.stop(true);await rm(root,{recursive:true,force:true});}
 });

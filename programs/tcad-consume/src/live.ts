@@ -56,17 +56,10 @@ function safe(n:unknown){return typeof n==='number'&&Number.isSafeInteger(n)&&n>
 function persistedPolicy(db:Database){
  const rows=db.query<any,[]>('SELECT * FROM request_policy').all();const p=rows[0];
  if(rows.length!==1||p.id!==1||!safe(p.not_before)||!safe(p.delay_ms))throw new Error('corrupt persisted request policy');
- if(p.robots!==null)validateRobots(p.robots);
- if(p.delay_ms<robotsDelay(p.robots))throw new Error('persisted policy delay contradicts retained robots/minimum');
- return p;
-}
-function crawlDelay(text:string){const value=text.split('#')[0]!.trim();if(!/^\d+(?:\.\d+)?$/.test(value))throw new Error('invalid retained robots crawl-delay');const delay=Math.ceil(Number(value)*1000);if(!safe(delay))throw new Error('unsafe robots delay');return delay;}
-function robotsDelay(robots:string|null){
- const delays=[...(robots??'').matchAll(/^Crawl-delay:([^\r\n]*)/gim)].map(m=>crawlDelay(m[1]!));
- return Math.max(3000,...delays);
-}
-function validateRobots(robots:unknown){
- if(typeof robots!=='string'||robots.length>2097152||!/^User-agent:\s*\S+/im.test(robots)||/[\x00]/.test(robots))throw new Error('corrupt robots policy');
+ if(p.delay_ms<3000)throw new Error('persisted policy delay below minimum');
+ // Legacy delay_ms may contain a robots-derived value; retain it as history only.
+ // Existing not_before and response-header obligations are never shortened.
+ return {...p,delay_ms:3000};
 }
 function validateLedger(db:Database,activeRequest=''){
  if(db.query('SELECT id FROM requests WHERE finished IS NULL AND id<>? LIMIT 1').get(activeRequest))throw new Error('unfinished request requires operator review');
@@ -179,11 +172,6 @@ class Session{
  }).immediate();
  }
  async text(url:string){const chunks:Buffer[]=[];let size=0;await this.get(url,async b=>{size+=b.length;if(size>2097152)throw new Error('metadata ceiling');chunks.push(b);});return Buffer.concat(chunks).toString('utf8');}
- async policy(){
- const row=persistedPolicy(this.db);let robots=row.robots;
- if(robots===null){robots=await this.text('https://traviscad.org/robots.txt');validateRobots(robots);const delay=robotsDelay(robots);this.db.query('UPDATE request_policy SET robots=?,delay_ms=?,not_before=max(not_before,?) WHERE id=1').run(robots,delay,this.clock()+delay);}
- if(/^Disallow:[ \t]*[^\s#]/im.test(robots))throw new Error('robots disallow requires operator review');
- }
 }
 const operationQueues=new Map<string,Promise<void>>();
 const memoryKeys=new WeakMap<Database,string>();
@@ -193,7 +181,7 @@ async function serializedLive<T>(db:Database,operation:()=>Promise<T>){
  await prior;try{return await operation();}finally{release();if(operationQueues.get(key)===queued)operationQueues.delete(key);}
 }
 export function discover(db:Database,root:string,o:LiveOptions){return serializedLive(db,()=>discoverSerial(db,root,o));}
-async function discoverSerial(db:Database,_root:string,o:LiveOptions){const s=new Session(db,o);await s.policy();const html=await s.text('https://traviscad.org/publicinformation');return retainCatalog(db,html,s.context!);}
+async function discoverSerial(db:Database,_root:string,o:LiveOptions){const s=new Session(db,o);const html=await s.text('https://traviscad.org/publicinformation');return retainCatalog(db,html,s.context!);}
 function originalCatalogObservation(db:Database,observation:string,id:string){
  const e=db.query<any,[string,string]>('SELECT e.*,o.html,o.hash,o.context FROM catalog_entries e JOIN catalog_observations o ON o.id=e.observation WHERE e.observation=? AND e.id=?').get(observation,id);
  if(!e||createHash('sha256').update(e.html).digest('hex')!==e.hash)throw new Error('acquisition catalog observation provenance');
@@ -202,7 +190,6 @@ function originalCatalogObservation(db:Database,observation:string,id:string){
  if(!catalogLinks(e.html).some(l=>l.id===id&&l.url===e.url&&l.label===e.label))throw new Error('acquisition catalog publication provenance');
 }
 async function verifyAcquisition(db:Database,root:string,id:string,prior:any){
- const robots=persistedPolicy(db).robots;if(robots===null||/^Disallow:[ \t]*[^\s#]/im.test(robots))throw new Error('cached robots policy requires operator review');
  const binding=db.query<any,[string]>('SELECT * FROM acquisition_versions WHERE path=?').get(prior.path);
  if(!binding||binding.id!==id||binding.hash!==prior.hash||binding.bytes!==prior.bytes)throw new Error('acquisition version provenance');
  originalCatalogObservation(db,binding.observation,id);await verifyArtifact(root,id,prior,binding.version);
@@ -222,7 +209,7 @@ async function acquireSerial(db:Database,root:string,id:string,o:LiveOptions){
  const prior=db.query<any,[string]>('SELECT * FROM acquisitions WHERE id=?').get(id);
  if(prior){await verifyAcquisition(db,root,id,prior);if(!o.refresh){preflightLive(db);return {...prior,reused:true};}}
  const version=crypto.randomUUID(),path=prior?id+'-'+version+'.zip':id+'.zip',final=join(root,path);for(const name of [final,final+'.pending'])if(await statFile(name))throw new Error('existing acquisition requires operator review');
- await s.policy();preflightLive(db);const h=await open(final+'.pending','wx',0o600);let bytes:number;
+ preflightLive(db);const h=await open(final+'.pending','wx',0o600);let bytes:number;
  try{bytes=await s.get(item.url,async b=>{await h.writeFile(b);});await h.sync();}finally{await h.close();}
  const hash=await digest(final+'.pending',LIMITS.compressed);
  // Validation is deliberately generic ZIP inventory, not a claim of interpreted records.

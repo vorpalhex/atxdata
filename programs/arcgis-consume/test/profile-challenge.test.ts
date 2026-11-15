@@ -10,11 +10,16 @@ for (const source of ["austin", "water"] as const)
     { "www-authenticate": 'Basic realm="authored fixture"' },
     { "content-type": "text/html" },
   ] as Record<string, string>[])
-    test(`${source} refuses challenge/authentication evidence in robots403`, async () => {
+    test(`${source} refuses challenge/authentication evidence on actual resource403`, async () => {
       const f = profileFixture(
         source,
         new Response("Challenge", { status: 403, headers }),
       );
+      const original = f.deps.fetch;
+      f.deps.fetch = async (url) =>
+        url.startsWith(f.base)
+          ? new Response("Challenge", { status: 403, headers })
+          : original(url);
       const root = await mkdtemp(
         join(process.env.TMPDIR!, "profile-challenge-"),
       );
@@ -35,7 +40,7 @@ for (const source of ["austin", "water"] as const)
           ],
           f.deps,
         ),
-      ).rejects.toThrow("robots challenge/authentication");
+      ).rejects.toThrow("HTTP 403");
       expect(
         f.calls.filter((u) => new URL(u).pathname.endsWith("/query")),
       ).toEqual([]);

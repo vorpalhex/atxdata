@@ -10,11 +10,11 @@ import {xml,zip} from './results.test';
 import {replay} from './collector.test';
 const temporary=async()=>mkdtemp(join(await realpath(process.env.TMPDIR!),'clarity-boundary-'));
 
-for(const extra of [3,4])test(`request ceiling is inclusive: ${extra} extra attempts`,async()=>{
+for(const extra of [5,6])test(`request ceiling is inclusive: ${extra} extra attempts`,async()=>{
  const root=await temporary(),base=replay(),seen=new Set<string>();let calls=0,retries=0;
  const c=await Collector.open(root,{...base,fetch:async url=>{calls++;if(!seen.has(url)&&retries<extra){seen.add(url);retries++;return new Response('retry',{status:500});}return base.fetch(url);}});
  try{
-  if(extra===3){await c.collect('125662');await c.verify();}else await expect(c.collect('125662')).rejects.toThrow('ceiling');
+  if(extra===5){await c.collect('125662');await c.verify();}else await expect(c.collect('125662')).rejects.toThrow('ceiling');
   expect(calls).toBe(15);expect(c.db.query('SELECT count(*) n FROM files').get()).toEqual({n:15});
   expect(c.db.query("SELECT count(*) n FROM files WHERE name='export' AND status='downloaded'").get()).toEqual({n:1});
  }finally{await c.close();await rm(root,{recursive:true,force:true});}
@@ -66,12 +66,12 @@ for(const status of [400,409,425,499])test(`permanent HTTP ${status} does not re
  try{await expect(c.collect('125662')).rejects.toThrow();expect(calls).toBe(1);}finally{await c.close();await rm(root,{recursive:true,force:true});}
 });
 
-test('same incomplete observation refreshes robots/link gates before any result route',async()=>{
- for(const policy of ['robots','link']){
+test('same incomplete observation refreshes official link gate before any result route',async()=>{
+ {
   const root=await temporary(),base=replay();let phase=0;const seen:string[]=[];
-  const deps={...base,fetch:async(url:string)=>{seen.push(url);if(phase===0&&url.endsWith('/summary.json'))throw new Error('local stop');if(phase===1&&policy==='robots'&&url.endsWith('/robots.txt'))return new Response('User-agent: *\nDisallow: /',{headers:{'content-type':'text/plain'}});if(phase===1&&policy==='link'&&url.includes('election-results-and-reconciliation-forms'))return new Response('link removed',{headers:{'content-type':'text/html'}});return base.fetch(url);}};
+  const deps={...base,fetch:async(url:string)=>{seen.push(url);if(phase===0&&url.endsWith('/summary.json'))throw new Error('local stop');if(phase===1&&url.includes('election-results-and-reconciliation-forms'))return new Response('link removed',{headers:{'content-type':'text/html'}});return base.fetch(url);}};
   let c=await Collector.open(root,deps);
-  try{await expect(c.collect('125662')).rejects.toThrow('local stop');const id=(await c.status()).coverage[0];await c.close();phase=1;seen.length=0;c=await Collector.open(root,deps);await expect(c.collect('125662')).rejects.toThrow();expect((await c.status()).observations).toBe(1);expect(seen.length).toBe(policy==='robots'?1:3);expect(seen.some(u=>u.includes('/json/')||u.endsWith('current_ver.txt'))).toBe(false);}
+  try{await expect(c.collect('125662')).rejects.toThrow('local stop');const id=(await c.status()).coverage[0];await c.close();phase=1;seen.length=0;c=await Collector.open(root,deps);await expect(c.collect('125662')).rejects.toThrow();expect((await c.status()).observations).toBe(1);expect(seen.length).toBe(1);expect(seen.some(u=>u.includes('/json/')||u.endsWith('current_ver.txt'))).toBe(false);}
   finally{await c.close();await rm(root,{recursive:true,force:true});}
  }
 });
@@ -85,7 +85,7 @@ test('default Bun.fetch preserves encoded gzip and positive main collect/sync re
  const nowSpy=spyOn(Date,'now').mockImplementation(()=>clock),sleepSpy=spyOn(Bun,'sleep').mockImplementation((async(ms:any)=>{clock+=Number(ms);}) as typeof Bun.sleep);
  try{
   expect(await main(['collect','--archive',root,'--election','125662'])).toMatchObject({reused:false});
-  expect(await main(['sync','--archive',root,'--election','125662'])).toMatchObject({reused:true});expect(options.length).toBe(12);
+  expect(await main(['sync','--archive',root,'--election','125662'])).toMatchObject({reused:true});expect(options.length).toBe(10);
   expect(options.every(o=>o.decompress===false&&o.redirect==='manual')).toBe(true);
   const c=await Collector.open(root);try{const row=c.db.query<any,[]>('SELECT * FROM files WHERE name=\'summary\'').get()!;expect(row.encoded_hash).not.toBe(row.decoded_hash);expect(hash(await readFile(join(root,row.path)))).toBe(row.encoded_hash);expect(await c.verify()).toMatchObject({httpRequests:0,observations:1});}finally{await c.close();}
  }finally{fetchSpy.mockRestore();nowSpy.mockRestore();sleepSpy.mockRestore();await rm(root,{recursive:true,force:true});}

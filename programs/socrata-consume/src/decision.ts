@@ -173,6 +173,7 @@ function negativeTerminal(db: Database, run: Row, summary: Row) {
   ensure(
     !db
       .query(
+        // Older archives may contain a real robots attempt; it is provenance, not a required gate.
         "SELECT 1 FROM attempts WHERE run=? AND label NOT IN ('catalog',?)",
       )
       .get(run.id, `robots:${new URL(origin).hostname}`),

@@ -1,3 +1,4 @@
+import { sameAcquisition } from "./acquisition-compat";
 import type { Database } from "bun:sqlite";
 import type { Archive } from "./archive";
 import { ReadonlyAppEvidence } from "./app-readonly";
@@ -17,7 +18,6 @@ import {
   wrapperMode,
   wrapperKind,
   validateWrapperOptions,
-  waiver,
   type WrapperOptions,
 } from "./wrapper-contract";
 function marked(db: Database, r: Run) {
@@ -46,7 +46,6 @@ function saved(options: WrapperOptions, binding: object, run: string) {
     source: "austin",
     selection: options,
     binding,
-    waiver: waiver(binding, run),
     budget: options.budget,
   };
 }
@@ -104,8 +103,8 @@ async function summary(db: Database, root: string, r: Run) {
   ensure(
     r.command === "inspect-wrapper" &&
       r.source === `austin:${options.item}:${wrapperMode}` &&
-      same(s, saved(options, b, r.id)),
-    "wrapper intent/waiver/source binding missing or changed",
+      sameAcquisition(s, saved(options, b, r.id)),
+    "wrapper intent/source binding missing or changed",
   );
   const h = await rawCapture(
     db,
@@ -144,7 +143,6 @@ async function summary(db: Database, root: string, r: Run) {
     wrapperReceiptVersion: 1,
     wireKind: wrapperKind,
     binding: b,
-    waiver: waiver(b, r.id),
     wrapperHtmlCaptured: true,
     wrapperResolved: false,
     bootstrapAcquired: false,
@@ -166,7 +164,7 @@ async function verifyReceipts(db: Database, root: string) {
       "unfinished wrapper operation requires review",
     );
     ensure(
-      same(await summary(db, root, r), JSON.parse(r.summary)),
+      sameAcquisition(await summary(db, root, r), JSON.parse(r.summary)),
       "wrapper receipt missing/downgraded/mismatched",
     );
     count++;
@@ -189,8 +187,11 @@ async function closure(root: string, db: Database, options?: WrapperOptions) {
     );
     if (prior)
       ensure(
-        same(JSON.parse(prior.options!), saved(options, selected!, prior.id)),
-        "wrapper immutable selection/waiver/budget changed",
+        sameAcquisition(
+          JSON.parse(prior.options!),
+          saved(options, selected!, prior.id),
+        ),
+        "wrapper immutable selection/budget changed",
       );
   }
   evidence.assertCurrent();
@@ -243,8 +244,8 @@ export async function inspectWrapper(a: Archive, value: WrapperOptions) {
   );
   if (prior) {
     ensure(
-      same(JSON.parse(prior.options!), saved(options, b, prior.id)),
-      "wrapper immutable selection/waiver/budget changed",
+      sameAcquisition(JSON.parse(prior.options!), saved(options, b, prior.id)),
+      "wrapper immutable selection/budget changed",
     );
     const result = await summary(a.store.db, a.root, prior);
     c.evidence.assertCurrent();

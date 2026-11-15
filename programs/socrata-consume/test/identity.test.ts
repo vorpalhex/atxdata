@@ -54,7 +54,7 @@ test("current catalog rejects old aliases and mismatched asset links, credential
       "link mismatch",
     );
 });
-test("ordinary discovery supports a second asset while shared-origin collection has one policy request", async () => {
+test("ordinary discovery supports a second asset while shared-origin collection has no robots requests", async () => {
   const root = mkdtempSync(join(base, "current-source-")),
     f = fixture("uirm-2zvd", 3, null);
   const result = await discover(
@@ -74,7 +74,7 @@ test("ordinary discovery supports a second asset while shared-origin collection 
   ).toBe(true);
   expect(
     f.calls.filter((u) => new URL(u).pathname === "/robots.txt").length,
-  ).toBe(1);
+  ).toBe(0);
   const count = f.calls.length;
   expect(
     (

@@ -43,60 +43,63 @@ test("readonly pre-open sees hold committed only in WAL without writing", async 
     db.close();
   }
 });
-test("named old held v1 COPY refuses before native Archive.open or fetch unchanged", async () => {
-  const input = process.env.ARCGIS_HELD_COPY;
-  expect(input).toBeTruthy();
-  const root = await mkdtemp(join(process.env.TMPDIR!, "old-held-copy-"));
-  for (const n of await readdir(input!))
-    await copyFile(join(input!, n), join(root, n));
-  const fence = join(
-    root,
-    "..",
-    "writer-fence-" + root.split("/").pop() + ".ts",
-  );
-  await writeFile(
-    fence,
-    `import {Archive} from ${JSON.stringify(resolve(import.meta.dir, "../src/archive.ts"))};Archive.open=async()=>{throw Error("WRITER_BOUNDARY_REACHED")};globalThis.fetch=async()=>{throw Error("FETCH_BOUNDARY_REACHED")};`,
-  );
-  const before = await files(root);
-  for (const v2 of [false, true]) {
-    const args = [
-      "inspect-app",
-      "--source",
-      "austin",
-      "--item",
-      "9".repeat(32),
-      "--archive",
+test.skipIf(!process.env.ARCGIS_HELD_COPY)(
+  "named old held v1 COPY refuses before native Archive.open or fetch unchanged",
+  async () => {
+    const input = process.env.ARCGIS_HELD_COPY;
+    expect(input).toBeTruthy();
+    const root = await mkdtemp(join(process.env.TMPDIR!, "old-held-copy-"));
+    for (const n of await readdir(input!))
+      await copyFile(join(input!, n), join(root, n));
+    const fence = join(
       root,
-      "--terms-sha256",
-      "a".repeat(64),
-      "--catalog-terms-sha256",
-      "b".repeat(64),
-      ...(v2 ? ["--app-data-format", "json-or-empty-v2"] : []),
-    ];
-    const p = Bun.spawn(
-      [
-        process.execPath,
-        "--preload",
-        fence,
-        resolve(import.meta.dir, "../src/cli.ts"),
-        ...args,
-      ],
-      {
-        env: { ...process.env, BUN_RUNTIME_TRANSPILER_CACHE_PATH: "0" },
-        stdout: "pipe",
-        stderr: "pipe",
-      },
+      "..",
+      "writer-fence-" + root.split("/").pop() + ".ts",
     );
-    const out = await new Response(p.stdout).text(),
-      err = await new Response(p.stderr).text();
-    expect(await p.exited).toBe(1);
-    expect(out).toBe("");
-    expect(err).toContain("manual review");
-    expect(err).not.toContain("BOUNDARY_REACHED");
-    expect(await files(root)).toEqual(before);
-  }
-});
+    await writeFile(
+      fence,
+      `import {Archive} from ${JSON.stringify(resolve(import.meta.dir, "../src/archive.ts"))};Archive.open=async()=>{throw Error("WRITER_BOUNDARY_REACHED")};globalThis.fetch=async()=>{throw Error("FETCH_BOUNDARY_REACHED")};`,
+    );
+    const before = await files(root);
+    for (const v2 of [false, true]) {
+      const args = [
+        "inspect-app",
+        "--source",
+        "austin",
+        "--item",
+        "9".repeat(32),
+        "--archive",
+        root,
+        "--terms-sha256",
+        "a".repeat(64),
+        "--catalog-terms-sha256",
+        "b".repeat(64),
+        ...(v2 ? ["--app-data-format", "json-or-empty-v2"] : []),
+      ];
+      const p = Bun.spawn(
+        [
+          process.execPath,
+          "--preload",
+          fence,
+          resolve(import.meta.dir, "../src/cli.ts"),
+          ...args,
+        ],
+        {
+          env: { ...process.env, BUN_RUNTIME_TRANSPILER_CACHE_PATH: "0" },
+          stdout: "pipe",
+          stderr: "pipe",
+        },
+      );
+      const out = await new Response(p.stdout).text(),
+        err = await new Response(p.stderr).text();
+      expect(await p.exited).toBe(1);
+      expect(out).toBe("");
+      expect(err).toContain("manual review");
+      expect(err).not.toContain("BOUNDARY_REACHED");
+      expect(await files(root)).toEqual(before);
+    }
+  },
+);
 
 test("readonly pre-open rejects symlink ancestors before reading archive state", async () => {
   const base = await mkdtemp(join(process.env.TMPDIR!, "preopen-alias-")),

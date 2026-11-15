@@ -3,8 +3,7 @@ import { Database } from "bun:sqlite";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { policyFixture } from "./support/policy-fixture";
-const acknowledgement = "--acknowledge-maps-robots-omission";
-test("native wrapper vertical: scoped waiver, literal HTML, offline verify and exact reuse", async () => {
+test("native wrapper vertical: no waiver, literal HTML, offline verify and exact reuse", async () => {
   const f = await policyFixture();
   try {
     const policy = await f.produce();
@@ -15,7 +14,7 @@ test("native wrapper vertical: scoped waiver, literal HTML, offline verify and e
     f.mode.body = Buffer.from(
       '<!doctype html><html><script src="./bootstrap.js"></script><link href="./style.css" rel="stylesheet"></html>',
     );
-    const args = ["inspect-wrapper", ...policy.slice(1), acknowledgement];
+    const args = ["inspect-wrapper", ...policy.slice(1)];
     const live = await f.invoke(args);
     expect(live.err).toBe("");
     expect(live.exit).toBe(0);
@@ -31,12 +30,8 @@ test("native wrapper vertical: scoped waiver, literal HTML, offline verify and e
       acquiredFiles: false,
       bootstrapAcquired: false,
       semanticServiceEquivalence: false,
-      waiver: {
-        acknowledged: true,
-        resource: "https://maps.austintexas.gov/robots.txt",
-        operation: "app-wrapper-v1",
-      },
     });
+    expect(result.summary.waiver).toBeUndefined();
     expect(result.summary.references[0]).toMatchObject({
       literal: "./bootstrap.js",
       acquired: false,

@@ -7,7 +7,7 @@ import { createHash } from "node:crypto";
 import { cityPdf } from "./austin-fixtures";
 import { state } from "./integrity-state";
 
-test("native Austin eDIMS acquisition preserves services robots302 and final policy; reuse and refresh", async () => {
+test("native Austin eDIMS acquisition makes only page/PDF transfers without policy receipts; reuse and refresh", async () => {
   const root = await mkdtemp(join(process.env.TMPDIR!, "austin-native-"));
   const archive = join(root, "archive"),
     pdf = cityPdf(
@@ -27,42 +27,19 @@ test("native Austin eDIMS acquisition preserves services robots302 and final pol
       const url = req.headers.get("x-authored-url")!;
       calls.push({ url, at: Date.now() });
       expect(req.headers.get("cookie")).toBeNull();
-      if (url === "https://services.austintexas.gov/robots.txt") {
-        const status = mode === "status" ? 301 : mode === "auth" ? 401 : 302;
+      if (url.endsWith("/robots.txt"))
+        throw Error("unexpected robots transfer");
+      if (url === doc && mode !== "normal")
         return new Response(
-          mode === "challenge"
-            ? "access denied: verify you are human"
-            : "canonical policy",
+          mode === "challenge" ? "verify you are human" : "Unavailable",
           {
-            status,
+            status: mode === "auth" ? 401 : mode === "status" ? 503 : 302,
             headers: {
-              location:
-                mode === "domain"
-                  ? "https://other.invalid/robots.txt"
-                  : "https://www.austintexas.gov/robots.txt",
               "content-type": "text/plain",
+              location: "https://other.invalid/document.pdf",
             },
           },
         );
-      }
-      if (
-        url === "https://www.austintexas.gov/robots.txt" &&
-        ["multi-hop", "cycle"].includes(mode)
-      )
-        return new Response("another redirect", {
-          status: 302,
-          headers: {
-            location:
-              mode === "cycle"
-                ? "https://services.austintexas.gov/robots.txt"
-                : "https://other.invalid/robots.txt",
-            "content-type": "text/plain",
-          },
-        });
-      if (url === "https://www.austintexas.gov/robots.txt")
-        return new Response("User-agent: *\nAllow: /\n", {
-          headers: { "content-type": "text/plain" },
-        });
       if (url === page)
         return new Response(
           `<h1>City of Austin</h1><h2>FY 2025-2026</h2><a href="${doc}">First Quarter Financial Report</a>`,
@@ -141,11 +118,10 @@ test("native Austin eDIMS acquisition preserves services robots302 and final pol
     const db = new Database(join(archive, "documents.sqlite"), {
       readonly: true,
     });
-    const original = db
-      .query<any, []>("SELECT * FROM attempts WHERE status=302")
-      .get();
-    expect(original.url).toBe("https://services.austintexas.gov/robots.txt");
-    expect(original.error).toBeNull();
+    expect(
+      db.query("SELECT COUNT(*) n FROM attempts WHERE kind='robots'").get(),
+    ).toEqual({ n: 0 });
+    expect(calls.map((c) => c.url)).toEqual([page, doc]);
     const version = db.query<any, []>("SELECT * FROM versions").get();
     expect(version.sha).toBe(createHash("sha256").update(pdf).digest("hex"));
     expect(JSON.parse(version.validation)).toMatchObject({
@@ -160,7 +136,7 @@ test("native Austin eDIMS acquisition preserves services robots302 and final pol
       Buffer.from(await readFile(join(archive, version.path))).equals(pdf),
     ).toBe(true);
     expect(db.query("SELECT COUNT(*) n FROM robots_bindings").get()).toEqual({
-      n: 1,
+      n: 0,
     });
     db.close();
     const before = calls.length;
@@ -189,21 +165,6 @@ test("native Austin eDIMS acquisition preserves services robots302 and final pol
         /producing/,
       ],
       [
-        "edge",
-        "UPDATE redirect_edges SET target_url='https://other.invalid/robots.txt'",
-        /redirect/,
-      ],
-      [
-        "policy",
-        "UPDATE robots_bindings SET final_attempt=redirect_attempt",
-        /policy binding/,
-      ],
-      [
-        "edge-spacing",
-        "UPDATE attempts SET started=(SELECT a.ended+2999 FROM redirect_edges e JOIN attempts a ON a.id=e.attempt WHERE e.target_attempt=attempts.id) WHERE id IN (SELECT target_attempt FROM redirect_edges)",
-        /redirect downstream identity\/pacing/,
-      ],
-      [
         "metadata",
         "UPDATE snapshot_metadata SET adapter_schema=3",
         /metadata version/,
@@ -218,12 +179,7 @@ test("native Austin eDIMS acquisition preserves services robots302 and final pol
         "UPDATE runs SET kind=replace(kind,'transport-work-v1:','transport-work-v0:') WHERE id LIKE 'transport-work-v3:%'",
         /reservation|identity/,
       ],
-      [
-        "downgrade",
-        "UPDATE runs SET id=replace(id,'transport-work-v3:','transport-work-v2:'); UPDATE attempts SET run=replace(run,'transport-work-v3:','transport-work-v2:')",
-        /redirect edge original/,
-      ],
-      ["missing-table", "DROP TABLE robots_bindings", /missing required table/],
+      ["missing-table", "DROP TABLE redirect_edges", /missing required table/],
     ] as const) {
       const target = join(root, name);
       await cp(archive, target, { recursive: true });
@@ -265,38 +221,13 @@ test("native Austin eDIMS acquisition preserves services robots302 and final pol
       bounded,
     );
     const start = calls.length;
-    expect(
-      await invoke(
-        "collect",
-        ["--limit", "1", "--allow-network", "--max-requests", "1"],
-        bounded,
-        1,
-      ),
-    ).toMatch(/budget/);
+    await invoke(
+      "collect",
+      ["--limit", "1", "--allow-network", "--max-requests", "1"],
+      bounded,
+    );
     expect(calls.length).toBe(start + 1);
-    const stopped = new Database(join(bounded, "documents.sqlite"), {
-      readonly: true,
-    });
-    expect(
-      stopped.query<any, []>("SELECT blocked FROM cooldowns").get().blocked,
-    ).toMatch(/redirect chain pending/);
-    expect(stopped.query("SELECT status,error FROM attempts").get()).toEqual({
-      status: 302,
-      error: null,
-    });
-    stopped.close();
-    expect(
-      await invoke("sync", ["--limit", "1", "--allow-network"], bounded, 1),
-    ).toMatch(/stopped/);
-    expect(calls.length).toBe(start + 1);
-    for (const variant of [
-      "domain",
-      "status",
-      "auth",
-      "challenge",
-      "multi-hop",
-      "cycle",
-    ]) {
+    for (const variant of ["domain", "status", "auth", "challenge"]) {
       mode = variant;
       const target = join(root, "hostile-" + variant);
       await invoke(
@@ -313,9 +244,7 @@ test("native Austin eDIMS acquisition preserves services robots302 and final pol
           1,
         ),
       ).toMatch(/redirect|HTTP|challenge/);
-      expect(calls.length - initial).toBe(
-        ["multi-hop", "cycle"].includes(mode) ? 2 : 1,
-      );
+      expect(calls.length - initial).toBe(1);
       const failed = new Database(join(target, "documents.sqlite"), {
         readonly: true,
       });
@@ -343,11 +272,17 @@ test("native Austin eDIMS acquisition preserves services robots302 and final pol
     expect(
       await invoke(
         "collect",
-        ["--limit", "1", "--allow-network", "--max-bytes", "3145728"],
+        [
+          "--limit",
+          "1",
+          "--allow-network",
+          "--max-bytes",
+          String(pdf.length - 1),
+        ],
         aggregateLater,
         1,
       ),
-    ).toMatch(/budget/);
+    ).toMatch(/budget|limit/);
     expect(calls.length).toBe(aggregateStart + 1);
     await invoke(
       "import-page",
@@ -358,7 +293,7 @@ test("native Austin eDIMS acquisition preserves services robots302 and final pol
     expect(
       await invoke(
         "collect",
-        ["--limit", "1", "--allow-network", "--max-bytes", "3145727"],
+        ["--limit", "1", "--allow-network", "--max-bytes", "0"],
         tooSmall,
         1,
       ),

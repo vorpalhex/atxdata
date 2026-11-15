@@ -57,8 +57,12 @@ test("imported token consumption preserves literal values, terminators and first
     [["status", "--bogus", "--root="], "unknown option"],
     [["status", "--root=", "--bogus"], "missing --root value"],
     [["status", "--root", "a", "--root", "b"], "duplicate option"],
-    [["status", "--human=false"], "boolean switches do not take values"],
-    [["status", "--human", "--human"], "duplicate option"],
+    [
+      ["status", "--allow-network=false"],
+      "boolean switches do not take values",
+    ],
+    [["status", "--allow-network", "--allow-network"], "duplicate option"],
+    [["status", "--human"], "unknown option"],
   ];
   for (const [args, message] of cases)
     await expect(run(args)).rejects.toThrow(message);

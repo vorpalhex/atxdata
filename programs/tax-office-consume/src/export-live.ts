@@ -1,17 +1,15 @@
 import {Collector} from './collector';
-import {setup,acquire,transport,robotsRedirect} from './live';
+import {setup,acquire,transport} from './live';
 import {ROUTES} from './source';
 import {exportSetup,exportLimits,startExport,retainCatalog,selectedItem,bindExport,retainExportFile,finishExport,verifyExport,verifyPartialExport,verifyUnboundExport,type ExportLimits} from './exports';
-async function policyCatalog(c:Collector,http:ReturnType<typeof transport>,run:string,limits:ExportLimits){
+async function discoveryCatalog(c:Collector,http:ReturnType<typeof transport>,run:string,limits:ExportLimits){
  const work={maxRequests:limits.maxRequests,maxTotalBytes:limits.maxTotalBytes};
- const robots=await acquire(c,http,run,'robots',limits.maxRows,ROUTES.robots,work);
- if(robots.status===302)await acquire(c,http,run,'robots',limits.maxRows,robotsRedirect(ROUTES.robots,robots.headers),work);
  const page=await acquire(c,http,run,'discovery',limits.maxRows,ROUTES.discovery,work);return retainCatalog(c,page.file,run);
 }
 export async function discover(c:Collector,limits:ExportLimits=exportLimits()){
  return c.exclusive(async()=>{
   setup(c);limits=exportLimits(limits);const {id,run}=startExport(c,'@catalog','discovery',limits);
-  try{const catalog=await policyCatalog(c,transport(c),run,limits);c.db.query("UPDATE snapshots SET status='catalog',completion_run=? WHERE id=?").run(run,id);c.finish(run,'succeeded');return catalog;}catch(error){c.finish(run,'failed',error);throw error;}
+  try{const catalog=await discoveryCatalog(c,transport(c),run,limits);c.db.query("UPDATE snapshots SET status='catalog',completion_run=? WHERE id=?").run(run,id);c.finish(run,'succeeded');return catalog;}catch(error){c.finish(run,'failed',error);throw error;}
  });
 }
 type CachedExport={id:string;source:string;selection:string;mode:string;version:string;row_count:null;max_rows:number;max_bytes:number;observed_at:string;completion_run:string;status:string};
@@ -58,7 +56,7 @@ export async function collectExport(c:Collector,selection:string,options:Collect
   setup(c);const http=transport(c),{id,run,prior}=resume(c,selection,limits,!!options.refresh);
   try{
    if(prior)await verifyPartialExport(c,id);
-   const current=await policyCatalog(c,http,run,limits),item=currentItem(current,selection,options.catalogVersion,prior);
+   const current=await discoveryCatalog(c,http,run,limits),item=currentItem(current,selection,options.catalogVersion,prior);
    if(!prior)bindExport(c,id,current.version,item,limits);
    await acquireFiles(c,http,id,run,item,limits);
    const result=await finishExport(c,id,run,item,limits);await c.verify();return result;

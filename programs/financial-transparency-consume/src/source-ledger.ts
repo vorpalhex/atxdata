@@ -90,6 +90,7 @@ function runState(run: Row, now: number): Range {
     return { start, end: now };
 }
 function identity(run: Row, o: Row, label: string) {
+    // Historical artifacts only: no required policy observation or directive enforcement.
     if (label === 'robots')
         return { url: robots, kind: 'text' };
     if (run.command === 'collect') {

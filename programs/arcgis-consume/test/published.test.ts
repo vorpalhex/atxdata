@@ -29,7 +29,7 @@ test("published strategy follows only validated temporary location; retains stab
     },
     fetch: async (url) => {
       calls++;
-      if (url.endsWith("/robots.txt")) return new Response("User-agent: *\n");
+      if (url.endsWith("/robots.txt")) throw Error("robots request forbidden");
       if (url.includes("/itemdata/"))
         return new Response(zip, {
           headers: { "content-type": "application/zip" },
@@ -51,7 +51,7 @@ test("published strategy follows only validated temporary location; retains stab
       termsSha256: terms(item).sha256,
     });
     expect(r.summary).toMatchObject({ records: 1, ids: ["101"] });
-    expect(calls).toBe(5);
+    expect(calls).toBe(4);
     const before = calls;
     expect((await adapter.verify()).collections).toBe(1);
     await adapter.execute("voter", "collect");

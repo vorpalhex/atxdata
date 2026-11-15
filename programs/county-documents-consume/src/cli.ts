@@ -39,8 +39,8 @@ Usage: bun run src/cli.ts COMMAND [options]
   retain-capture --source SOURCE --observation ID --capture-attempt UUID --document-sha SHA256 --selection-sha SHA256 (always offline original-integrity only)
   review-context --observation ID
   review-pdf --observation ID --input FILE (--image PNG | --images PATHS_JSON) --review JSON [--headers FILE]
-  archive --source-href EXACT_PUBLISHED_HREF --page EXPLICIT_HTTPS_ENDPOINT [--archive-value VALUE] --allow-network [--human]
-  discover --source SOURCE --page EXACT_DISCOVERY_URL --allow-network [--human]
+  archive --source-href EXACT_PUBLISHED_HREF --page EXPLICIT_HTTPS_ENDPOINT [--archive-value VALUE] --allow-network
+  discover --source SOURCE --page EXACT_DISCOVERY_URL --allow-network
   collect|sync --source SOURCE --limit N [selection options] --allow-network
 Help: -h, --help, help COMMAND; --version reports the declared package version offline.
 Examples (offline): status --root APPROVED_PRIVATE_DIRECTORY; list --root APPROVED_PRIVATE_DIRECTORY --source county-code --limit 1.
@@ -49,8 +49,8 @@ Explicit originals: --resolve-legacy-edims on Council discover/import-page prese
 Sources: county-code, budgets, meeting-archives, election-documents, austin-financial-publications, austin-council-archives, austin-election-publications.
 Work budgets: --max-requests N (100), --max-bytes N (536870912), --max-pdf-bytes N (134217728), --max-pages N (50). Positive safe integers, per operation, not archive-lifetime quotas. Import and collect share PDF bounds; import/review also honor aggregate body/image byte budgets. Metadata stays3MiB/page and aggregate2000 document occurrences/source.
 Discovery follows only actual retained links in relevant source paths; bounded traversal returns complete/pending. catalog reports retained links/selectors and blocked original hrefs, not fabricated routes.
---human is a boolean default-false operator acknowledgement, not identity spoofing. Only the exact enCodePlus Travis County tenant robots disallow can be acknowledged; all other gates remain. archive currently obtains the published selector/catalog or applies its read-only filter with fresh own anonymous state and server-selected readback. It does NOT yet acquire historical PDF bodies.
-No retries/scheduler/server. Austin new-format archives retain bounded approved302 edges and services-to-www robots-policy bindings; no existing stopped attempts are rewritten. Default Council/election paths preserve metadata6 and semantic receipt7. Explicit Council resolution uses metadata7; capture-only uses structural original receipt9, never semantic identity. Widen wrappers and election search submissions remain unsupported. Global durable >=3second completion pacing, robots, cooldowns, stop gates and history never reset between operations. collect verifies existing selected downloads without HTTP; sync explicitly requests new bytes. Interrupted artifacts/wire fail closed pending manual recovery.
+archive currently obtains the published selector/catalog or applies its read-only filter with fresh own anonymous state and server-selected readback. It does NOT yet acquire historical PDF bodies.
+No retries/scheduler/server. Austin new-format archives retain bounded approved302 edges; no existing stopped attempts are rewritten. Default Council/election paths preserve metadata6 and semantic receipt7. Explicit Council resolution uses metadata7; capture-only uses structural original receipt9, never semantic identity. Widen wrappers and election search submissions remain unsupported. Global durable >=3second completion pacing, cooldowns, stop gates and history never reset between operations. collect verifies existing selected downloads without HTTP; sync explicitly requests new bytes. Interrupted artifacts/wire fail closed pending manual recovery.
 review-pdf accepts explicit reviewed physical pages and image/selection hashes, preserving legacy one-page receipts. Not OCR, interpretation or unattended acceptance. See README for review JSON and source caveats.
 `;
 function commandHelp(command?: string): string {
@@ -129,12 +129,6 @@ export function createProgram() {
     new Option(
       "--allow-network",
       "Explicit authorization for network commands",
-    ).default(false),
-  );
-  program.addOption(
-    new Option(
-      "--human",
-      "Default-false operator acknowledgement; never identity spoofing",
     ).default(false),
   );
   program.addOption(
@@ -337,7 +331,6 @@ async function collect(engine: Engine, opts: Options, refresh: boolean) {
           {},
           { ...budget, maxBytes: budget.maxBytes - cached },
           {
-            human: opts.human === "yes",
             captureOnly: opts["capture-only"] === "yes",
           },
         ),
@@ -359,9 +352,7 @@ const ACTIONS: Record<Command, (engine: Engine, opts: Options) => unknown> = {
   "retain-capture": (engine, opts) =>
     engine.retainCapture(captureOptions(opts), budgets(opts)),
   archive: (engine, opts) =>
-    new Transport(engine, {}, budgets(opts), {
-      human: opts.human === "yes",
-    }).archive(
+    new Transport(engine, {}, budgets(opts)).archive(
       required(opts, "source-href"),
       required(opts, "page"),
       opts["archive-value"],
@@ -388,7 +379,6 @@ const ACTIONS: Record<Command, (engine: Engine, opts: Options) => unknown> = {
   "review-pdf": reviewPdf,
   discover: (engine, opts) =>
     new Transport(engine, {}, budgets(opts), {
-      human: opts.human === "yes",
       resolveLegacyEdims: opts["resolve-legacy-edims"] === "yes",
     }).discoverTree(
       sourceName(required(opts, "source")),

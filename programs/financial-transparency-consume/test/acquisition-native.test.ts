@@ -93,7 +93,7 @@ test("OS denies public transport, allows bounded localhost native streaming in s
       ]),
     ).toMatchObject({ exit: 0, result: { bindings: 1, httpRequests: 0 } });
     expect(requests).toHaveLength(before);
-    expect(requests.map((row) => row.method)).toEqual(["GET", "HEAD", "GET"]);
+    expect(requests.map((row) => row.method)).toEqual(["HEAD", "GET"]);
     for (let i = 1; i < requests.length; i++)
       expect(requests[i].time - requests[i - 1].time).toBeGreaterThanOrEqual(
         3000,

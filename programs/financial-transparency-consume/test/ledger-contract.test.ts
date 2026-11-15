@@ -36,10 +36,8 @@ const faults: Record<string, string> = {
     'options-null': "UPDATE acquisition_options SET options=json_set(options,'$.budget.records',NULL)",
     'foreign-column': "ALTER TABLE runs ADD COLUMN foreign_column TEXT",
     'run-future-finish': "UPDATE runs SET finished='2999-01-01T00:00:00.000Z'",
-    'request-accounting': "UPDATE acquisition_options SET options=json_set(options,'$.budget.requests',1)",
+    'request-accounting': "UPDATE acquisition_options SET options=json_set(options,'$.budget.requests',0)",
     'aggregate-accounting': "UPDATE acquisition_options SET options=json_set(options,'$.budget.totalBytes',1)",
-    'missing-successful-policy': "UPDATE attempts SET status=200,error=NULL WHERE label='robots'",
-    'missing-policy-context': "UPDATE attempts SET headers=NULL WHERE label='robots'",
     'duplicate-selected-attempt': "INSERT INTO attempts SELECT '00000000-0000-0000-0000-000000000000',run,label,url,started,finished,status,headers,bytes,error FROM attempts WHERE label='csv'",
 };
 for (const [name, sql] of Object.entries(faults))
@@ -107,7 +105,7 @@ for (const [field, value] of [['accepted', 99], ['rowsRead', 99], ['bytes', 1]])
         await expect(verifyAcquisition(f.options.sourceArchive, f.options.output)).rejects.toThrow();
         expect(snapshot(f.options.sourceArchive)).toEqual(before);
     });
-for(const kind of ['csv','robots'])test(`unexpected successful HTTP201 ${kind} never becomes a successful binding`,async()=>{
+for(const kind of ['csv'])test(`unexpected successful HTTP201 ${kind} never becomes a successful binding`,async()=>{
  const f=fixture();const deps={...f.deps,fetch:async(url:string)=>{const response=await f.deps.fetch(url);if(url.endsWith('robots.txt'))return kind==='robots'?new Response('User-agent: *',{status:201}):response;const raw=await response.text();return new Response(raw,{status:kind==='csv'?201:200});}};
  await expect(collect(f.options,deps)).rejects.toThrow();expect(readdirSync(f.options.output)).toEqual([]);expect(await verifyAcquisition(f.options.sourceArchive,f.options.output)).toMatchObject({bindings:0});
 });

@@ -33,6 +33,7 @@ test("native contextual help/version bypass unusable configuration and never rei
         cwd,
         env: {
           ...process.env,
+          BUN_RUNTIME_TRANSPILER_CACHE_PATH: "",
           HOME: cwd,
           XDG_CONFIG_HOME: cwd,
           TERM: "dumb",

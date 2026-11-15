@@ -21,7 +21,7 @@ test('source-linked nested discovery supports arbitrary annual pages, cycle-safe
   const transport=new Transport(engine,deps,{maxPages:1});
   const first=await transport.discoverTree('budgets',base);
   expect(first.complete).toBe(false);expect(first.pending).toContain(nested);
-  expect(calls).toHaveLength(2);
+  expect(calls).toHaveLength(1);
   const next=await new Transport(engine,deps,{maxPages:4}).discoverTree('budgets',nested);
   expect(next.complete).toBe(true);
   expect(engine.list('budgets',{year:'2032',role:'adopted',limit:20})).toHaveLength(1);

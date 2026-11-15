@@ -154,7 +154,6 @@ for (const fault of [
   "budget",
   "attempt",
   "missing-receipts",
-  "historical-route",
 ])
   test(
     "native app replay refuses " + fault + " without HTTP or durable changes",
@@ -200,39 +199,6 @@ for (const fault of [
           result.run,
         );
       }
-      if (fault === "historical-route") {
-        const row = db
-          .query(
-            "SELECT path,sha256,bytes FROM observations WHERE run=? AND label=?",
-          )
-          .get(result.run, "robots-www.arcgis.com") as {
-          path: string;
-          sha256: string;
-          bytes: number;
-        };
-        const denied = (
-          "User-agent: *\nDisallow: /sharing/rest/content/items/" +
-          id +
-          "/data\n"
-        ).padEnd(row.bytes, " ");
-        expect(Buffer.byteLength(denied)).toBe(row.bytes);
-        await writeFile(join(f.root, row.path), denied);
-        const hash = createHash("sha256").update(denied).digest("hex");
-        db.query(
-          "UPDATE observations SET sha256=? WHERE run=? AND label=?",
-        ).run(hash, result.run, "robots-www.arcgis.com");
-        db.query("UPDATE versions SET sha256=? WHERE sha256=?").run(
-          hash,
-          row.sha256,
-        );
-        summary.receipts.find(
-          (x: any) => x.label === "robots-www.arcgis.com",
-        ).sha256 = hash;
-        db.query("UPDATE runs SET summary=? WHERE id=?").run(
-          JSON.stringify(summary),
-          result.run,
-        );
-      }
       db.query("UPDATE acquisition_options SET options=? WHERE run=?").run(
         JSON.stringify(saved),
         result.run,
@@ -243,26 +209,24 @@ for (const fault of [
       for (const args of [["verify", "--archive", f.root], f.args]) {
         const refusal = await f.invoke(args);
         expect(refusal.exit).toBe(1);
-        if (fault === "historical-route")
-          expect(refusal.err).toContain("historical robots disallows route");
         expect(await snapshot(f.root)).toEqual(before);
         expect(await readFile(f.calls, "utf8")).toBe(calls);
       }
     },
   );
 test("native app finite request ceiling and cached bounds refuse without extra requests", async () => {
-  const low = await fixture(false, "5");
+  const low = await fixture(false, "4");
   const failed = await low.invoke(low.args, true);
   expect(failed.exit).toBe(1);
   expect(failed.err).toContain("ceiling");
   expect((await readFile(low.calls, "utf8")).trim().split("\n")).toHaveLength(
-    5,
+    4,
   );
   const f = await fixture();
   expect((await f.invoke(f.args, true)).exit).toBe(0);
   const before = await snapshot(f.root),
     calls = await readFile(f.calls, "utf8");
-  const lower = f.args.map((x) => (x === "6" ? "5" : x));
+  const lower = f.args.map((x) => (x === "6" ? "4" : x));
   expect((await f.invoke(lower)).exit).toBe(1);
   expect(await snapshot(f.root)).toEqual(before);
   expect(await readFile(f.calls, "utf8")).toBe(calls);
@@ -625,7 +589,7 @@ test("native app-only terms emits distinct current terms using Portal only", asy
   );
   expect(summary.terms.sha256).not.toBe(summary.catalogTerms.sha256);
   const calls = (await readFile(f.calls, "utf8")).trim().split("\n");
-  expect(calls).toHaveLength(5);
+  expect(calls).toHaveLength(4);
   expect(
     calls.every((u) => new URL(u).origin === "https://www.arcgis.com"),
   ).toBe(true);
@@ -642,7 +606,7 @@ test("native ordinary rules keeps advertised service inspection when app-only om
     (await readFile(f.calls, "utf8"))
       .split("\n")
       .filter((u) => u.startsWith(new URL(otherService).origin)),
-  ).toHaveLength(2);
+  ).toHaveLength(1);
   expect(JSON.parse(result.out).summary.service).toEqual({ layers: [] });
 });
 test("native app-only guards fail before archive mutation and informationals remain offline", async () => {

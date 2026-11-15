@@ -12,9 +12,8 @@ export function replay() {
  return {calls,now:()=>clock,sleep:async(ms:number)=>{clock+=ms;},random:()=>0,fetch:async(url:string)=>{
   calls.push(url);
   const suffixes=['json/config.json','json/en/electionsettings.json','json/en/summary.json','json/status.json','json/details.json','reports/detailxml.zip'];
-  const allowed=new Set([HOST+'/robots.txt','https://votetravis.gov/robots.txt',OFFICIAL,COUNTY+'elections.json',COUNTY+'125662/current_ver.txt',...['367565','367566'].flatMap(v=>suffixes.map(s=>COUNTY+'125662/'+v+'/'+s))]);
+  const allowed=new Set([OFFICIAL,COUNTY+'elections.json',COUNTY+'125662/current_ver.txt',...['367565','367566'].flatMap(v=>suffixes.map(s=>COUNTY+'125662/'+v+'/'+s))]);
   if(!allowed.has(url))throw new Error('unexpected exact source route '+url);
-  if(url.endsWith('/robots.txt')) return new Response('User-agent: *\nDisallow: /wp-admin/\n',{headers:{'content-type':'text/plain'}});
   if(url===OFFICIAL) return new Response(`<a href="${COUNTY}">Results</a>`,{headers:{'content-type':'text/html'}});
   if(url.endsWith('elections.json')) return Response.json([election]);
   if(url.endsWith('current_ver.txt')) return new Response('367565',{headers:{'content-type':'text/plain'}});
@@ -30,12 +29,12 @@ test('one selected snapshot persists provenance and scoped rows; duplicate and o
   const c=await Collector.open(root,deps);
   const result=await c.collect('125662');
   expect(result.coverage).toMatchObject({contests:1,choices:1,precincts:1,rows:1,registered:5,ballots:3,votes:2,stable:true,mismatches:[],certification:'not established'});expect(result.reused).toBe(false);
-  expect(deps.calls.length).toBe(12);
+  expect(deps.calls.length).toBe(10);
   expect(c.db.query('SELECT count(*) n FROM result_rows').get()).toEqual({n:1});
   expect(c.db.query('PRAGMA integrity_check').get()).toEqual({integrity_check:'ok'});
   expect(c.db.query('PRAGMA foreign_key_check').all()).toEqual([]);
-  await c.collect('125662');await c.verify(); expect(deps.calls.length).toBe(12);
-  expect(await c.status()).toMatchObject({observations:1,files:12});
+  await c.collect('125662');await c.verify(); expect(deps.calls.length).toBe(10);
+  expect(await c.status()).toMatchObject({observations:1,files:10});
   await expect(Collector.open(root,deps)).rejects.toThrow();
   await c.close();
   const offline=await Collector.open(root,{fetch:async()=>{throw new Error('HTTP forbidden');}});

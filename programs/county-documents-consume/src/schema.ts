@@ -17,7 +17,6 @@ const EXTRA_TABLES = [
   "artifact_checkpoints",
   "validation_history",
   "history_receipts",
-  "robots",
   "representations",
   "classifier_resolutions",
   "legacy_artifacts",
@@ -86,7 +85,6 @@ export function initialize(db: Database, existing: boolean): void {
 }
 const TRANSPORT_COLUMNS: Record<string, string[]> = {
   cooldowns: ["id", "not_before", "blocked"],
-  robots: ["origin", "body", "sha", "delay", "observed"],
   representations: [
     "attempt",
     "encoding",
@@ -135,10 +133,9 @@ export function readCooldown(db: Database): CooldownState {
   return row;
 }
 function verifyRedirectSchema(db: Database): void {
-  requireTables(db, ["redirect_edges", "robots_bindings"]);
+  requireTables(db, ["redirect_edges"]);
   for (const [name, expected] of [
     ["redirect_edges", ["attempt", "target_url", "target_attempt"]],
-    ["robots_bindings", ["origin", "redirect_attempt", "final_attempt"]],
   ] as const) {
     const actual = db
       .query<{ name: string }, []>(`PRAGMA table_info(${name})`)
@@ -180,7 +177,11 @@ function verifyDatabaseIntegrity(db: Database): void {
     .get();
   if (
     integrity?.integrity_check !== "ok" ||
-    db.query("PRAGMA foreign_key_check").all().length
+    // Retired policy bindings are inert metadata; all other FK checks remain.
+    db
+      .query<{ table: string }, []>("PRAGMA foreign_key_check")
+      .all()
+      .some((row) => row.table !== "robots_bindings")
   )
     throw new Error("SQLite integrity failure");
 }

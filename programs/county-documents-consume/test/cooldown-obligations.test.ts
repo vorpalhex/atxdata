@@ -26,13 +26,13 @@ for(const fault of [false,true]) test(`retained successful server hold across re
   if(fault) db.run('UPDATE cooldowns SET not_before=0');db.close();
   if(fault) {
    await expect(Engine.open(root)).rejects.toThrow(/cooldown/);
-   expect(calls).toBe(2);
+   expect(calls).toBe(1);
    const check=new Database(join(root,'documents.sqlite'));
    expect(check.query<{not_before:number},[]>('SELECT not_before FROM cooldowns').get()!.not_before).toBe(0);check.close();
   } else {
    e=await Engine.open(root);await e.preflight();
    await new Transport(e,deps).discover('budgets',sources.budgets.pages[1]);
-   expect(starts[2]).toBeGreaterThanOrEqual(deadline);
+   expect(starts[1]).toBeGreaterThanOrEqual(deadline);
   }
  }finally{await e?.close();await rm(root,{recursive:true,force:true});}
 });
@@ -50,11 +50,11 @@ test('gate-only rollback refuses offline mutations and transport without silent 
   await expect(e.importPage('budgets',sources.budgets.pages[0],'<p>new</p>','fixture')).rejects.toThrow(/cooldown/);
   await expect(e.verify('budgets',{limit:1})).rejects.toThrow(/cooldown/);
   await expect(new Transport(e,deps).discover('budgets',sources.budgets.pages[1])).rejects.toThrow(/cooldown/);
-  expect(calls).toBe(2);expect(state(e)).toEqual(before);
+  expect(calls).toBe(1);expect(state(e)).toEqual(before);
  }finally{await e.close();await rm(root,{recursive:true,force:true});}
 });
 const holds:[string,Record<string,string>,number][]=[
- ['minimum',{},2000],['robots',{},10000],['retry numeric',{'retry-after':'120'},2000],
+ ['minimum',{},2000],['retry numeric',{'retry-after':'120'},2000],
  ['retry date',{'retry-after':'Tue, 14 Nov 2023 22:15:20 GMT','date':'Tue, 14 Nov 2023 22:13:20 GMT'},2000],
  ['standard reset',{'ratelimit-remaining':'0','ratelimit-reset':'120'},2000],
  ['absolute reset',{'x-ratelimit-remaining':'0','x-ratelimit-reset':'1700000120'},2000],
@@ -73,7 +73,7 @@ for(const [name,headers,delay] of holds) test(`one millisecond rollback rejects 
   await e.preflight();
   e.db.run('UPDATE cooldowns SET not_before=not_before-1');const before=state(e);
   await expect(new Transport(e,deps).discover('budgets',sources.budgets.pages[1])).rejects.toThrow(/cooldown/);
-  expect(calls).toBe(2);expect(state(e)).toEqual(before);
+  expect(calls).toBe(1);expect(state(e)).toEqual(before);
  }finally{await e.close();await rm(root,{recursive:true,force:true});}
 });
 for(const bodyMs of [500,2000]) test(`absolute Reset remains absolute when body consumes ${bodyMs} ms`,async()=>{
@@ -119,7 +119,7 @@ test('rollback during awaited sleep refuses before reservation or HTTP',async()=
  try {
   await new Transport(e,deps).discover('budgets',sources.budgets.pages[0]);damage=true;
   await expect(new Transport(e,deps).discover('budgets',sources.budgets.pages[1])).rejects.toThrow(/cooldown/);
-  expect(calls).toBe(2);expect(state(e)).toEqual(before!);
+  expect(calls).toBe(1);expect(state(e)).toEqual(before!);
  }finally{await e.close();await rm(root,{recursive:true,force:true});}
 });
 for(const hold of [false,true]) test(`old receipts remain explicit without timing fabrication: server hold=${hold}`,async()=>{

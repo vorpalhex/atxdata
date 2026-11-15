@@ -2,7 +2,7 @@ import { test, expect } from "bun:test";
 import { policyFixture } from "./support/policy-fixture";
 import { Archive } from "../src/archive";
 import { sourceBinding } from "../src/policy-inspection-receipt";
-import { waiver } from "../src/wrapper-contract";
+
 import { parseArgs } from "../src/cli";
 test("raw wrapper binds retained catalog/app producer, not a self-consistent replacement", async () => {
   for (const fault of ["none", "argument-only", "binding-replacement"]) {
@@ -10,7 +10,7 @@ test("raw wrapper binds retained catalog/app producer, not a self-consistent rep
     let a: Archive | undefined;
     try {
       const p = await f.produce();
-      expect(f.wire.length).toBe(6);
+      expect(f.wire.length).toBe(5);
       const options = parseArgs([
         "inspect-wrapper",
         ...p.slice(1),
@@ -49,7 +49,6 @@ test("raw wrapper binds retained catalog/app producer, not a self-consistent rep
         source: "austin",
         selection: options,
         binding,
-        waiver: waiver(binding, run),
         budget: options.budget,
       });
       const before = a.store.db.serialize();

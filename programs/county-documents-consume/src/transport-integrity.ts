@@ -1,16 +1,9 @@
 import { transportUrl, type Source } from "./adapters";
-import { robotsDecision } from "./human-policy";
 import type { Engine } from "./engine";
-import { sha } from "./engine";
 import { verifySchema, readCooldown } from "./schema";
 import { reservationReceipt, attemptReceipt } from "./budgets";
 import { verifyCooldownObligations } from "./cooldown-integrity";
-import {
-  verifyRedirects,
-  redirectEdges,
-  boundRobots,
-  hasRedirectSchema,
-} from "./redirects";
+import { verifyRedirects, redirectEdges } from "./redirects";
 export type Representation = {
   attempt: string;
   representation: string;
@@ -115,40 +108,9 @@ function verifyKnown(
     "status/error/stop accounting",
   );
 }
-function verifyDecision(
-  engine: Engine,
-  a: Attempt,
-  receipt: ReturnType<typeof reservationReceipt>,
-): void {
-  if (!receipt) return;
-  if (a.kind === "robots") {
-    requireChecks(
-      [receipt.acknowledgement === undefined],
-      "robots acknowledgement forbidden",
-    );
-    return;
-  }
-  const robots = engine.db
-    .query<{ body: string; sha: string }, [string]>(
-      "SELECT * FROM robots WHERE origin=?",
-    )
-    .get(new URL(a.url).origin);
-  requireChecks([robots !== null], "attempt robots provenance missing");
-  const expected = robotsDecision(
-    robots!.body,
-    robots!.sha,
-    a.url,
-    receipt.acknowledgement?.human === true,
-  ).acknowledgement;
-  requireChecks(
-    [JSON.stringify(receipt.acknowledgement) === JSON.stringify(expected)],
-    "human acknowledgement provenance",
-  );
-}
 function verifyAttempt(engine: Engine, a: Attempt, blocked: boolean): void {
   const cap = a.reservation;
-  const receipt = attemptReceipt(a);
-  verifyDecision(engine, a, receipt);
+  attemptReceipt(a);
   const r = engine.db
     .query<Representation, [string]>(
       "SELECT * FROM representations WHERE attempt=?",
@@ -177,44 +139,6 @@ function verifyAttempt(engine: Engine, a: Attempt, blocked: boolean): void {
   );
   if (r.representation === "legacy-decoded-only") verifyLegacy(engine, a, r);
   else verifyKnown(engine, a, r, blocked);
-}
-function verifyRobots(engine: Engine): void {
-  const rows = engine.db
-    .query<{ origin: string; body: string; sha: string }, []>(
-      "SELECT * FROM robots",
-    )
-    .all();
-  for (const r of rows) {
-    const receipt = engine.db
-      .query(
-        "SELECT 1 FROM attempts a JOIN representations r ON r.attempt=a.id WHERE a.kind='robots' AND a.url=? AND a.status=200 AND r.decoded_hash=?",
-      )
-      .get(r.origin + "/robots.txt", r.sha);
-    requireChecks(
-      [
-        sha(r.body) === r.sha,
-        receipt !== null || boundRobots(engine, r.origin, r.sha),
-      ],
-      "robots provenance",
-    );
-  }
-  const missing = engine.db
-    .query(
-      "SELECT 1 FROM attempts a JOIN representations r ON r.attempt=a.id LEFT JOIN robots b ON a.url=b.origin||'/robots.txt' AND b.sha=r.decoded_hash WHERE a.kind='robots' AND a.status=200 AND (a.error IS NULL OR r.representation='legacy-decoded-only') AND a.ended IS NOT NULL AND b.origin IS NULL LIMIT 1",
-    )
-    .get();
-  requireChecks([missing === null], "robots decision missing");
-  if (hasRedirectSchema(engine)) {
-    for (const row of engine.db
-      .query<{ origin: string; sha: string }, []>(
-        "SELECT b.origin,r.sha FROM robots_bindings b JOIN robots r ON r.origin=b.origin",
-      )
-      .all())
-      requireChecks(
-        [boundRobots(engine, row.origin, row.sha)],
-        "robots redirect binding",
-      );
-  }
 }
 export function verifyTransportLedger(
   engine: Engine,
@@ -263,7 +187,6 @@ export function verifyTransportLedger(
     reservationReceipt(a.run_kind, a.kind, a.reservation);
   }
   verifyOperations(attempts);
-  verifyRobots(engine);
   verifyCooldownObligations(engine, gate.not_before);
 }
 function verifyOperations(attempts: Attempt[]): void {

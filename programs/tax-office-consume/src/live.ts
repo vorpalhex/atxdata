@@ -1,7 +1,7 @@
 import {open,readFile,stat} from 'node:fs/promises';import {join} from 'node:path';
 import {PoliteHttpClient} from '../../civicclerk-consume/src/http';
 import {promote} from '../../civicclerk-consume/src/archive';
-import {Collector} from './collector';import {CAPS,ROUTES,HOST,parseCsv,validatePdf,positive,csvRows} from './source';
+import {Collector} from './collector';import {CAPS,ROUTES,parseCsv,validatePdf,positive,csvRows} from './source';
 import {fileDigest} from './files';
 
 import {parseCatalog} from './catalog';
@@ -83,38 +83,12 @@ async function consume(c:Collector,response:Response,path:string,cap:number,file
  if(length!==null&&Number(length)!==bytes)throw new Error('content length mismatch');
  await promote(path);return fileOnly?Buffer.alloc(0):readFile(path);
 }
-export function robotsRedirect(url:string,headers:Headers){
- const location=headers.get('location');if(!location||url!==ROUTES.robots)throw new Error('robots redirect requires review');
- const target=new URL(location,ROUTES.robots);
- if(target.href!==HOST+'/404')throw new Error('robots redirect outside HTTPS allowlist');return target.href;
-}
-function missingRobots(text:string,response:Response,url:string){
- if(!text.trim())return response.status===404;
- if(!/<(?:!doctype|html|title|body)\b/i.test(text))return response.status===404&&/^(?:404\s*)?(?:not found|page not found)\s*$/i.test(text.trim());
- const marker=/<title[^>]*>[^<]*(?:404|not found)[^<]*<\/title>/i.test(text)&&/page (?:was )?not found|404\s*(?:error|not found)|the page you are looking for doesn['’]t seem to exist/i.test(text);
- return marker&&(response.status===404||(url===HOST+'/404'&&response.status===200));
-}
-function validateRobots(body:Buffer,response:Response,url:string){
- if(![200,302,404].includes(response.status))throw new Error(`HTTP ${response.status}`);
- const text=body.toString();
- if(/captcha|access denied|sign[ -]?in|log[ -]?in|challenge|cloudflare/i.test(text))throw new Error('robots access gate');
- if(response.status===302){robotsRedirect(url,response.headers);return;}
- if(response.status===404||url!==ROUTES.robots){if(!missingRobots(text,response,url))throw new Error('robots missing-page response requires review');return;}
- if(/<(?:!doctype|html|title|body)\b/i.test(text))throw new Error('robots unexpected HTML');
- if(/^\s*(?:Disallow|Crawl-delay|Request-rate)\s*:\s*\S/im.test(text))throw new Error('robots instructions require review');
- validateRobotsLines(text);
-}
-function validateRobotsLines(text:string){
- const lines=text.split(/\r?\n/).map(line=>line.replace(/#.*$/,'').trim()).filter(Boolean);
- if(lines.some(line=>! /^(?:user-agent|allow|disallow|sitemap)\s*:/i.test(line)))throw new Error('robots unrecognized instructions');
-}
 function validatePolicy(kind:Kind,body:Buffer,response:Response){
  const text=body.toString();
  if(kind==='discovery'&&(!text.includes('/voterdata/TaxDelqOpenData.csv')||!text.includes('DelinquentFileLayout.php')||/captcha|access denied|sign in/i.test(text))){try{parseCatalog(text);}catch(error){throw new Error('discovery gate/usage review',{cause:error});}}
 }
 
 function validate(kind:Kind,body:Buffer,response:Response,maxRows:number,url:string){
- if(kind==='robots'){validateRobots(body,response,url);return;}
  if(response.status!==200)throw new Error(`HTTP ${response.status}`);
  validatePolicy(kind,body,response);
  if(kind==='csv')parseCsv(body,maxRows);if(kind==='layout')validatePdf(body);
@@ -195,8 +169,6 @@ export async function collect(c:Collector,selection:string,maxRows:number,refres
   setup(c);const {id,run}=c.start(selection,maxRows,'live',refresh,options.maxBytes,options);
   const http=transport(c),work={maxRequests:options.maxRequests,maxTotalBytes:options.maxTotalBytes};
   try{
-   const robots=await acquire(c,http,run,'robots',maxRows,ROUTES.robots,work);
-   if(robots.status===302)await acquire(c,http,run,'robots',maxRows,robotsRedirect(ROUTES.robots,robots.headers),work);
    await acquire(c,http,run,'discovery',maxRows,ROUTES.discovery,work);
    const csv=await acquire(c,http,run,'csv',maxRows,ROUTES.csv,{...work,maxBytes:options.maxBytes,fileOnly:true});await c.retainCsv(id,run,csv.file,options.maxBytes??CAPS.csv,{headers:csv.headers,status:csv.status});
    const layout=await acquire(c,http,run,'layout',maxRows,ROUTES.layout,work);await c.retain(id,run,'layout',layout.raw,{headers:layout.headers,status:layout.status});

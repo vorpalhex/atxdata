@@ -30,14 +30,14 @@ test('catalog date selects the second election and cached date reuse performs ze
  await fixture(async(c,d)=>{
   const result=await c.collectDate('2026-11-03');expect(result.reused).toBe(false);
   expect(c.db.query('SELECT election FROM observations').get()).toEqual({election:'009876'});
-  expect((await c.collectDate('2026-11-03')).reused).toBe(true);expect(d.calls.length).toBe(12);
+  expect((await c.collectDate('2026-11-03')).reused).toBe(true);expect(d.calls.length).toBe(10);
  });
 });
 test('second catalog election retains literal leading zeroes, coexists, and verifies offline',async()=>{
  await fixture(async(c,d)=>{
   await c.collect('009876');await c.collect('125662');
-  expect((await c.verify()).observations).toBe(2);expect(d.calls.length).toBe(24);
+  expect((await c.verify()).observations).toBe(2);expect(d.calls.length).toBe(20);
   expect(c.db.query('SELECT election FROM observations ORDER BY rowid').all()).toEqual([{election:'009876'},{election:'125662'}]);
-  expect((await c.collect('009876')).reused).toBe(true);expect(d.calls.length).toBe(24);
+  expect((await c.collect('009876')).reused).toBe(true);expect(d.calls.length).toBe(20);
  });
 });

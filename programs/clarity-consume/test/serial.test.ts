@@ -7,11 +7,11 @@ test('a stalled full body holds the request slot; starts are paced after complet
  const root=await mkdtemp(join(await realpath(process.env.TMPDIR!),'clarity-serial-')),deps=replay(),base=deps.fetch;let finish!:()=>void,started!:()=>void;const gate=new Promise<void>(r=>started=r);const starts:number[]=[];
  const c=await Collector.open(root,{...deps,fetch:async(url)=>{
   starts.push(deps.now());
-  if(starts.length===1)return new Response(new ReadableStream({start(controller){controller.enqueue(new TextEncoder().encode('User-agent: *'));finish=()=>controller.close();started();}}),{headers:{'content-type':'text/plain'}});
+  if(starts.length===1)return new Response(new ReadableStream({start(controller){controller.enqueue(new TextEncoder().encode('<a href="https://results.enr.clarityelections.com/TX/Travis/">Results</a>'));finish=()=>controller.close();started();}}),{headers:{'content-type':'text/html'}});
   return base(url);
  }});
  try{const collecting=c.collect('125662');await gate;expect(starts.length).toBe(1);await expect(c.collect('125662')).rejects.toThrow('one operation');expect(starts.length).toBe(1);finish();await collecting;
-  expect(starts.length).toBe(12);for(let i=1;i<starts.length;i++)expect(starts[i]-starts[i-1]).toBeGreaterThanOrEqual(3000);
+  expect(starts.length).toBe(10);for(let i=1;i<starts.length;i++)expect(starts[i]-starts[i-1]).toBeGreaterThanOrEqual(3000);
  }finally{await c.close();await rm(root,{recursive:true,force:true});}
 });
 test('atomic promotion never clobbers an existing destination and retains the attempted original body',async()=>{

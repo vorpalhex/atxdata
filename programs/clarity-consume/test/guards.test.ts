@@ -5,16 +5,15 @@ import { Collector,serverDelay } from '../src/collector';
 import { replay } from './collector.test';
 const scratch=process.env.TMPDIR!;
 async function archive(work:(c:Collector,root:string,deps:ReturnType<typeof replay>)=>Promise<void>){const root=await mkdtemp(join(await realpath(scratch),'clarity-guard-'));const deps=replay();let c:Collector|undefined;try{c=await Collector.open(root,deps);await work(c,root,deps);}finally{await c?.close();await rm(root,{recursive:true,force:true});}}
-test('actual source robots 404 is retained; transient error body and successful cooldown survive restart',async()=>{
+test('transient official-page error body and successful cooldown survive restart',async()=>{
  const root=await mkdtemp(join(await realpath(scratch),'clarity-rate-'));const deps=replay(),base=deps.fetch;let count=0;
  try{
   const c=await Collector.open(root,{...deps,fetch:async(url)=>{
-   if(url.endsWith('clarityelections.com/robots.txt')){count++;if(count===1)return new Response('busy',{status:503,headers:{'retry-after':'8'}});return new Response('missing',{status:404,headers:{'content-type':'text/html'}});}
+   if(url.includes('election-results-and-reconciliation-forms') && ++count===1)return new Response('busy',{status:503,headers:{'retry-after':'8'}});
    const r=await base(url);if(url.endsWith('elections.json'))r.headers.set('retry-after','20');return r;
   }});
   await c.collect('125662');
   expect(c.db.query("SELECT count(*) n FROM files WHERE http_status=503 AND status='failed'").get()).toEqual({n:1});
-  expect(c.db.query("SELECT count(*) n FROM files WHERE http_status=404 AND status='downloaded'").get()).toEqual({n:1});
   const before=(await c.status()).notBefore;expect(before).toBeGreaterThan(deps.now());await c.close();
   const reopen=await Collector.open(root,deps);expect((await reopen.status()).notBefore).toBe(before);await reopen.verify();await reopen.close();
  }finally{await rm(root,{recursive:true,force:true});}

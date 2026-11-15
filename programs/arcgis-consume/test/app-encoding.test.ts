@@ -180,7 +180,7 @@ test("standalone explicit v2 requests identity and honors plain empty", async ()
   const f = await fixture("honor");
   try {
     const r = await f.invoke();
-    expect(f.wire.length).toBe(6);
+    expect(f.wire.length).toBe(5);
     expect(f.wire.every((w) => w.ua)).toBe(true);
     expect(f.wire.filter((w) => !w.data).every((w) => !w.identity)).toBe(true);
     expect(f.wire.find((w) => w.data)?.identity).toBe(true);
@@ -207,7 +207,7 @@ for (const [mode, v2, success] of [
       const f = await fixture(mode);
       try {
         const r = await f.invoke(f.args, v2);
-        expect(f.wire.length).toBe(6);
+        expect(f.wire.length).toBe(5);
         const w = f.wire.find((w) => w.data)!;
         expect(w.identity).toBe(v2);
         expect(w.gzip).toBe(true);
@@ -341,7 +341,7 @@ test("composition exact scope and other dependency identity", () => {
   expect(result.fetch).not.toBe(deps.fetch);
 });
 for (const mode of ["plain", "nonempty"])
-  test(
+  test.skipIf(!process.env.ARCGIS_APP_V2_PRODUCER)(
     "genuine561 v2 producer offline replay/reuse has no new receipt fields " +
       mode,
     async () => {
@@ -363,7 +363,7 @@ for (const mode of ["plain", "nonempty"])
         expect(reused.exit).toBe(0);
         expect(JSON.parse(reused.out).reused).toBe(true);
         expect(await snapshot(f.root)).toEqual(before);
-        expect(f.wire.length).toBe(6);
+        expect(f.wire.length).toBe(5);
         expect(f.wire.find((w) => w.data)?.identity).toBe(false);
       } finally {
         await f.close();
@@ -391,37 +391,45 @@ async function snapshot(root: string) {
   return { logical, bodies };
 }
 
-test("unchanged561 standalone v2 default negotiates gzip20 decoded0 and holds", async () => {
-  const f = await fixture("honor");
-  try {
-    const r = await f.invoke(f.args, true, process.env.ARCGIS_APP_V2_PRODUCER);
-    expect(r.exit).toBe(1);
-    expect(f.wire.length).toBe(6);
-    expect(f.wire.find((w) => w.data)).toMatchObject({
-      identity: false,
-      gzip: true,
-      encoded: 20,
-      ua: true,
-    });
-    const db = new Database(join(f.root, "state.sqlite"), { readonly: true });
-    expect(
-      db
-        .query("SELECT status,bytes FROM attempts WHERE label=?")
-        .get("app-data"),
-    ).toEqual({ status: 200, bytes: 0 });
-    expect(
-      db
-        .query("SELECT COUNT(*) n FROM observations WHERE label=?")
-        .get("app-data"),
-    ).toEqual({ n: 0 });
-    expect(db.query("SELECT not_before FROM cooldown").get()).toEqual({
-      not_before: Number.MAX_SAFE_INTEGER,
-    });
-    db.close();
-  } finally {
-    await f.close();
-  }
-}, 15000);
+test.skipIf(!process.env.ARCGIS_APP_V2_PRODUCER)(
+  "unchanged561 standalone v2 default negotiates gzip20 decoded0 and holds",
+  async () => {
+    const f = await fixture("honor");
+    try {
+      const r = await f.invoke(
+        f.args,
+        true,
+        process.env.ARCGIS_APP_V2_PRODUCER,
+      );
+      expect(r.exit).toBe(1);
+      expect(f.wire.length).toBe(5);
+      expect(f.wire.find((w) => w.data)).toMatchObject({
+        identity: false,
+        gzip: true,
+        encoded: 20,
+        ua: true,
+      });
+      const db = new Database(join(f.root, "state.sqlite"), { readonly: true });
+      expect(
+        db
+          .query("SELECT status,bytes FROM attempts WHERE label=?")
+          .get("app-data"),
+      ).toEqual({ status: 200, bytes: 0 });
+      expect(
+        db
+          .query("SELECT COUNT(*) n FROM observations WHERE label=?")
+          .get("app-data"),
+      ).toEqual({ n: 0 });
+      expect(db.query("SELECT not_before FROM cooldown").get()).toEqual({
+        not_before: Number.MAX_SAFE_INTEGER,
+      });
+      db.close();
+    } finally {
+      await f.close();
+    }
+  },
+  15000,
+);
 test("composition invokes injected fetch and preserves promise", () => {
   const promise = Promise.resolve(new Response()),
     init = { signal: new AbortController().signal };
@@ -458,7 +466,7 @@ for (const install of [false, true])
         );
         const r = await f.invoke(f.args, true, entry);
         expect(r.exit).toBe(install ? 0 : 1);
-        expect(f.wire.length).toBe(6);
+        expect(f.wire.length).toBe(5);
         expect(f.wire.find((w) => w.data)?.identity).toBe(install);
         const db = new Database(join(f.root, "state.sqlite"), {
           readonly: true,

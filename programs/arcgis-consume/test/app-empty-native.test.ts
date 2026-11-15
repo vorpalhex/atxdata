@@ -342,7 +342,7 @@ for (const [name, wire, mode] of negativeFrames)
     },
     10000,
   );
-for (const at of ["robots", "site-item", "site-data", "catalog", "app-item"])
+for (const at of ["site-item", "site-data", "catalog", "app-item"])
   test("v2 does not broaden empty " + at + " admission", async () => {
     const f = await nativeFixture(frame(""), "end", at);
     try {
@@ -361,38 +361,41 @@ for (const at of ["robots", "site-item", "site-data", "catalog", "app-item"])
     }
   });
 
-test("genuine untouched ad0 successful v1 producer replays without marker rewriting", async () => {
-  const cli = process.env.ARCGIS_APP_V1_PRODUCER;
-  expect(cli).toBeTruthy();
-  const f = await nativeFixture(frame("{}"));
-  try {
-    const old = await f.invoke(f.args, false, cli);
-    expect(old.exit).toBe(0);
-    expect(JSON.parse(old.out).summary).toMatchObject({
-      mode: "app-metadata-v1",
-      receiptVersion: 1,
-      outcome: "empty",
-    });
-    const before = await logicalSnapshot(f.root);
-    const physicalBefore = await rootSnapshot(f.root);
-    const check = await f.invoke(
-      ["verify", "--archive", f.root],
-      false,
-      undefined,
-      false,
-    );
-    expect(check.err).toBe("");
-    expect(check.exit).toBe(0);
-    const reused = await f.invoke(f.args, false, undefined, false);
-    expect(reused.exit).toBe(0);
-    expect(JSON.parse(reused.out).reused).toBe(true);
-    expect(f.connections).toBe(1);
-    expect(await logicalSnapshot(f.root)).toEqual(before);
-    expect(await rootSnapshot(f.root)).toEqual(physicalBefore);
-  } finally {
-    await f.close();
-  }
-});
+test.skipIf(!process.env.ARCGIS_APP_V1_PRODUCER)(
+  "genuine untouched ad0 successful v1 producer replays without marker rewriting",
+  async () => {
+    const cli = process.env.ARCGIS_APP_V1_PRODUCER;
+    expect(cli).toBeTruthy();
+    const f = await nativeFixture(frame("{}"));
+    try {
+      const old = await f.invoke(f.args, false, cli);
+      expect(old.exit).toBe(0);
+      expect(JSON.parse(old.out).summary).toMatchObject({
+        mode: "app-metadata-v1",
+        receiptVersion: 1,
+        outcome: "empty",
+      });
+      const before = await logicalSnapshot(f.root);
+      const physicalBefore = await rootSnapshot(f.root);
+      const check = await f.invoke(
+        ["verify", "--archive", f.root],
+        false,
+        undefined,
+        false,
+      );
+      expect(check.err).toBe("");
+      expect(check.exit).toBe(0);
+      const reused = await f.invoke(f.args, false, undefined, false);
+      expect(reused.exit).toBe(0);
+      expect(JSON.parse(reused.out).reused).toBe(true);
+      expect(f.connections).toBe(1);
+      expect(await logicalSnapshot(f.root)).toEqual(before);
+      expect(await rootSnapshot(f.root)).toEqual(physicalBefore);
+    } finally {
+      await f.close();
+    }
+  },
+);
 async function rootSnapshot(root: string) {
   const out: Record<string, string> = {};
   for (const n of (await readdir(root)).sort()) {

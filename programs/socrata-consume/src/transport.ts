@@ -246,10 +246,8 @@ export function admitted(url: string) {
   ensure(
     (u.origin === origin &&
       (/^\/api\/views\/[a-z0-9]{4}-[a-z0-9]{4}\.json$/.test(path) ||
-        /^\/resource\/[a-z0-9]{4}-[a-z0-9]{4}\.json$/.test(path) ||
-        path === "/robots.txt")) ||
-      (u.origin === catalogOrigin &&
-        (path === "/api/catalog/v1" || path === "/robots.txt")),
+        /^\/resource\/[a-z0-9]{4}-[a-z0-9]{4}\.json$/.test(path))) ||
+      (u.origin === catalogOrigin && path === "/api/catalog/v1"),
     "unsupported source URL",
   );
 }
