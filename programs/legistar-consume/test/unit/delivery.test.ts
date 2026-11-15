@@ -35,6 +35,7 @@ function probe(args: string[], badOutput = false) {
           LEGISTAR_API_BASE: "https://fixture.invalid/v1",
           MAX_DOWNLOAD_RETRIES: "0",
           HTTP_TIMEOUT_MS: "2000",
+          BACKFILL_MEETING_DELAY_MS: "0",
         },
       },
     );
@@ -51,18 +52,23 @@ function probe(args: string[], badOutput = false) {
 test("both selectors keep ID precedence with a structured stderr warning", () => {
   const result = probe([
     "ingest-meeting",
+    "--json",
     "--event-id=59",
     "--date=2040-12-31",
   ]);
   expect(result.status).toBe(0);
-  expect(JSON.parse(result.stderr).event).toBe("cli.selector-precedence");
+  const diagnostics = result.stderr
+    .trim()
+    .split("\n")
+    .map((line) => JSON.parse(line));
+  expect(diagnostics[0].event).toBe("cli.selector-precedence");
+  expect(
+    diagnostics.find((record) => record.event === "meeting.start").date,
+  ).toBe("2021-01-05");
   const records = result.stdout
     .trim()
     .split("\n")
     .map((line) => JSON.parse(line));
-  expect(records.find((record) => record.event === "meeting.start").date).toBe(
-    "2021-01-05",
-  );
   expect(records.at(-1)).toMatchObject({
     event: "run.summary",
     status: "succeeded",
@@ -82,12 +88,14 @@ test("all result and logger paths observe unwritable output and preserve checkpo
     ["ingest-meeting", "--event-id=59"],
     ["backfill", "--from=2021-01-05", "--to=2021-01-05"],
   ]) {
-    const result = probe(args, true);
-    expect(result.status).toBe(1);
-    expect(result.stderr).toContain("cli.failed");
-    expect(result.stderr).toContain("stdout");
-    expect(result.stderr).not.toContain(" at ");
-    if (result.checkpoint)
-      expect(JSON.parse(result.checkpoint).complete).toBe(true);
+    for (const prefix of [[], ["--json"]]) {
+      const result = probe([...prefix, ...args], true);
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain("cli.failed");
+      expect(result.stderr).toContain("stdout");
+      expect(result.stderr).not.toContain(" at ");
+      if (result.checkpoint)
+        expect(JSON.parse(result.checkpoint).complete).toBe(true);
+    }
   }
 });

@@ -31,7 +31,21 @@ Check API access:
 just check-api
 ```
 
-List meetings in a date range:
+Discover meeting IDs (human-readable; no date arguments required):
+
+```bash
+bun run src/cli.ts list-meetings
+bun run src/cli.ts list-meetings --to='30 days' --body='City Council'
+bun run src/cli.ts --json list-meetings --from=2026-05-30 --to=2026-08-01
+```
+
+The default range is **30 local calendar days ago through 30 days ahead**, inclusive.
+Use `--json` before or after any product subcommand for machine output; logs and
+progress always go to stderr. Plain `bun run src/cli.ts` is an offline introduction
+with examples (stdout, status 0). All date flags accept the vocabulary below except
+`list-meetings-page`, whose explicit ISO bounds keep checkpoint queries stable.
+
+List meetings in an explicit date range with the existing recipe:
 
 ```bash
 just list-meetings 2026-05-30 2026-08-01
@@ -219,9 +233,9 @@ on explicit CLI/frontend/helper/test paths, not every collector file or lockfile
 The five product commands remain `list-meetings`, `list-meetings-page`,
 `ingest-meeting`, `backfill`, and `retry-failed`. Top-level `-h`/`--help`,
 `--version` (`-V`), `help COMMAND`, and every local `-h`/`--help` bypass runtime
-configuration and network initialization. Plain invocation retains help on
-stderr/status 1. Examples: `bun run src/cli.ts help ingest-meeting` and
-`bun run src/cli.ts list-meetings --from=2021-01-05 --to=2021-01-05`.
+configuration and network initialization. Plain invocation now provides the same
+useful introduction on stdout/status 0. Examples: `bun run src/cli.ts help ingest-meeting`
+and `bun run src/cli.ts list-meetings --from=2021-01-05 --to=2021-01-05`.
 
 Commander retains command-local value options: put `--from`, `--date`, etc.
 after their subcommand. Global help/version work before or after commands.
@@ -247,22 +261,82 @@ Combined `--event-id` and `--date` remain accepted: ID takes precedence and the
 date is ignored (even when not a valid date), with a structured stderr
 `cli.selector-precedence` warning before initialization. No user-provided target
 or date is echoed by that warning. Date-only selectors and listing/backfill
-ranges require valid inclusive calendar dates. The library guards are retained.
+ranges are resolved and validated before runtime state. The library guards and
+strict ISO library contracts are unchanged.
 
-Default listing NDJSON, batch JSON, `run.summary`, and cron JSON log stdout
-streams are preserved; logs were not globally moved to stderr. All native stdout
-paths now observe writes, including logger records and summary/checkpoint
-delivery. Non-EPIPE output failures return safe `cli.failed`/status 1; a five-second
-per-record deadline bounds backpressure and queued logger output is bounded.
-Logging failure is reported after the job lifecycle, not thrown into its domain
-work: completed run/acquisition facts and synced checkpoints are not erased or
-relabeled for failed delivery. EPIPE is intentionally quiet and preserves the
-domain status. Commander stderr (including parser errors and no-argument help),
-selector warnings, and terminal `cli.failed` diagnostics use the same checked fd
-writer on stderr. Both sinks are observed and flushed on success and parser-error
-paths. A non-EPIPE stderr delivery failure returns status 1 without recursively
-reporting to the failed sink or emitting an uncaught stack; healthy parser/noarg
-bytes are unchanged.
+### Dates
+
+`list-meetings` independently defaults `--from` to `-30 days` and `--to` to
+`30 days`. Supplying only one bound retains the other's default; a reversed range
+is an error, not silently adjusted. `backfill` still requires **both** bounds;
+`ingest-meeting` still requires an ID or date. These commands accept exactly
+(lowercase, single spaces, quoted as needed):
+
+- A valid strict `YYYY-MM-DD` calendar date (no timestamps or abbreviated dates).
+- `today`, `yesterday`, `tomorrow`.
+- `[+-]N day(s)` or `[+-]N week(s)` (unsigned N means future): `30 days`,
+  `-2 weeks`, `+1 day`.
+- `N day(s) ago`, `N week(s) ago`, `in N day(s)`, `in N week(s)` (unsigned N).
+
+N is a nonnegative integer; the absolute offset after converting weeks to days
+must not exceed 36500 days. Fractions, months, ambiguous natural language, invalid
+calendar dates and empty values fail before directories, database, checkpoint or
+HTTP initialization. Relative range bounds share one clock reading and use the
+process's **local calendar day** (`TZ` if configured), including DST transitions,
+not elapsed 24-hour durations or UTC date slicing. Both bounds are inclusive.
+The API query uses ISO day strings with an exclusive next-day upper bound. For
+reproducible scripts, use explicit ISO dates and a deliberate timezone.
+
+`list-meetings-page` requires both bounds to be explicit strict ISO dates; relative
+dates and implicit defaults are deliberately unavailable so a later resume cannot
+shift the query. Resume identity and exclusive private synced checkpoint delivery
+are unchanged, including when human stdout is selected.
+
+### Streams and compatibility migration
+
+This cleanup intentionally changes the former defaults. Product commands now
+emit human-readable results on stdout, even when redirected (no color, pager,
+animation or TTY-dependent schema). Listings show IDs, dates, bodies, times,
+locations and publication statuses; empty human listings report zero meetings.
+Ingestion/backfill report the real run status, counts and output directory. Batch
+listings report completion, the checkpoint path and returned meetings.
+
+Scripts must add `--json` (before or after the subcommand). Repeated `--json` is
+idempotent; it is boolean, not `--json=true`. Informational help/version remain text.
+Machine contracts are:
+
+- `list-meetings`: the existing NDJSON projection, one complete meeting per line:
+  `eventId` (number), `date` and `body` (strings), `time`, `agendaStatus`,
+  `minutesStatus`, `location` (existing string/null types). Empty results produce
+  empty stdout; listing order is unchanged (date order from the collector).
+- `ingest-meeting` / `backfill`: one JSON object, the existing
+  `{ "event": "run.summary", ...RunSummary }` schema. No logger records on stdout.
+  Completed failed/partial jobs retain their truthful summary and status 1;
+  preflight failures have no summary. Run JSON files are unchanged.
+- `list-meetings-page`: one JSON batch object (`meetings`, `complete`, and
+  `continuation` only when incomplete), identical to its checkpoint. Checkpoint
+  files **always** contain that JSON regardless of stdout mode. An incomplete but
+  successfully delivered batch remains status 0; resume with the same query.
+
+Progress and operational logs now always use **stderr**, retaining their structured
+JSON Lines records; do not parse stderr as one JSON object when logs can precede
+`cli.failed`. Commander usage errors remain stderr text. Capture results and logs
+separately, for example:
+
+```sh
+bun run src/cli.ts list-meetings --json >meetings.jsonl 2>listing.log
+bun run src/cli.ts ingest-meeting --event-id=59 --json >summary.json 2>ingest.log
+```
+
+All native stdout/stderr paths use checked fd queues. Non-EPIPE output failures
+return safe `cli.failed`/status 1; a five-second per-record deadline bounds
+backpressure and queued logger output is bounded. Logging failure is reported
+after the job lifecycle, not thrown into domain work: completed run/acquisition
+facts and synced checkpoints are not erased or relabeled for failed delivery.
+EPIPE is intentionally quiet and preserves the domain status. Both sinks are
+observed and flushed on success and parser-error paths. A non-EPIPE stderr delivery
+failure returns status 1 without recursively reporting to the failed sink or
+emitting an uncaught stack.
 The shipped `test/unit/stderr.test.ts` exercises the absolute native entrypoint
 with OS-calibrated read-only descriptors and an observation-only, positively
 calibrated `uncaughtExceptionMonitor` backchannel. No cross-process job lock or
@@ -284,9 +358,8 @@ the active request, stop further checks and flush the partial report before a
 bounded exit; cleanup is best-effort, not an unbounded wait. This diagnostic is
 not proof of provider access or authorization; tests only use authored fixtures.
 
-For offline verification use existing private directories outside checkouts:
-`TMPDIR=/private/fixture/tmp DATA_PATH=/private/fixture/data bun test` and
-`bun run typecheck`, with locked dependencies and OS public networking denied
+For offline verification, configure `TMPDIR` and `DATA_PATH` to existing private
+directories outside the checkout, then run `bun test` and `bun run typecheck`, with locked dependencies and OS public networking denied
 except loopback fixtures. `HOME` and XDG directories may also be isolated there.
 Tests no longer create `.scratch` under the source checkout. Do not run live
 smoke recipes or public diagnostic checks as part of these frontend gates.
