@@ -1,5 +1,5 @@
 import type { Engine } from "./engine";
-import { cooldown, robotsPolicy, RobotsDisallow } from "./policy";
+import { cooldown } from "./policy";
 import { attemptReceipt } from "./budgets";
 export type HeaderTiming = { clockBasis: "unix-ms"; observed: number };
 type Completion = {
@@ -36,32 +36,20 @@ function responseTime(a: Completion): number {
     throw Error("cooldown header receipt outside attempt");
   return observed;
 }
-function robotsDelay(engine: Engine, url: string): number {
-  const row = engine.db
-    .query<{ body: string }, [string]>("SELECT body FROM robots WHERE origin=?")
-    .get(new URL(url).origin);
-  if (!row) return 2000;
-  try {
-    return robotsPolicy(row.body, new URL(url).pathname);
-  } catch (error) {
-    if (error instanceof RobotsDisallow) return error.delay;
-    throw error;
-  }
-}
-function completionDeadline(engine: Engine, a: Completion): number {
+function completionDeadline(a: Completion): number {
   const ended = timestamp(a.ended!);
   if (ended < timestamp(a.started) || a.headers === null)
     throw Error("cooldown completion evidence invalid");
   const minimum = a.run.startsWith("transport-work-") ? 3000 : 2000;
   return Math.max(
-    ended + Math.max(minimum, robotsDelay(engine, a.url)),
+    ended + minimum,
     cooldown(new Headers(JSON.parse(a.headers)), responseTime(a)),
   );
 }
 function requireDeadline(gate: number, deadline: number): void {
   if (!Number.isSafeInteger(deadline) || gate < deadline)
     throw Error(
-      "cooldown below retained completion/receipt/robots obligation; operator review",
+      "cooldown below retained completion/receipt obligation; operator review",
     );
 }
 export function verifyCooldownObligations(engine: Engine, gate: number): void {
@@ -70,15 +58,5 @@ export function verifyCooldownObligations(engine: Engine, gate: number): void {
       "SELECT a.*,r.kind run_kind FROM attempts a JOIN runs r ON r.id=a.run WHERE a.ended IS NOT NULL AND (a.error IS NULL OR EXISTS(SELECT 1 FROM classifier_resolutions c WHERE c.attempt=a.id))",
     )
     .all();
-  for (const a of rows) requireDeadline(gate, completionDeadline(engine, a));
-  const robots = engine.db
-    .query<{ body: string; observed: number }, []>(
-      "SELECT body,observed FROM robots",
-    )
-    .all();
-  for (const row of robots)
-    requireDeadline(
-      gate,
-      timestamp(row.observed) + robotsPolicy(row.body, "/robots.txt"),
-    );
+  for (const a of rows) requireDeadline(gate, completionDeadline(a));
 }

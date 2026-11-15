@@ -1,5 +1,5 @@
 import {load,type CheerioAPI} from 'cheerio';
-import {humanScope} from './human-policy';
+import {archiveScope} from './archive-scope';
 export type ArchiveOption={value:string;label:string;selected:boolean};
 function formFields($:CheerioAPI,form:ReturnType<CheerioAPI>) {
  const fields=new URLSearchParams();
@@ -10,7 +10,7 @@ function formFields($:CheerioAPI,form:ReturnType<CheerioAPI>) {
  return fields;
 }
 function requireFilterForm(form:ReturnType<CheerioAPI>,action:string,page:string):void {
- const valid=[form.length>0,humanScope(action),new URL(action).pathname===new URL(page).pathname,(form.attr('method')??'get').toLowerCase()==='post'];
+ const valid=[form.length>0,archiveScope(action),new URL(action).pathname===new URL(page).pathname,(form.attr('method')??'get').toLowerCase()==='post'];
  if(!valid.every(Boolean)) throw Error('unsafe archive filter form');
 }
 export function archiveForm(html:string,page:string,value?:string) {
@@ -28,12 +28,12 @@ export function archiveForm(html:string,page:string,value?:string) {
 }
 export function requireArchiveEndpoint(sourceHref:string,endpoint:string):void {
  const raw=new URL(sourceHref),chosen=new URL(endpoint);
- const valid=[humanScope(endpoint),['http:','https:'].includes(raw.protocol),raw.hostname==='online.encodeplus.com',!raw.username,!raw.password,!raw.port,raw.pathname==='/regs/traviscounty-tx/archivedialog.aspx',chosen.pathname===raw.pathname,chosen.search===raw.search];
+ const valid=[archiveScope(endpoint),['http:','https:'].includes(raw.protocol),raw.hostname==='online.encodeplus.com',!raw.username,!raw.password,!raw.port,raw.pathname==='/regs/traviscounty-tx/archivedialog.aspx',chosen.pathname===raw.pathname,chosen.search===raw.search];
  if(!valid.every(Boolean)) throw Error('unsafe archive source identity');
 }
 export function sourceLinks(html:string,page:string) {
  const $=load(html);
- return $('a[href]').toArray().map(e=>({href:$(e).attr('href')!,label:$(e).text(),url:new URL($(e).attr('href')!,page).href})).filter(e=>humanScope(e.url));
+ return $('a[href]').toArray().map(e=>({href:$(e).attr('href')!,label:$(e).text(),url:new URL($(e).attr('href')!,page).href})).filter(e=>archiveScope(e.url));
 }
 export function historicalPdfLink(html:string,page:string,chapter:string) {
  if(!/^\d+$/.test(chapter)) throw Error('unsafe historical chapter identity');

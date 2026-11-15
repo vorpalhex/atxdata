@@ -12,7 +12,7 @@ test('cleanup aggregation preserves primary transient retry classification and t
 });
 test('budget exhaustion retains the primary body failure without weakening byte reservations',async()=>{
  const base=await temp();let now=10000,csvCalls=0;const c=await Collector.open(join(base,'archive'),{now:()=>now,sleep:async ms=>{now+=ms;},fetch:async url=>{
- if(url===ROUTES.robots)return new Response('',{status:404});if(url===ROUTES.discovery)return new Response('/voterdata/TaxDelqOpenData.csv DelinquentFileLayout.php');csvCalls++;
+ if(url===ROUTES.discovery)return new Response('/voterdata/TaxDelqOpenData.csv DelinquentFileLayout.php');csvCalls++;
  return new Response(new ReadableStream({pull(controller){controller.error(new TypeError('native primary read failure'));}}));
  }});
  try{await expect(collect(c,'delinquency',1,true)).rejects.toThrow('native primary read failure');expect(csvCalls).toBe(3);expect(c.status()).toMatchObject({complete:0,failed:1});

@@ -20,7 +20,7 @@ test("native source-linked policy301 to HTML records raw chain without permissio
     expect(s.chain[0].status).toBe(301);
     expect(s.chain[0].location).toBe("https://geohub.austintexas.gov/");
     expect(s.chain[1].url).toBe("https://geohub.austintexas.gov/");
-    expect(f.wire.length).toBe(8);
+    expect(f.wire.length).toBe(7);
     expect(f.wire.every((w) => w.ua)).toBe(true);
     const verify = await f.invoke(["verify", "--archive", f.root], true);
     expect(verify.err).toBe("");
@@ -29,7 +29,7 @@ test("native source-linked policy301 to HTML records raw chain without permissio
     expect(reuse.err).toBe("");
     expect(reuse.exit).toBe(0);
     expect(JSON.parse(reuse.out).reused).toBe(true);
-    expect(f.wire.length).toBe(8);
+    expect(f.wire.length).toBe(7);
   } finally {
     f.close();
   }

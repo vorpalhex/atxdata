@@ -1,12 +1,12 @@
+import { sameAcquisition } from "./acquisition-compat";
 import { terms } from "./rules";
 import type { Database } from "bun:sqlite";
 import type { Archive } from "./archive";
-import { ensure, object, same } from "./check";
+import { ensure, object } from "./check";
 import { ReadonlyAppEvidence } from "./app-readonly";
 import { withReadOnlyArchive } from "./app-preopen";
 import { retainedWrapper, verifyWrapperRuns } from "./wrapper";
 import { policyRuns, rawCapture, hash } from "./policy-inspection-receipt";
-import { profileAllowed } from "./profile-policy";
 import {
   referenceMode,
   referenceKind,
@@ -41,17 +41,6 @@ function runRow(db: Database, id: string) {
 function key(o: ReferenceOptions, url: string) {
   return `austin:${referenceMode}:${hash(JSON.stringify({ wrapper: o.wrapperRun, parent: o.parentRun, url, helper: o.helperRun ?? null }))}`;
 }
-function waiver(o: ReferenceOptions, run: string) {
-  return {
-    kind: "operator-scoped-robots-omission-v1",
-    acknowledged: true,
-    resource: "https://maps.austintexas.gov/robots.txt",
-    operation: referenceMode,
-    run,
-    wrapperRun: o.wrapperRun,
-    wrapperSha256: o.wrapperSha256,
-  };
-}
 function save(o: ReferenceOptions, binding: unknown, run: string) {
   return {
     mode: referenceMode,
@@ -60,7 +49,6 @@ function save(o: ReferenceOptions, binding: unknown, run: string) {
     source: "austin",
     selection: o,
     binding,
-    waiver: waiver(o, run),
     budget: o.budget,
   };
 }
@@ -98,7 +86,7 @@ export async function retainedAsset(
   );
   const c = await referenceContext(db, root, own, next);
   ensure(
-    c.selected && same(s, save(own, c.binding, r.id)),
+    c.selected && sameAcquisition(s, save(own, c.binding, r.id)),
     "reference parent intent/source mismatch",
   );
   const h = await rawCapture(
@@ -122,7 +110,7 @@ export async function retainedAsset(
   );
   const actual = await receiptSummary(db, root, r.id, own, c, h);
   ensure(
-    same(actual, JSON.parse(r.summary!)),
+    sameAcquisition(actual, JSON.parse(r.summary!)),
     "reference receipt changed/downgraded",
   );
   return {
@@ -248,24 +236,6 @@ export async function referenceContext(
   e.assertCurrent();
   return { parent, derived: d, selected, binding };
 }
-async function strictPolicy(
-  a: Pick<Archive, "request" | "readExpected"> &
-    Partial<Pick<Archive, "setSpacing">>,
-  run: string,
-  url: string,
-  offline = false,
-) {
-  const origin = new URL(url).origin;
-  if (origin === "https://maps.austintexas.gov") return;
-  const robot = origin + "/robots.txt",
-    label = "reference-robots";
-  const text = String(
-    offline
-      ? await a.readExpected(run, label, robot, "text")
-      : await a.request(run, label, robot, "text"),
-  );
-  a.setSpacing?.(profileAllowed("water", robot, text, url));
-}
 async function receiptSummary(
   db: Database,
   root: string,
@@ -290,7 +260,6 @@ async function receiptSummary(
     resolutionReceiptVersion: 1,
     derivationVersion: 2,
     binding: c.binding,
-    waiver: waiver(o, run),
     capture: h.receipt,
     catalogMembershipClaim: false,
     metadataOnly: true,
@@ -313,14 +282,6 @@ export async function verifyReferenceRuns(db: Database, root: string) {
     const o = validateReferenceOptions(s.selection);
     await retainedAsset(db, root, o, r.id);
     const a = new ReadonlyAppEvidence(root, db);
-    await strictPolicy(
-      a,
-      r.id,
-      String(
-        object(s.binding).selected && object(object(s.binding).selected).url,
-      ),
-      true,
-    );
     a.assertCurrent();
     n++;
   }
@@ -359,16 +320,12 @@ export async function verifyRawReferenceSource(
   const o = validateReferenceOptions(s.selection),
     c = await referenceContext(a.store.db, a.root, o);
   ensure(
-    c.selected && same(s, save(o, c.binding, run)),
+    c.selected && sameAcquisition(s, save(o, c.binding, run)),
     "raw derived producer binding mismatch",
   );
   const target = c.selected.url!;
   ensure(
-    (kind === referenceKind && label === "reference-body" && url === target) ||
-      (kind === "text" &&
-        label === "reference-robots" &&
-        new URL(target).origin !== "https://maps.austintexas.gov" &&
-        url === new URL(target).origin + "/robots.txt"),
+    kind === referenceKind && label === "reference-body" && url === target,
     "raw derived URL/role substitution",
   );
   a.store.preflight();
@@ -390,7 +347,7 @@ export async function resolveApp(a: Archive, value: ReferenceOptions) {
     );
   if (prior) {
     ensure(
-      same(JSON.parse(prior.options!), save(o, c.binding, prior.id)),
+      sameAcquisition(JSON.parse(prior.options!), save(o, c.binding, prior.id)),
       "immutable reference selection/budget changed",
     );
     await retainedAsset(a.store.db, a.root, o, prior.id);
@@ -401,15 +358,9 @@ export async function resolveApp(a: Archive, value: ReferenceOptions) {
   const run = a.store.start(k, "resolve-app");
   a.store.saveOptions(run, save(o, c.binding, run));
   const guard = a.guard;
-  a.guard = (url) =>
-    ensure(
-      url === c.selected!.url ||
-        url === new URL(c.selected!.url!).origin + "/robots.txt",
-      "reference guard refused",
-    );
+  a.guard = (url) => ensure(url === c.selected!.url, "reference guard refused");
   a.setSpacing(3000);
   try {
-    await strictPolicy(a, run, c.selected.url!);
     await a.request(run, "reference-body", c.selected.url!, referenceKind);
     const h = await rawCapture(
       a.store.db,

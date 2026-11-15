@@ -1,3 +1,4 @@
+import { sameAcquisition } from "./acquisition-compat";
 import type { Database } from "bun:sqlite";
 import type { Archive } from "./archive";
 import { ReadonlyAppEvidence } from "./app-readonly";
@@ -15,7 +16,6 @@ import { policyRuns, rawCapture, hash } from "./policy-inspection-receipt";
 import { layerSchema, featurePage, featureIds } from "./schema";
 import { queryUrl } from "./sources";
 import { terms } from "./rules";
-import { profileAllowed } from "./profile-policy";
 export const layerMode = "app-layer-v1";
 export type AppLayerOptions = ReferenceOptions & {
   layerURL: string;
@@ -122,13 +122,6 @@ function saved(o: AppLayerOptions, b: object, run: string) {
     selection: o,
     binding: b,
     budget: o.budget,
-    waiver: {
-      kind: "operator-scoped-robots-omission-v1",
-      acknowledged: true,
-      resource: "https://maps.austintexas.gov/robots.txt",
-      operation: layerMode,
-      run,
-    },
   };
 }
 const query = (u: string, p: Record<string, string>) =>
@@ -251,14 +244,12 @@ export async function verifyRawLayerSource(
   );
   const o = validateLayerOptions(s.selection as AppLayerOptions),
     b = await binding(a.store.db, a.root, o);
-  ensure(same(s, saved(o, b, run)), "raw layer parent/source substitution");
-  const origin = new URL(o.layerURL).origin;
   ensure(
-    (kind === referenceKind && url === (await expectedURL(a, run, label, o))) ||
-      (kind === "text" &&
-        label === "layer-robots" &&
-        origin !== "https://maps.austintexas.gov" &&
-        url === origin + "/robots.txt"),
+    sameAcquisition(s, saved(o, b, run)),
+    "raw layer parent/source substitution",
+  );
+  ensure(
+    kind === referenceKind && url === (await expectedURL(a, run, label, o)),
     "raw layer URL/role substitution",
   );
   a.store.preflight();
@@ -389,23 +380,6 @@ async function summary(
       "whole explicitly selected bounded native XY layer; not historical/transactional completeness",
   };
 }
-async function strictLayerPolicy(
-  a: Pick<Archive, "request" | "readExpected"> &
-    Partial<Pick<Archive, "setSpacing">>,
-  run: string,
-  o: AppLayerOptions,
-  offline: boolean,
-) {
-  const origin = new URL(o.layerURL).origin;
-  if (origin === "https://maps.austintexas.gov") return;
-  const url = origin + "/robots.txt",
-    text = String(
-      offline
-        ? await a.readExpected(run, "layer-robots", url, "text")
-        : await a.request(run, "layer-robots", url, "text"),
-    );
-  a.setSpacing?.(profileAllowed("water", url, text, o.layerURL));
-}
 export async function verifyLayerRuns(db: Database, root: string) {
   let count = 0;
   const e = new ReadonlyAppEvidence(root, db);
@@ -418,10 +392,9 @@ export async function verifyLayerRuns(db: Database, root: string) {
     );
     const o = validateLayerOptions(s.selection as AppLayerOptions),
       b = await binding(db, root, o);
-    ensure(same(s, saved(o, b, r.id)), "app layer intent changed");
-    await strictLayerPolicy(e, r.id, o, true);
+    ensure(sameAcquisition(s, saved(o, b, r.id)), "app layer intent changed");
     ensure(
-      same(await summary(e, r.id, o, b), JSON.parse(r.summary)),
+      sameAcquisition(await summary(e, r.id, o, b), JSON.parse(r.summary)),
       "layer receipt mismatch",
     );
     count++;
@@ -456,7 +429,7 @@ export async function collectAppLayer(a: Archive, value: AppLayerOptions) {
     );
   if (prior) {
     ensure(
-      same(JSON.parse(prior.options!), saved(o, b, prior.id)),
+      sameAcquisition(JSON.parse(prior.options!), saved(o, b, prior.id)),
       "immutable app-layer source/options changed",
     );
     const result = await summary(a, prior.id, o, b);
@@ -468,9 +441,7 @@ export async function collectAppLayer(a: Archive, value: AppLayerOptions) {
   const old = a.guard;
   a.guard = (u) =>
     ensure(
-      u.startsWith(o.layerURL + "?") ||
-        u.startsWith(o.layerURL + "/query?") ||
-        u === new URL(o.layerURL).origin + "/robots.txt",
+      u.startsWith(o.layerURL + "?") || u.startsWith(o.layerURL + "/query?"),
       "layer guard refused",
     );
   a.setSpacing(3000);
@@ -480,7 +451,6 @@ export async function collectAppLayer(a: Archive, value: AppLayerOptions) {
     return readRaw(a, run, label, u, o);
   };
   try {
-    await strictLayerPolicy(a, run, o, false);
     const m = await get("layer-before"),
       p = plan(m, o),
       count = integer((await get("count-before")).count, 0, o.maxRecords);

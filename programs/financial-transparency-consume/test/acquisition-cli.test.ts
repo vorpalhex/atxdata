@@ -44,7 +44,7 @@ test("CLI labels unsupported source content without exposing body and caches fai
       '{"status":"unsupported"}',
       '{"status":"unsupported"}',
     ]);
-    expect(calls).toBe(2);
+    expect(calls).toBe(1);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -138,7 +138,7 @@ test("CLI exposes positive finite budgets, arbitrary selection and privacy-safe 
         (s: string) => lines.push(s),
       ),
     ).toBe(0);
-    expect(calls).toBe(2);
+    expect(calls).toBe(1);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

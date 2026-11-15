@@ -16,17 +16,6 @@ type Downstream = {
   kind: string;
   started: number;
 };
-type PolicyBinding = {
-  redirect_attempt: string;
-  final_attempt: string;
-  url: string;
-  kind: string;
-  status: number;
-  headers: string;
-  decoded_hash: string;
-  ended: number | null;
-  error: string | null;
-};
 export type Edge = {
   attempt: string;
   target_url: string;
@@ -50,6 +39,7 @@ function safeTarget(from: string, location: string): URL {
   );
   return target;
 }
+// Historical redirect replay only; Transport never creates robots attempts.
 function robotsRoute(from: string, target: URL, kind: string): boolean {
   return (
     kind === "robots" &&
@@ -197,57 +187,4 @@ export function verifyRedirects(engine: Engine): void {
     );
     acyclicChain(edge, byId);
   }
-}
-function policyReceipt(engine: Engine, origin: string): PolicyBinding | null {
-  return engine.db
-    .query<PolicyBinding, [string]>(
-      "SELECT b.*,a.url,a.kind,a.status,a.headers,a.ended,a.error,r.decoded_hash FROM robots_bindings b JOIN attempts a ON a.id=b.final_attempt JOIN representations r ON r.attempt=a.id WHERE b.origin=?",
-    )
-    .get(origin);
-}
-function requirePolicy(
-  edge: Edge,
-  row: PolicyBinding,
-  origin: string,
-  hash: string,
-): void {
-  requireRedirect(
-    [
-      origin === "https://services.austintexas.gov",
-      edge.target_attempt === row.final_attempt,
-      edge.target_url === "https://www.austintexas.gov/robots.txt",
-      row.url === edge.target_url,
-      row.kind === "robots",
-      row.status === 200,
-      row.error === null,
-      row.ended !== null,
-      row.decoded_hash === hash,
-      /^text\/plain(?:;|$)/i.test(
-        new Headers(JSON.parse(row.headers)).get("content-type") ?? "",
-      ),
-    ],
-    "redirect robots policy binding invalid",
-  );
-}
-export function boundRobots(
-  engine: Engine,
-  origin: string,
-  hash: string,
-): boolean {
-  if (!hasRedirectSchema(engine)) return false;
-  const row = policyReceipt(engine, origin);
-  if (!row) return false;
-  const edge = redirectEdges(engine).find(
-    (e) => e.attempt === row.redirect_attempt,
-  );
-  if (!edge) throw Error("redirect robots policy edge missing");
-  requirePolicy(edge, row, origin, hash);
-  const original = engine.db
-    .query<{ url: string }, [string]>("SELECT url FROM attempts WHERE id=?")
-    .get(edge.attempt);
-  requireRedirect(
-    [original?.url === origin + "/robots.txt"],
-    "redirect robots original origin mismatch",
-  );
-  return true;
 }

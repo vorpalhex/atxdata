@@ -4,8 +4,8 @@ import {constants} from 'node:fs';
 import {open} from 'node:fs/promises';
 import {pipeline} from 'node:stream/promises';
 export const HOST='https://tax-office.traviscountytx.gov';
-export const ROUTES={robots:HOST+'/robots.txt',discovery:HOST+'/pages/property.php',csv:HOST+'/voterdata/TaxDelqOpenData.csv',layout:HOST+'/pages/DelinquentFileLayout.php'};
-export const CAPS={csv:4*1024**2,layout:2*1024**2,discovery:2*1024**2,robots:2*1024**2,requests:8,rows:50000,total:16*1024**2};
+export const ROUTES={discovery:HOST+'/pages/property.php',csv:HOST+'/voterdata/TaxDelqOpenData.csv',layout:HOST+'/pages/DelinquentFileLayout.php'};
+export const CAPS={csv:4*1024**2,layout:2*1024**2,discovery:2*1024**2,requests:8,rows:50000,total:16*1024**2};
 export const HEADER=['Account #','Last Tax Roll Year ','Property Type Code','Land Value','Improvement Value','Ag Market','Appraisal Value','Ag Taxable Value','Assessed Value','Exemptions','Delinquent Total','Current Year Total','Total Due','Sequence #','1st Year Delinquent','Cause #','Judgement Date','Bankruptcy Number','Owner ID','Owner Name','Address 1','Address 2','Address 3','City','State','Zip Code','Country','Street Number','Street Name','Property Zip','Legal Description'];
 export function cents(s:string):bigint {
  if(!/^-?\d+(?:\.\d{1,2})?$/.test(s))throw new Error('decimal money');

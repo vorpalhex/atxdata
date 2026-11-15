@@ -8,7 +8,7 @@ import {fixturePdf} from "./engine.test";
 import {authoredLargePdf} from "./fixtures";
 import {verifyTransportLedger} from '../src/transport-integrity';
 
-test("operation budgets permit continued same-archive discovery and >2 PDFs without erasing policy/history",async()=>{
+test("operation budgets permit continued same-archive discovery and >2 PDFs without erasing history",async()=>{
  const root=await realpath(await mkdtemp(join(process.env.TMPDIR!,"operations-")));
  let engine=await Engine.open(root),now=10000;
  const starts:number[]=[];
@@ -22,7 +22,7 @@ test("operation budgets permit continued same-archive discovery and >2 PDFs with
   for(let i=0;i<4;i++) await new Transport(engine,deps).discover('county-code',sources['county-code'].pages[0]);
   const transport=new Transport(engine,deps);
   for(const row of engine.list('county-code',{limit:3})) await transport.collect(row.id);
-  expect(engine.status()).toMatchObject({snapshots:4,versions:3,attempts:8});
+  expect(engine.status()).toMatchObject({snapshots:4,versions:3,attempts:7});
   expect(await engine.verify('county-code',{limit:3})).toMatchObject({documents:3,httpRequests:0});
   expect(starts.every((start,i)=>i===0 || start-starts[i-1]!>=3000)).toBe(true);
   const previous=engine.status().attempts;
@@ -63,7 +63,7 @@ test('collect persists complete >5MiB streamed fixture under explicit wire/PDF a
   const transport=new Transport(engine,{now:()=>now,sleep:async(ms:number)=>{now+=ms;},fetch:async(url:string)=>{
    if(url.endsWith('/robots.txt')) return new Response('User-agent: *\nDisallow:',{headers:{'content-type':'text/plain'}});
    return new Response(new ReadableStream({pull(controller){if(offset===large.length) {controller.close();return;}const end=Math.min(offset+65536,large.length);controller.enqueue(large.subarray(offset,end));offset=end;}}),{headers:{'content-type':'application/pdf','content-length':String(large.length)}});
-  }},{maxPdfBytes:7*1024*1024,maxBytes:10*1024*1024,maxRequests:2});
+  }},{maxPdfBytes:7*1024*1024,maxBytes:10*1024*1024,maxRequests:1});
   await transport.collect(row.id);
   expect(offset).toBe(large.length);
   expect(await engine.verify('county-code',{limit:1})).toMatchObject({documents:1});

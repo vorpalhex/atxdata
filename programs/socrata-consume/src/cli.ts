@@ -151,7 +151,7 @@ function offline(p: Command, state: State, ops: typeof operations) {
   for (const name of ["status", "verify"] as const)
     p.command(name)
       .description(
-        "Offline verified original/policy/SQLite/row provenance inspection.",
+        "Offline verified original/timing/SQLite/row provenance inspection.",
       )
       .action(async (_options, command: Command) => {
         state.result = await ops[name](common(command).root);

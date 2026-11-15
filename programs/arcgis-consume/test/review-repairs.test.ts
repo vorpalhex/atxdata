@@ -78,7 +78,7 @@ const args = (root: string, command = "collect", urlItem = item) => [
   terms(urlItem).sha256,
 ];
 
-test("A1 catalog-matched vendor tenant service is collected with its own robots gate", async () => {
+test("A1 catalog-matched vendor tenant service is collected without robots traffic", async () => {
   // Synthetic third tenant proves this is not a two-retained-item/tenant allowlist.
   const url =
     "https://services1.arcgis.com/ThirdTenant12345/arcgis/rest/services/Fixture/FeatureServer";
@@ -86,9 +86,7 @@ test("A1 catalog-matched vendor tenant service is collected with its own robots 
   const root = await temp();
   const result: any = await main(args(root, "collect", selected), f.deps);
   expect(result.summary).toMatchObject({ service: url, records: 13 });
-  const robots = seen.indexOf("https://services1.arcgis.com/robots.txt");
-  expect(robots).toBeGreaterThan(-1);
-  expect(robots).toBeLessThan(seen.findIndex((u) => u.startsWith(url)));
+  expect(seen.some((u) => new URL(u).pathname === "/robots.txt")).toBe(false);
   const before = seen.length;
   await main(["verify", "--archive", root], f.deps);
   expect(seen).toHaveLength(before);

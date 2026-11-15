@@ -187,17 +187,6 @@ export function v2Receipt(
   };
 }
 
-function requirePolicy(a: AppEvidence, run: string) {
-  const p = a.store.observation(run, "robots-www.arcgis.com");
-  ensure(
-    p &&
-      p.url === "https://www.arcgis.com/robots.txt" &&
-      p.kind === "text" &&
-      p.status === "ready" &&
-      p.bytes > 0,
-    "v2 requires nonempty retained Portal policy",
-  );
-}
 function validateRepresentation(
   a: AppEvidence,
   run: string,
@@ -223,7 +212,6 @@ export async function readV2AppData(
   offline: boolean,
 ) {
   intent(a, run);
-  requirePolicy(a, run);
   const old = a.store.observation(run, label);
   if (old) ensure(old.status === "ready", "v2 cannot adopt pending app-data");
   const before = new Set(

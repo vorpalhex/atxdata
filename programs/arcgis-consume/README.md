@@ -1,18 +1,45 @@
 # arcgis-consume
 
+## Robots removal and archive compatibility
+
+Collection, discovery, terms review, app metadata, wrapper, reference and layer
+operations do not fetch, parse or enforce robots.txt. Disallow and Crawl-delay
+are not acquisition or replay gates. No omission acknowledgement or waiver is
+required or created. The former CLI acknowledgement remains accepted as a hidden
+legacy no-op for existing scripts, not an authority receipt.
+
+`inspect-policy` remains an explicit, opt-in diagnostic capture of the literal
+maps policy resource. It is never invoked by acquisition, never grants permission,
+and is not a mandatory prerequisite for a wrapper/reference/layer operation.
+Existing diagnostic receipts still receive ordinary byte/status/provenance checks.
+
+Source allowlists, reviewed usage terms, real HTTP status/challenge checks, ordinary
+minimum 3-second completion pacing, Retry-After/rate-limit cooldowns, manual holds,
+finite budgets and original-body/hash/query/producer integrity remain enforced.
+No successful policy bodies or receipts are fabricated.
+
+Legacy policy bodies remain ordinary archived bytes, subject to existing integrity
+checks but not REP interpretation. Envelope-only waiver/acknowledgement/sourcePolicy
+annotations are ignored for acquisition comparisons; all other selection, budget,
+source and body bindings remain checked. Old timing obligations (including a
+historically recorded stricter spacing) and holds are not erased. Archives lacking
+independent timing evidence, corrupt originals or incomplete operations can still
+require review; this is not a migration or repair tool. The retired internal
+`rules.allowed` and `profile-policy` exports are removed; callers importing those
+robots helpers must stop using them rather than expect API compatibility. Optional historical
+producer/copy/original tests explicitly skip when their private inputs are absent.
+
 ## Explicit maps wrapper HTML operation
 
-`inspect-wrapper --source austin --archive ABSOLUTE_PRIVATE_DIRECTORY --item CATALOG_APP_ID --app-run SUCCESSFUL_APP_RUN --app-item-sha256 RETAINED_ITEM_BODY_SHA256 --acknowledge-maps-robots-omission`
+`inspect-wrapper --source austin --archive ABSOLUTE_PRIVATE_DIRECTORY --item CATALOG_APP_ID --app-run SUCCESSFUL_APP_RUN --app-item-sha256 RETAINED_ITEM_BODY_SHA256`
 
-The acknowledgement is a bare boolean switch. Omission, `=true`, `=false`, string operands and use on other commands are refused. The library requires `acknowledgeMapsRobotsOmission === true`. This records an operator decision to omit exactly `https://maps.austintexas.gov/robots.txt` for this wrapper operation; it does not convert the old maps/GeoHub HTML policy receipt into permission. Existing policy receipts are verified without new policy requests or rewritten outcomes. Portal source-policy/terms verification remains required.
-
-The existing complete readonly app/source verifier runs before opening a native writer and before any direct API mutation or request. The selected successful v1/v2 app must have matching retained public Web Mapping Application catalog membership, item role, terms, published URL and producer body SHA. No proof-item ID or FloodPro path allowlist: this mode admits literal canonical HTTPS application URLs on maps.austintexas.gov, without credentials/query/fragment; other origins and the robots path are refused rather than waived. The versioned decision binds source, item, app producer, terms, published URL and wrapper operation run.
+The existing complete readonly app/source verifier runs before opening a native writer and before any direct API mutation or request. The selected successful v1/v2 app must have matching retained public Web Mapping Application catalog membership, item role, terms, published URL and producer body SHA. No proof-item ID or FloodPro path allowlist: this mode admits literal canonical HTTPS application URLs on maps.austintexas.gov, without credentials/query/fragment; other origins and the robots path are refused as non-application paths. The versioned decision binds source, item, app producer, terms, published URL and wrapper operation run.
 
 Exactly one literal wrapper GET is allowed, zero retries, minimum 3 seconds completion spacing plus stricter recorded server obligations. Default and maximum limits are 1 request and 1,000,000 fetch-decoded bytes for total, response and raw capture; use existing `--max-requests`, `--max-bytes`, `--response-bytes`, `--raw-bytes` only to tighten limits. The same original-Response queue, body persistence, framing/length guards, status/header/Location ledger and unknown-transfer holds are used. Non-200, challenge/denial, non-HTML, held, partial, oversized or unsupported-framing responses cannot become successful wrapper receipts. A complete diagnostic error body may remain retained with its original status and a failed run. No redirect is followed and no robots request is made.
 
-A successful `app-wrapper-v1` / `wrapperReceiptVersion: 1` receipt binds `wrapper-raw-v1` HTML bytes and records script-src, link-href and base-href attribute values using Bun's non-executing HTMLRewriter. These are parser-decoded attribute literals, not resolved URLs or service equivalence. Base elements are recorded, not applied to future navigation. Cross-origin, credential/query/fragment-bearing references remain in the original private body, with only hashes in CLI output. Nothing executes JavaScript or requests these references. `wrapperHtmlCaptured=true` does not set `wrapperResolved`, bootstrap/feature/file acquisition or semantic service equivalence. General `permission` and further `navigation` remain false; the explicit scoped waiver is the authority for this one HTML acquisition only.
+A successful `app-wrapper-v1` / `wrapperReceiptVersion: 1` receipt binds `wrapper-raw-v1` HTML bytes and records script-src, link-href and base-href attribute values using Bun's non-executing HTMLRewriter. These are parser-decoded attribute literals, not resolved URLs or service equivalence. Base elements are recorded, not applied to future navigation. Cross-origin, credential/query/fragment-bearing references remain in the original private body, with only hashes in CLI output. Nothing executes JavaScript or requests these references. `wrapperHtmlCaptured=true` does not set `wrapperResolved`, bootstrap/feature/file acquisition or semantic service equivalence. General `permission` and further `navigation` remain false.
 
-Repeat the identical command for verified offline reuse; `verify --archive ABSOLUTE_PRIVATE_DIRECTORY` also reconstructs the receipt with no HTTP. Missing/corrupt/downgraded waivers, source changes, unfinished runs, unknown holds and altered selections or budgets are refused. There is no resume, fresh-root initializer, user URL/header override, blanket robots bypass or new schema. Independent review and operational release are still required before live use of newly changed code.
+Repeat the identical command for verified offline reuse; `verify --archive ABSOLUTE_PRIVATE_DIRECTORY` also reconstructs the receipt with no HTTP. Source changes, unfinished runs, unknown holds and altered selections or budgets are refused. There is no resume, fresh-root initializer, user URL/header override, new schema. Independent review and operational release are still required before live use of newly changed code.
 
 Read-only Bun/SQLite acquisition from the TNR, Voter Maps and Austin GeoHub catalogs, plus explicitly item-linked public layers discovered through the official Austin Water dashboard. Sources are `tnr`, `voter`, `austin` and `water`. County presets remain compatible; city collect/sync requires an explicit catalog-backed `--item` and advertised `--layer`. `--service` is only a matching assertion, not arbitrary URL permission. Fields and finite operating budgets are configurable; proof budgets are not production caps.
 
@@ -25,8 +52,6 @@ Read-only Bun/SQLite acquisition from the TNR, Voter Maps and Austin GeoHub cata
 A real shipped-CLI Water run acquired the complete current seven-feature `LWOPR_View` point layer, map-linked public item `3817d04dbb29486e9469510fe1e63156`, advertised layer `0`. The explicit projection is `OBJECTID,COMPFLAG,STARTFLAG`, retaining native XY geometry and CRS `102100` / latest `3857`; no address, work-order, creator/editor or contact attributes were selected. These are public operational incident locations, not anonymous aggregate areas. Native offline verification and exact reuse added no requests. This is one current observation, not all Water holdings or history.
 
 The separate outage polygon layer was observed as 7,775 records during count-only reconnaissance. Its map-linked item `60736b279f964313a52e768f81a76109` was inaccessible; the distinct serviceItemId was not substituted and no polygon prefix was collected. PropertyProfile/FloodPro wrappers remain catalogued but their underlying acquisition routes are unresolved; wrapper traversal is not claimed. City evidence remains one complete ten-boundary observation acquired as originals and replayed through the CLI, not a fully-live City CLI invocation or all city GIS.
-
-For these two hosted city/Water authorities only, a completed HTTP403 at the exact `/robots.txt` route can be recorded as an explicitly approved RFC9309 unavailable-policy outcome. The original failed status, headers and provider timing remain unchanged; no successful robots body is synthesized. Error bodies are not retained by the shared provider, so `bodyRetained:false` is explicit; retained reconnaissance bodies are separate evidence. Actual-resource403,429,5xx, unknown transfers, malformed holds and manual stops do not gain permission. The separate maps-authority robots redirect to HTML remains unresolved. Operator-owned `rules.ts` and its two inherited Disallow failures are unchanged.
 
 Native source-run examples (Bun and the sibling modules described below are required):
 
@@ -73,12 +98,12 @@ Normal operational stdout remains pretty JSON with its existing keys/order and a
 
 Frontend regression tests ship in `test/frontend-native.test.ts`. Use a private external `TMPDIR`, isolated HOME/XDG/cwd and OS public-network denial with only explicit localhost fixture access for the full suites. The FIFO backpressure portion uses POSIX `mkfifo` and is not exercised on Windows; no Windows support claim is made. These are source-run Bun entrypoints, not an installed binary. Frozen offline installation is `bun install --frozen-lockfile --offline --ignore-scripts`; no dependency upgrades are needed.
 
-Plain invocation intentionally retains status 1/stderr, now with useful full usage. Explicit help is status 0/stdout. Help exposes `list -> rules/catalogTerms -> discover -> rules/item terms/layers -> collect`, the catalog versus item hash distinction, and legacy bare-preset routes. Successful list preset ordering and summary/run/reused schemas are unchanged. `src/rules.ts` and the two known robots-policy assertion failures remain untouched; this frontend repair does not claim Disallow enforcement. Optional retained-original tests remain skipped without an explicit `ARCGIS_ORIGINAL_INPUTS` manifest; no source data needs to be acquired for these tests.
+Plain invocation intentionally retains status 1/stderr, now with useful full usage. Explicit help is status 0/stdout. Help exposes `list -> rules/catalogTerms -> discover -> rules/item terms/layers -> collect`, the catalog versus item hash distinction, and legacy bare-preset routes. Successful list preset ordering and summary/run/reused schemas are unchanged. Optional retained-original tests remain skipped without an explicit `ARCGIS_ORIGINAL_INPUTS` manifest; no source data needs to be acquired for these tests.
 
 ## Supported scope
 
 - Discovery follows all returned catalog continuations within the selected page/request/byte budgets. The current hub configuration supplies the group predicates; all item types in those groups are enumerated. It is not an organization-wide search. Repeated identities, changing totals, incorrect positions and incomplete terminal pages fail rather than silently truncate.
-- Public Feature Service / Map Service items can use HTTPS county `gis.traviscountytx.gov/.../rest/services/.../FeatureServer` or `MapServer`, or the catalog/item-matching vendor route `services1.arcgis.com/<tenant>/arcgis/rest/services/.../FeatureServer` or `MapServer`. Tenant/path permission comes from exact agreement between the configured hub catalog and selected public item metadata, not a fixed two-item/tenant allowlist. Vendor requests have their own authority-specific robots/crawl-delay gate. Advertised numeric layer suffixes are parsed separately from the service root; explicit `--layer` must equal that suffix (if present), appear in service metadata and match both layer metadata IDs. Original advertised source identity is retained. `--service` asserts the matching root or advertised endpoint, including on cached reuse; it never permits arbitrary URL acquisition. Other authorities (including unproven taxmaps routes), credentials, ports, query strings and non-service routes are rejected. No `/0` guessing or layer substitution for an explicitly supplied item.
+- Public Feature Service / Map Service items can use HTTPS county `gis.traviscountytx.gov/.../rest/services/.../FeatureServer` or `MapServer`, or the catalog/item-matching vendor route `services1.arcgis.com/<tenant>/arcgis/rest/services/.../FeatureServer` or `MapServer`. Tenant/path permission comes from exact agreement between the configured hub catalog and selected public item metadata, not a fixed two-item/tenant allowlist. Advertised numeric layer suffixes are parsed separately from the service root; explicit `--layer` must equal that suffix (if present), appear in service metadata and match both layer metadata IDs. Original advertised source identity is retained. `--service` asserts the matching root or advertised endpoint, including on cached reuse; it never permits arbitrary URL acquisition. Other authorities (including unproven taxmaps routes), credentials, ports, query strings and non-service routes are rejected. No `/0` guessing or layer substitution for an explicitly supplied item.
 - Feature schemas come from the layer metadata. By default every advertised attribute is requested; `--fields` selects a complete explicit projection including the layer's OID. Numeric, string, date, GUID and related supported ArcGIS scalar types are checked. Unknown attribute types fail explicitly. Original attributes, field definitions, native spatial reference, units, extents, capabilities and metadata remain in unchanged response bodies.
 - Native XY point, multipoint, polyline, polygon and envelope geometry are supported, including legitimately null shapes. Coordinates are finite and inside the advertised extent with a 0.01-native-unit allowance; rings must close. Z/M, meshes, rasters, nonspatial tables, attachments and export jobs are not implemented. No reprojection or invented geometry occurs. Page CRS identities must match metadata; service-only tolerance metadata need not be repeated in page responses.
 - Ordered pagination is used only when the layer advertises pagination and ordering. Page size is capped by `maxRecordCount`. Otherwise the complete authoritative ID set is queried in bounded batches, independent of response order. Truncated/missing/duplicate batches fail. A service that cannot supply complete count/ID evidence is unsupported rather than silently sampled.
@@ -142,23 +167,21 @@ After a settled interruption, repeat its command/options with `--resume RUN_ID`.
 
 General CLI defaults (all numeric overrides require finite positive safe integers; layer IDs may be zero):
 
-| Option             |   Default | Meaning                                                        |
-| ------------------ | --------: | -------------------------------------------------------------- |
-| `--max-requests`   |      1000 | All attempts in this operation, including robots and redirects |
-| `--max-bytes`      | 268435456 | Combined received/reserved response bytes                      |
-| `--response-bytes` |  16777216 | Each metadata/count/ID/feature response                        |
-| `--raw-bytes`      | 134217728 | Each published file                                            |
-| `--expanded-bytes` | 536870912 | Combined ZIP declared/actual expansion                         |
-| `--max-records`    |   1000000 | Complete selected feature/file record count, not a prefix      |
-| `--max-pages`      |      1000 | Catalog pages and feature pages, separately bounded            |
-| `--page-size`      |      1000 | Requested features per page/batch, capped by server metadata   |
-| `--max-members`    |      1000 | ZIP members                                                    |
+| Option             |   Default | Meaning                                                      |
+| ------------------ | --------: | ------------------------------------------------------------ |
+| `--max-requests`   |      1000 | All attempts in this operation, including explicit redirects |
+| `--max-bytes`      | 268435456 | Combined received/reserved response bytes                    |
+| `--response-bytes` |  16777216 | Each metadata/count/ID/feature response                      |
+| `--raw-bytes`      | 134217728 | Each published file                                          |
+| `--expanded-bytes` | 536870912 | Combined ZIP declared/actual expansion                       |
+| `--max-records`    |   1000000 | Complete selected feature/file record count, not a prefix    |
+| `--max-pages`      |      1000 | Catalog pages and feature pages, separately bounded          |
+| `--page-size`      |      1000 | Requested features per page/batch, capped by server metadata |
+| `--max-members`    |      1000 | ZIP members                                                  |
 
 These are configurable operating bounds, not observed source sizes. Responses are streamed to private, no-clobber raw paths. JSON and bounded ZIP semantic validation then use memory; very large explicitly configured ZIPs require corresponding memory. Feature pages are persisted separately rather than accumulated as one feature roll. Whole-layer IDs are bounded by the count/response budgets and retained for completeness reconciliation.
 
-New general operations have no hidden retries or automatic redirects. A transfer has a 45-second deadline. At most one complete transfer is in flight; the completion-to-next-start gap is at least 3 seconds or a stricter robots/server delay. Retry-After and supported rate-limit instructions are honored even on HTTP 200; uninterpretable cooldown instructions persist a manual-review stop. Native fetch does not import browser cookies or credentials.
-
-IMPORTANT baseline policy: the operator's `src/rules.ts` change in base 99dd488 comments out robots Disallow rejection. This repair deliberately does not restore or otherwise edit it. Crawl-delay and HTML/challenge checks still run. Do not claim that current code enforces Disallow. The two existing tests expecting Disallow rejection fail in the untouched baseline and remain failures, not weakened tests.
+New general operations have no hidden retries or automatic redirects. A transfer has a 45-second deadline. At most one complete transfer is in flight; the completion-to-next-start gap is at least 3 seconds or a stricter server delay. Retry-After and supported rate-limit instructions are honored even on HTTP 200; uninterpretable cooldown instructions persist a manual-review stop. Native fetch does not import browser cookies or credentials.
 
 ## Persistence, compatibility and verification
 
@@ -172,7 +195,7 @@ General feature verification reconstructs exact item/service/layer/count/ID/page
 
 The cooldown singleton is mandatory existing policy, not a default to recreate. Existing databases must contain exactly id1 and a numeric, finite, nonnegative safe-integer timestamp. Cache reads, verification/recovery, spacing and source/run/history/reservation writes preflight this policy. `defer` validates both input and existing state before a monotone update; it cannot normalize damaged state. A missing/zero-byte database initializes only in an otherwise empty archive (plus the owned lock), supporting Financial's private empty-file preallocation without resetting retained-body/sidecar evidence. Deleted policy in an initialized database fails closed. `Number.MAX_SAFE_INTEGER` remains a deliberate durable manual-review stop: new operations/cache/recovery stop, while the already-started response attempt may finish accounting without clearing the stop. Retry jitter is rounded upward to integral milliseconds.
 
-`timing_events` adds independent, provider-owned append-only facts for spacing/defer, reservation, dispatch, header receipt, checkpoint and full-body completion. The mutable numeric gate must be at least every recomputed retained obligation, including successful-response Retry-After/rate limits and completion-based spacing. A valid integer rollback is corruption, not elapsed policy: it fails before reads/cache/offline verification or new writes/transport, without raising the gate to hide the contradiction. Stricter minimum/robots spacing persists across reopen. Unknown response instructions retain the manual stop. A dispatched transfer without completion evidence stops on reopen without deleting its reservation or partial body.
+`timing_events` adds independent, provider-owned append-only facts for spacing/defer, reservation, dispatch, header receipt, checkpoint and full-body completion. The mutable numeric gate must be at least every recomputed retained obligation, including successful-response Retry-After/rate limits and completion-based spacing. A valid integer rollback is corruption, not elapsed policy: it fails before reads/cache/offline verification or new writes/transport, without raising the gate to hide the contradiction. Retained stricter spacing persists across reopen without interpreting robots content. Unknown response instructions retain the manual stop. A dispatched transfer without completion evidence stops on reopen without deleting its reservation or partial body.
 
 Clock domains are explicit: run/attempt ISO timestamps use wall-clock; observation retrieval and transport deadlines use `Dependencies.now`. `clockDomain` is optional; it defaults to `unix-epoch-ms`, or `injected-epoch-ms` when `now` is supplied. Stable custom labels are supported. Facts retain separately sampled provider-clock and wall-clock milliseconds; do not compare these two domains directly. Valid offline verification does not depend on the reader clock. A new operation cannot silently switch clock domains or roll its recorded clock backward. Checkpoint retrieval is bound to independently captured clock facts, not bounded by mutable cooldown.
 
@@ -196,25 +219,23 @@ Historical evidence, not a fresh acquisition: the previous implementation retain
 
 Run tests with a private external TMPDIR and an OS outbound-network denial boundary that permits localhost fixtures. Keep coverage/metrics/mutation workers outside every checkout, in a private repository-layout mirror. Frozen offline installation succeeded; all changed files remain local and unstaged. Full-suite/typecheck, scoped mutation/CRAP/dryer receipts and residual classifications accompany the handoff. Independent review and acceptance remain chief-owned.
 
-The unchanged policy exceptions are exactly `robots longest-match rules, agent groups and stricter crawl-delay are respected` and `robots /query disallow is enforced before any feature query`. No other failures are accepted as policy exceptions.
-
 ### Application metadata development slice (not acceptance clearance)
 
-`inspect-app --source austin --item CATALOG_APP_ID --archive ABSOLUTE_PRIVATE_DIRECTORY --catalog-terms-sha256 CATALOG_TERMS_SHA256 --terms-sha256 ITEM_TERMS_SHA256` is a metadata-only operation for arbitrary public Web Mapping Application members of the complete source catalog. Review actual native `rules` catalog terms, run `discover` with that catalog hash, and review selected-item `rules` before supplying the separate item hash. Existing positive finite budget flags apply to policy, site, complete paginated catalog, item and itemData together. A one-page fixture costs six requests; a four-page catalog costs nine, not five.
+`inspect-app --source austin --item CATALOG_APP_ID --archive ABSOLUTE_PRIVATE_DIRECTORY --catalog-terms-sha256 CATALOG_TERMS_SHA256 --terms-sha256 ITEM_TERMS_SHA256` is a metadata-only operation for arbitrary public Web Mapping Application members of the complete source catalog. Review actual native `rules` catalog terms, run `discover` with that catalog hash, and review selected-item `rules` before supplying the separate item hash. Existing positive finite budget flags apply to site, complete paginated catalog, item and itemData together. A one-page fixture costs five requests; a four-page catalog costs eight.
 
-This slice has only injected-fixture evidence, no authorization for a live Portal request or new live root. It retains JSON representation bytes through existing text observations so arrays, scalars and null can have honest versioned metadata dispositions; only JSON syntax runs inside transfer validation. Semantic error, empty and unsupported data are not parsed as apps/maps. Metadata-only summaries expose no records count, and explicitly deny wrapper resolution and feature/file acquisition. The two known catalog IDs are not an allowlist. Existing native legacy/Water behavior and maps robots restrictions are unchanged.
+This slice has only injected-fixture evidence, no authorization for a live Portal request or new live root. It retains JSON representation bytes through existing text observations so arrays, scalars and null can have honest versioned metadata dispositions; only JSON syntax runs inside transfer validation. Semantic error, empty and unsupported data are not parsed as apps/maps. Metadata-only summaries expose no records count, and explicitly deny wrapper resolution and feature/file acquisition. The two known catalog IDs are not an allowlist. Existing native legacy/Water source identity and transport checks remain required.
 
-Native verify/reuse dispatch is separate from feature and published-file completion. Receipts bind producing observations/attempts and historical route policy. Metadata receipts remain private. This is an unfinished development slice: complete policy/budget/lock/replay adversarial coverage, quality metrics, causal omissions, sanitizer, independent review and real-source proof remain gates. Do not treat successful metadata fixtures as wrapper or City acquisition acceptance.
+Native verify/reuse dispatch is separate from feature and published-file completion. Receipts bind producing observations/attempts and exact request provenance. Metadata receipts remain private. This is an unfinished development slice: complete policy/budget/lock/replay adversarial coverage, quality metrics, causal omissions, sanitizer, independent review and real-source proof remain gates. Do not treat successful metadata fixtures as wrapper or City acquisition acceptance.
 
 Application eligibility requires a represented absolute HTTP(S) published URL, with a nonempty authority and no credentials, literal whitespace/control characters or backslash repair. The item must match the exact original catalog URL string; validation does not normalize or follow it. Invalid catalog eligibility fails before app itemData, after retaining complete catalog JSON, without an unknown-wire hold. A completed but mismatched item remains metadata-only item-unavailable with no itemData request. A published URL is metadata, never permission for application navigation.
 
-For Portal-only application terms review use `rules --app-only --source austin --item CATALOG_APP_ID --archive ABSOLUTE_PRIVATE_DIRECTORY`. This public CLI flag requires an explicit catalog member and reads only source policy, site, complete catalog and current item JSON. Both catalog and current item must remain public Web Mapping Applications with the reviewed exact published-URL eligibility. A complete non-app/current-role response is retained, then rejected semantically before service-origin policy, service metadata, HTML, app itemData or features. Distinct current catalog/item terms are returned without automatic acceptance. Ordinary `rules` retains its existing service-inspection behavior when the flag is omitted. The flag is immutable on same-run resume and grants no live-source or navigation permission.
+For Portal-only application terms review use `rules --app-only --source austin --item CATALOG_APP_ID --archive ABSOLUTE_PRIVATE_DIRECTORY`. This public CLI flag requires an explicit catalog member and reads only site, complete catalog and current item JSON. Both catalog and current item must remain public Web Mapping Applications with the reviewed exact published-URL eligibility. A complete non-app/current-role response is retained, then rejected semantically before service metadata, HTML, app itemData or features. Distinct current catalog/item terms are returned without automatic acceptance. Ordinary `rules` retains its existing service-inspection behavior when the flag is omitted. The flag is immutable on same-run resume and grants no live-source or navigation permission.
 
 ### Explicit app-data representation v2 (fixture implementation)
 
 `inspect-app --source austin --item CATALOG_APP_ID --archive ABSOLUTE_PRIVATE_DIRECTORY --catalog-terms-sha256 CATALOG_TERMS_SHA256 --terms-sha256 ITEM_TERMS_SHA256 --app-data-format json-or-empty-v2` opts into mode `app-metadata-v2`, receiptVersion2 and an immutable format discriminator. Omission remains genuine strict-JSON v1; there is no upgrade/adoption of old failed or pending data. The flag is invalid on other commands/sources and v2 requires zero retries. Existing published app/catalog identity and reviewed distinct terms remain prerequisites.
 
-Only app-data may produce `outcome: raw-empty`, `representation: empty-body`. This requires an actual completed fresh HTTP200 transfer, accepted explicit zero framing (Content-Length0 or properly terminated chunked), bounded supported media/headers, no credentials/challenge/redirect indicators or ambiguous encoding, then an exact successful producer/ready canonical body with zero bytes and empty-body hash. Headers remain private but are hash-bound to the producer receipt. Nonempty bytes retain strict JSON parsing without trimming; JSON null/string-empty/object-empty/array-empty are representation `json`, never raw-empty. A nonempty retained Portal policy is a conservative v2 prerequisite; provider/legacy policy handling is unchanged. No reference traversal, endpoint-availability success, wrapper absence, features or files are inferred.
+Only app-data may produce `outcome: raw-empty`, `representation: empty-body`. This requires an actual completed fresh HTTP200 transfer, accepted explicit zero framing (Content-Length0 or properly terminated chunked), bounded supported media/headers, no credentials/challenge/redirect indicators or ambiguous encoding, then an exact successful producer/ready canonical body with zero bytes and empty-body hash. Headers remain private but are hash-bound to the producer receipt. Nonempty bytes retain strict JSON parsing without trimming; JSON null/string-empty/object-empty/array-empty are representation `json`, never raw-empty. No reference traversal, endpoint-availability success, wrapper absence, features or files are inferred.
 
 For inspect-app and app-bearing verification, a consumer pre-open read-only gate snapshots main database plus WAL bytes, validates checksum/salt/committed frames within64MiB-per-file bounds, and queries a read-only in-memory SQLite view. It never connects SQLite to those source files, creates SHM, recovers/promotes a body, changes a gate, or writes source schema. Missing/inconsistent metadata, unsupported/incomplete WAL snapshots, manual holds and owned locks fail closed. Snapshot reads are not a substitute for later normal locked/runtime checks; concurrent state can still change and remains subject to those checks. Already-open inspectApp callers receive a no-further-mutation preflight, not a promise that their caller never opened a writer.
 
@@ -229,7 +250,7 @@ Already-open `inspectApp` calls retain their response-bound behavior and cannot 
 ## Unreleased publisher-derived applications and layers
 
 `resolve-app` starts only from an existing successful native wrapper and its
-exact SHA, using strict boolean `--acknowledge-maps-robots-omission`. Supply
+exact SHA. Supply
 `--source austin --archive PRIVATE_ROOT --wrapper-run UUID --wrapper-sha256 SHA`.
 Omit `--reference-sha256` for readonly-derived reference context; explicitly
 select a returned reference SHA to acquire ONE parent-published frame/script
@@ -244,9 +265,8 @@ New references use separate versioned intents/derivation2 and the existing
 Archive RAW original-response queue. Lowlevel source fences rederive actual
 parent bytes/producer closure BEFORE cache recovery/reservation/HTTP. No
 metadata-only derived Portal item is asserted to be a GeoHub catalog member.
-Nonmaps origins use the strict water-profile REP check, not legacy Austin
-fallback; this does not classify their data as Water. The explicit maps
-resource omission never permits another-origin robots omission.
+Every origin remains subject to source/role allowlists, real response status and
+challenge checks, finite budgets and server cooldowns; no robots policy is fetched.
 
 `collect-app-layer` requires the same source/wrapper selectors, `--parent-run`
 pointing to completed WebMap data, an exact published `--layer-url` and reviewed
@@ -265,7 +285,7 @@ requires explicit review, not implicit new acquisition.
 Defaults/ceilings: zero retries, up to16requests,12MiB total decoded bytes,
 6MiB per response/raw body,256reference rows by default (ceiling4096). Feature
 selection is explicit; unselected remote content/history remains unknown.
-No provider/Store/DDL/protectedrules edits. Still requires independent review
+No provider/Store/DDL changes. Still requires independent review
 and chief live authority; authored native fixture execution is not public proof.
 
 Layer terms prerequisite (app-derived): in WebMap `resolve-app` context, select

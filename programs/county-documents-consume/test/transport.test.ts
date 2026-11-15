@@ -12,7 +12,7 @@ test("cooldowns include success, structured whitespace, dates, exhausted legacy 
  expect(()=>cooldown(new Headers({"RateLimit":'r=0;t=unknown'}),1000)).toThrow();
  expect(()=>cooldown(new Headers({"Retry-After":" "}),1000)).toThrow();
 });
-test("robots before discovery, durable complete-body pacing, private headers and failed reservations survive reopening",async()=>{
+test("direct discovery, durable complete-body pacing, private headers and failed reservations survive reopening",async()=>{
  const root=await realpath(await mkdtemp(join(process.env.TMPDIR!,"transport-test-")));
  let engine=await Engine.open(root),now=10000,calls:string[]=[];
  const fake=async(url:string)=>{
@@ -23,8 +23,9 @@ test("robots before discovery, durable complete-body pacing, private headers and
  try {
   const transport=new Transport(engine,{fetch:fake,now:()=>now,sleep:async ms=>{now+=ms;}});
   await transport.discover("budgets",sources.budgets.pages[0]);
-  expect(calls).toEqual(["https://www.traviscountytx.gov/robots.txt",sources.budgets.pages[0]]);
+  expect(calls).toEqual([sources.budgets.pages[0]]);
   expect(engine.status().snapshots).toBe(1);
+  await transport.discover("budgets",sources.budgets.pages[1]);
   const attempts=engine.db.query<{started:number;ended:number;bytes:number;headers:string},[]>("select * from attempts order by started").all();
   expect(attempts[1]!.started-attempts[0]!.ended).toBeGreaterThanOrEqual(3000);
   expect(attempts[1]!.headers).toContain("noarchive");

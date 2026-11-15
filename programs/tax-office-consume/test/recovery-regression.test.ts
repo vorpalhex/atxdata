@@ -2,7 +2,7 @@ import {test,expect} from 'bun:test';import {join} from 'node:path';import {writ
 import {Collector} from '../src/collector';import {collect} from '../src/live';import {run as cli} from '../src/cli';import {ROUTES} from '../src/source';import {sample,pdf,temp} from './collector.test';
 test('explicit live refresh leaves failed checkpoint intact and accepts changed valid bytes in a new snapshot',async()=>{
  const base=await temp();let phase=0,now=10000;const c=await Collector.open(join(base,'archive'),{now:()=>now,sleep:async ms=>{now+=ms;},fetch:async url=>{
-  if(url===ROUTES.robots)return new Response('',{status:404});if(url===ROUTES.discovery)return new Response('/voterdata/TaxDelqOpenData.csv DelinquentFileLayout.php');
+  if(url===ROUTES.discovery)return new Response('/voterdata/TaxDelqOpenData.csv DelinquentFileLayout.php');
   return new Response(url===ROUTES.csv?(phase?Buffer.from(sample().toString().replaceAll('\r\n','\n')):sample()):(phase?pdf:Buffer.from('bad PDF')));
  }});
  try{await expect(collect(c,'delinquency',1,true)).rejects.toThrow('PDF');const prior=c.db.query<{id:string},[]>('SELECT id FROM snapshots').get()!;phase=1;

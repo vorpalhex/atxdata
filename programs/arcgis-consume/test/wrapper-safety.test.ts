@@ -6,7 +6,7 @@ import { policyFixture } from "./support/policy-fixture";
 import { parseArgs } from "../src/cli";
 import { Archive } from "../src/archive";
 import { inspectWrapper } from "../src/wrapper";
-import { validateWrapperOptions, waiver } from "../src/wrapper-contract";
+import { validateWrapperOptions } from "../src/wrapper-contract";
 const ack = "--acknowledge-maps-robots-omission";
 const args = (p: string[]) => ["inspect-wrapper", ...p.slice(1), ack];
 async function files(root: string) {
@@ -27,19 +27,12 @@ const base = {
     retries: 0,
   },
 };
-for (const value of [undefined, false, "true", "yes", 1])
-  test(`strict API acknowledgement ${String(value)}`, () => {
-    expect(() =>
-      validateWrapperOptions({ ...base, acknowledgeMapsRobotsOmission: value }),
-    ).toThrow(/boolean/);
-  });
 test("native bare flag only, command scope and finite ceilings", async () => {
   const f = await policyFixture();
   try {
     const p = await f.produce();
     const before = await files(f.root);
     for (const suffix of [
-      [],
       [ack + "=true"],
       [ack + "=false"],
       [ack, "false"],
@@ -55,7 +48,7 @@ test("native bare flag only, command scope and finite ceilings", async () => {
       expect(r.exit).toBe(1);
     }
     expect((await f.invoke([...p, ack], true)).exit).toBe(1);
-    expect(f.wire.length).toBe(6);
+    expect(f.wire.length).toBe(5);
     expect(await files(f.root)).toEqual(before);
   } finally {
     f.close();
@@ -74,10 +67,10 @@ for (const v1 of [false, true])
       const r = await f.invoke(args(p));
       expect(r.err).toBe("");
       expect(r.exit).toBe(0);
-      expect(f.wire.slice(6).map((x) => x.url)).toEqual([
+      expect(f.wire.slice(5).map((x) => x.url)).toEqual([
         "https://maps.austintexas.gov/AnotherApp/",
       ]);
-      expect(JSON.parse(r.out).summary.waiver.appReceiptVersion).toBe(
+      expect(JSON.parse(r.out).summary.binding.appReceiptVersion).toBe(
         v1 ? 1 : 2,
       );
     } finally {
@@ -97,18 +90,13 @@ for (const publishedURL of [
       const before = await files(f.root);
       const r = await f.invoke(args(p), true);
       expect(r.exit).toBe(1);
-      expect(f.wire.length).toBe(6);
+      expect(f.wire.length).toBe(5);
       expect(await files(f.root)).toEqual(before);
     } finally {
       f.close();
     }
   });
-for (const label of [
-  "unchanged",
-  "catalog",
-  "site-data",
-  "robots-www.arcgis.com",
-])
+for (const label of ["unchanged", "catalog", "site-data"])
   test(`complete source prewriter fence ${label}`, async () => {
     const f = await policyFixture();
     try {
@@ -148,7 +136,7 @@ for (const label of [
       else expect(err).not.toContain("WRITER_FENCE");
       expect(err).not.toContain("FETCH_FENCE");
       expect(await files(f.root)).toEqual(before);
-      expect(f.wire.length).toBe(6);
+      expect(f.wire.length).toBe(5);
     } finally {
       f.close();
     }
@@ -182,7 +170,7 @@ test("direct API rejects corrupt catalog without further ledger mutation or HTTP
     f.close();
   }
 });
-for (const fault of ["waiver", "string-ack", "body", "hold", "limits"])
+for (const fault of ["body", "hold", "limits"])
   test(`offline refusal ${fault}`, async () => {
     const f = await policyFixture();
     try {
@@ -192,21 +180,6 @@ for (const fault of ["waiver", "string-ack", "body", "hold", "limits"])
       expect(r.exit).toBe(0);
       const id = JSON.parse(r.out).run;
       const db = new Database(join(f.root, "state.sqlite"));
-      if (fault === "waiver" || fault === "string-ack") {
-        const row = db
-          .query<{ options: string }, [string]>(
-            "SELECT options FROM acquisition_options WHERE run=?",
-          )
-          .get(id)!;
-        const s = JSON.parse(row.options);
-        if (fault === "waiver")
-          s.waiver.resource = "https://geohub.austintexas.gov/robots.txt";
-        else s.selection.acknowledgeMapsRobotsOmission = "true";
-        db.query("UPDATE acquisition_options SET options=? WHERE run=?").run(
-          JSON.stringify(s),
-          id,
-        );
-      }
       if (fault === "hold")
         db.query("UPDATE cooldown SET not_before=?").run(
           Number.MAX_SAFE_INTEGER,
@@ -226,7 +199,7 @@ for (const fault of ["waiver", "string-ack", "body", "hold", "limits"])
         true,
       );
       expect(r2.exit).toBe(1);
-      expect(f.wire.length).toBe(7);
+      expect(f.wire.length).toBe(6);
       expect(await files(f.root)).toEqual(before);
       if (fault !== "limits")
         expect(
@@ -245,7 +218,7 @@ for (const status of [302, 403, 429, 503])
       if (status === 429) f.mode.headers["retry-after"] = "7";
       const r = await f.invoke(args(p));
       expect(r.exit).toBe(1);
-      expect(f.wire.length).toBe(7);
+      expect(f.wire.length).toBe(6);
       const db = new Database(join(f.root, "state.sqlite"), { readonly: true });
       const row = db
         .query<{ status: number; bytes: number }, []>(
@@ -266,7 +239,7 @@ test("response cap preserves failed intent and raw decoded byte accounting", asy
     f.mode.status = 200;
     const r = await f.invoke([...args(p), "--response-bytes", "4"]);
     expect(r.exit).toBe(1);
-    expect(f.wire.length).toBe(7);
+    expect(f.wire.length).toBe(6);
     const db = new Database(join(f.root, "state.sqlite"), { readonly: true });
     expect(
       db
@@ -289,7 +262,7 @@ test("HTML reference collection never executes or follows private/third-party UR
     const r = await f.invoke(args(p));
     expect(r.exit).toBe(0);
     expect(r.out).not.toContain("PRIVATE");
-    expect(f.wire.length).toBe(7);
+    expect(f.wire.length).toBe(6);
     expect(
       JSON.parse(r.out).summary.references.every(
         (x: { acquired: boolean }) => x.acquired === false,
@@ -299,22 +272,7 @@ test("HTML reference collection never executes or follows private/third-party UR
     f.close();
   }
 });
-test("waiver decision invariants cannot be overwritten by binding fields", () => {
-  const result = waiver(
-    {
-      acknowledged: false,
-      resource: "https://outside.invalid/robots.txt",
-      operation: "other",
-      run: "other",
-    },
-    "actual-run",
-  );
-  expect(result.acknowledged).toBe(true);
-  expect(result.resource).toBe("https://maps.austintexas.gov/robots.txt");
-  expect(result.operation).toBe("app-wrapper-v1");
-  expect(result.run).toBe("actual-run");
-});
-test("raw wrapper bridge itself refuses missing waiver before transport", async () => {
+test("raw wrapper bridge itself refuses missing source intent before transport", async () => {
   const f = await policyFixture();
   let a: Archive | undefined;
   try {

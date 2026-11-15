@@ -52,14 +52,14 @@ test('F2 retained inventory corruption rejects root discovery before any HTTP or
  }finally {await engine.close();await rm(root,{recursive:true,force:true});}
 });
 
-test('F3 exact encodeplus robots authority is scoped to robots operation',async()=>{
+test('F3 direct encodeplus discovery needs no robots acknowledgement',async()=>{
  const root=await realpath(await mkdtemp(join(process.env.TMPDIR!,'repair-f3-'))),engine=await Engine.open(root);
  const url='https://online.encodeplus.com/regs/traviscounty-tx/archivedialog.aspx',calls:string[]=[];
  try {
   await engine.importPage('county-code',sources['county-code'].pages[0],`<a href="${url}">Archives</a>`,'authored');
-  const transport=new Transport(engine,{fetch:async(u)=>{calls.push(u);return new Response('User-agent: *\nDisallow: /regs/',{headers:{'content-type':'text/plain'}});}});
-  await expect(transport.discover('county-code',url)).rejects.toThrow('robots disallow');
-  expect(calls).toEqual(['https://online.encodeplus.com/robots.txt']);
+  const transport=new Transport(engine,{fetch:async(u)=>{calls.push(u);return new Response('<p>Archives</p>',{headers:{'content-type':'text/html'}});}});
+  await transport.discover('county-code',url);
+  expect(calls).toEqual([url]);
  }finally {await engine.close();await rm(root,{recursive:true,force:true});}
 });
 

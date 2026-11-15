@@ -52,7 +52,7 @@ test("200 cooldown persists across reopen and arbitrary-year second snapshot exc
   expect(first).toMatchObject({ accepted: 1 });
   const second = await collect({ ...options, fiscalYear: 1998 }, deps);
   expect(second).toMatchObject({ fiscalYear: 1998, accepted: 1 });
-  expect(starts[2] - starts[1]).toBeGreaterThanOrEqual(10000);
+  expect(starts[1] - starts[0]).toBeGreaterThanOrEqual(10000);
   expect(
     await verifyAcquisition(options.sourceArchive, options.output),
   ).toMatchObject({ bindings: 2 });
@@ -69,13 +69,13 @@ test("wrong source-year including quarantined-width row never creates import bat
   );
   expect(readdirSync(options.output)).toEqual([]);
   const db = new Database(join(options.sourceArchive, "state.sqlite"));
-  expect(db.query("SELECT count(*) n FROM attempts").get()).toEqual({ n: 2 });
+  expect(db.query("SELECT count(*) n FROM attempts").get()).toEqual({ n: 1 });
   expect(
     db.query("SELECT count(*) n FROM observations WHERE label='csv'").get(),
   ).toEqual({ n: 0 });
   db.close();
   await expect(collect(options, wire.dependencies)).rejects.toThrow();
-  expect(wire.calls).toBe(2);
+  expect(wire.calls).toBe(1);
 });
 test.each(["dangling", "resolving", "orphan", "lock"])(
   "unsafe source %s is refused with zero transport",
@@ -127,13 +127,11 @@ test("killed transport retains reserved attempt and lock; restart never silently
   expect(wire.calls).toBe(0);
 });
 test.each([
-  "request",
   "file",
   "aggregate",
   "rows",
   "redirect",
   "challenge",
-  "policy",
 ])(
   "bounded %s failure never imports or performs hidden retry",
   async (kind) => {
@@ -147,10 +145,6 @@ test.each([
       },
       fetch: async (url: string) => {
         calls++;
-        if (url.endsWith("robots.txt"))
-          return kind === "policy"
-            ? new Response("User-agent: *\nDisallow: /Reports/")
-            : new Response("", { status: 404 });
         if (kind === "redirect")
           return new Response(null, {
             status: 302,
@@ -163,9 +157,7 @@ test.each([
       },
     };
     const limits =
-      kind === "request"
-        ? { maxRequests: 1 }
-        : kind === "file"
+      kind === "file"
           ? { maxBytes: 100 }
           : kind === "aggregate"
             ? { maxTotalBytes: 100 }
@@ -174,16 +166,10 @@ test.each([
               : {};
     await expect(collect({ ...options, ...limits }, deps)).rejects.toThrow();
     const count = calls;
-    expect(calls).toBe(kind === "policy" || kind === "request" ? 1 : 2);
+    expect(calls).toBe(1);
     expect(readdirSync(options.output)).toEqual([]);
     await expect(collect({ ...options, ...limits }, deps)).rejects.toThrow();
     expect(calls).toBe(count);
-    if (kind === "policy") {
-      await expect(
-        collect({ ...options, refresh: true }, deps),
-      ).rejects.toThrow("robots restriction");
-      expect(calls).toBe(count);
-    }
   },
 );
 test("foreign acquisition database is refused unchanged before shared Store can initialize it", async () => {
@@ -221,7 +207,7 @@ test("bounded exact file/aggregate/row limits are inclusive", async () => {
       wire.dependencies,
     ),
   ).toMatchObject({ rowsRead: 1, accepted: 1 });
-  expect(wire.calls).toBe(2);
+  expect(wire.calls).toBe(1);
 });
 test.each([
   { ratelimit: '"default";r=0;t=12' },
@@ -250,10 +236,10 @@ test.each([
     };
     await collect(options, dependencies);
     await collect({ ...options, fiscalYear: 1984 }, dependencies);
-    expect(starts[2] - starts[1]).toBeGreaterThanOrEqual(12000);
+    expect(starts[1] - starts[0]).toBeGreaterThanOrEqual(12000);
   },
 );
-test("bounded cached robots Crawl-delay is re-applied after restart", async () => {
+test("ordinary minimum spacing persists across restart without robots", async () => {
   const options = setup();
   let time = Date.now();
   const starts: number[] = [];
@@ -271,9 +257,8 @@ test("bounded cached robots Crawl-delay is re-applied after restart", async () =
   };
   await collect(options, dependencies);
   await collect({ ...options, fiscalYear: 1984 }, dependencies);
-  expect(starts).toHaveLength(3);
-  expect(starts[1] - starts[0]).toBeGreaterThanOrEqual(7000);
-  expect(starts[2] - starts[1]).toBeGreaterThanOrEqual(7000);
+  expect(starts).toHaveLength(2);
+  expect(starts[1] - starts[0]).toBeGreaterThanOrEqual(3000);
 });
 const csv = (year = 2035) =>
   `${header}\n${year},2026-10-01,0001,Authored,0002,1.01,,A,001,Example,002,fixture,\n`;
@@ -347,7 +332,7 @@ test.each([
     verifyAcquisition(options.sourceArchive, options.output),
   ).rejects.toThrow();
   await expect(collect(options, wire.dependencies)).rejects.toThrow();
-  expect(wire.calls).toBe(2);
+  expect(wire.calls).toBe(1);
 });
 test.each(["lock", "dangling", "resolving", "orphan"])(
   "invalid import output %s rejects before any source request",
@@ -391,5 +376,5 @@ test("unavailable selection caches status with zero HTTP until explicit refresh"
     status: "unavailable",
     reused: true,
   });
-  expect(calls).toBe(2);
+  expect(calls).toBe(1);
 });

@@ -57,7 +57,7 @@ test("City metadata downgrade refuses native collect before sentinel writer lock
     requirePageReview({} as any, row, Buffer.alloc(0), [], 1),
   ).toThrow(/City/);
 });
-test("new City public engine collect shares policy, budgets, cache verification and corrupt original rejection", async () => {
+test("new City public engine collect shares transport, budgets, cache verification and corrupt original rejection", async () => {
   const root = await mkdtemp(join(process.env.TMPDIR!, "city-library-")),
     engine = await Engine.open(root),
     pdf = cityPdf("City of Austin General Election Notice January 2, 2030");
@@ -85,9 +85,9 @@ test("new City public engine collect shares policy, budgets, cache verification 
   try {
     await engine.importPage(source, page, html, "authored");
     const row = engine.list(source, { limit: 1 })[0]!;
-    await expect(
-      new Transport(engine, deps, { maxRequests: 1 }).collect(row.id),
-    ).rejects.toThrow(/budget/);
+    const limited = new Transport(engine, deps, { maxRequests: 1 });
+    await limited.collect(row.id);
+    await expect(limited.collect(row.id)).rejects.toThrow(/budget/);
     expect(calls).toBe(1);
     await new Transport(engine, deps).collect(row.id);
     await engine.verify(source, { limit: 1 });

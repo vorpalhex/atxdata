@@ -109,7 +109,7 @@ test("native same empty catalog: discover positive and inspect terminal negative
       expect(producer.exit).toBe(command[0] === "inspect" ? 1 : 0);
       if (command[0] === "inspect")
         expect(producer.stderr).toContain("asset absent");
-      expect(calls.length - n).toBe(2);
+      expect(calls.length - n).toBe(1);
       const before = state(root);
       const verified = await native(
         ["verify", "--archive", root, "--json"],
@@ -118,7 +118,7 @@ test("native same empty catalog: discover positive and inspect terminal negative
       expect(verified.stderr).toBe("");
       expect(verified.exit).toBe(0);
       expect(JSON.parse(verified.stdout).httpRequests).toBe(0);
-      expect(calls.length - n).toBe(2);
+      expect(calls.length - n).toBe(1);
       expect(state(root)).toEqual(before);
       if (command[0] === "inspect") {
         const db = new Database(join(root, "transport/state.sqlite"), {
@@ -301,7 +301,7 @@ test("native invalid catalog admission retains true unknown holds including coun
         s.server.url.href,
       );
       expect(result.exit).toBe(1);
-      expect(s.calls.length).toBe(2);
+      expect(s.calls.length).toBe(1);
       await rejectsUnchanged(root, s.server.url.href, s.calls, "unknown");
     } finally {
       s.server.stop(true);
@@ -514,7 +514,7 @@ test("native interrupted catalog stream and SIGKILL remain held without HTTP or 
           ).exit,
         ).toBe(1);
       }
-      expect(calls.length).toBe(2);
+      expect(calls.length).toBe(1);
       await rejectsUnchanged(
         root,
         server.url.href,

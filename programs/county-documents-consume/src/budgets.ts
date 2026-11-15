@@ -1,4 +1,11 @@
-import type { HumanAcknowledgement } from "./human-policy";
+/** Historical metadata only; never evaluated or emitted by new transfers. */
+type HumanAcknowledgement = {
+  human: true;
+  url: string;
+  robotsSha256: string;
+  matchedRule: string;
+  scope: "encodeplus-travis-robots-v1";
+};
 export type WorkBudget = {
   maxRequests: number;
   maxBytes: number;
@@ -50,11 +57,7 @@ export class OperationBudget {
   complete(reservation: number, actual: number): void {
     this.bytes -= reservation - actual;
   }
-  receipt(
-    kind: string,
-    cap: number,
-    acknowledgement?: HumanAcknowledgement,
-  ): string {
+  receipt(kind: string, cap: number): string {
     return (
       "transport-work-v1:" +
       JSON.stringify({
@@ -62,7 +65,6 @@ export class OperationBudget {
         kind,
         cap,
         limits: this.limits,
-        acknowledgement,
       })
     );
   }

@@ -1,6 +1,7 @@
+import { sameAcquisition } from "./acquisition-compat";
 import { readCatalog, verifySelection } from "./selection";
 import { Archive } from "./archive";
-import { ensure, object, array, integer, same } from "./check";
+import { ensure, object, array, integer } from "./check";
 import {
   configs,
   sharing,
@@ -15,7 +16,7 @@ import {
   source,
   type Source,
 } from "./sources";
-import { allowed, terms } from "./rules";
+import { terms } from "./rules";
 import {
   selected,
   validateLayer,
@@ -86,7 +87,14 @@ export class Adapter {
     command: Command,
     termsSha256?: string,
   ): Promise<unknown> {
-    const robots = await this.gate(run, source);
+    const origins = ["https://www.arcgis.com"];
+    if (source === "tnr") origins.push(new URL(configs.tnr.layer).origin);
+    this.archive.setSpacing(3000);
+    this.archive.guard = (url) =>
+      ensure(
+        origins.includes(new URL(url).origin),
+        "authority outside acquisition allowlist",
+      );
     const config = configs[source];
     const item = await this.archive.request(
       run,
@@ -97,7 +105,7 @@ export class Adapter {
     );
     const currentTerms = terms(item);
     if (command === "rules") {
-      const summary = { source, terms: currentTerms, robots };
+      const summary = { source, terms: currentTerms };
       return summary;
     }
     ensure(
@@ -108,47 +116,10 @@ export class Adapter {
     if (command === "discover") summary = await this.discover(run, source);
     else {
       if (source === "tnr") await this.features(run, item);
-      else await this.published(run, item, robots);
+      else await this.published(run, item);
       summary = await this.verifyCollection(run, source);
     }
     return summary;
-  }
-  private async gate(run: string, source: Source) {
-    this.archive.guard = undefined;
-    const origins = ["https://www.arcgis.com"];
-    if (source === "tnr") origins.push(new URL(configs.tnr.layer).origin);
-    const rules: Record<string, string> = {};
-    for (const [i, origin] of origins.entries()) {
-      const url = origin + "/robots.txt";
-      let text: string;
-      try {
-        const value = await this.archive.request(
-          run,
-          `robots-${i}`,
-          url,
-          "text",
-        );
-        ensure(typeof value === "string", "robots body missing");
-        text = value;
-      } catch (error) {
-        if (error instanceof Error && "status" in error && error.status === 404)
-          text = "";
-        else throw error;
-      }
-      const target =
-        i === 0 ? itemUrl(configs[source].item) : configs.tnr.layer;
-      this.archive.setSpacing(allowed(url, text, target));
-      rules[origin] = text;
-    }
-    this.archive.guard = (url) => this.checkRoute(rules, url);
-    return rules;
-  }
-  private checkRoute(rules: Record<string, string>, url: string) {
-    const origin = new URL(url).origin;
-    ensure(origin in rules, "authority missing robots gate");
-    this.archive.setSpacing(
-      allowed(origin + "/robots.txt", rules[origin], url),
-    );
   }
   private async discover(run: string, source: Source) {
     return readCatalog(this.archive, run, source, 1000);
@@ -241,20 +212,14 @@ export class Adapter {
       (v) => authoritativeIds(v, count),
     );
   }
-  private async published(
-    run: string,
-    itemValue: unknown,
-    rules: Record<string, string>,
-  ) {
+  private async published(run: string, itemValue: unknown) {
     const item = validatePublishedItem(itemValue),
       entry = `${sharing}/content/items/${configs.voter.item}/data`;
     const cached = this.archive.store.observation(run, "published-file");
     if (!cached) {
-      this.checkRoute(rules, entry);
       const url = publishedRedirect(
         await this.archive.request(run, "published-entry", entry, "redirect"),
       );
-      this.checkRoute(rules, url);
       await this.archive.request(
         run,
         "published-file",
@@ -332,7 +297,7 @@ export class Adapter {
         ? await verifySelection(this.archive, run.id)
         : await this.verifyCollection(run.id, source(run.source));
       ensure(
-        same(summary, JSON.parse(run.summary)),
+        sameAcquisition(summary, JSON.parse(run.summary)),
         "stored summary differs from original content",
       );
     }

@@ -11,13 +11,13 @@ async function scope(action:(e:Engine)=>Promise<void>) {
  const root=await realpath(await mkdtemp(join(process.env.TMPDIR!,"transport-integrity-"))),e=await Engine.open(root);
  try{await action(e);}finally{await e.close();await rm(root,{recursive:true,force:true});}
 }
-for(const table of ['robots','representations','classifier_resolutions']) test(`fresh offline schema owns ${table}; loss refuses transport`,()=>scope(async e=>{
+for(const table of ['representations','classifier_resolutions']) test(`fresh offline schema owns ${table}; loss refuses transport`,()=>scope(async e=>{
  expect(e.db.query("SELECT 1 FROM sqlite_master WHERE name=?").get(table)).not.toBeNull();
  e.db.exec(`DROP TABLE ${table}`);
  expect(()=>new Transport(e)).toThrow('schema');
  expect(e.db.query("SELECT 1 FROM sqlite_master WHERE name=?").get(table)).toBeNull();
 }));
-for(const [table,column] of [['robots','delay'],['representations','encoding'],['classifier_resolutions','reason']]) test(`transport schema requires ${table}.${column}`,()=>scope(async e=>{
+for(const [table,column] of [['representations','encoding'],['classifier_resolutions','reason']]) test(`transport schema requires ${table}.${column}`,()=>scope(async e=>{
  e.db.exec(`ALTER TABLE ${table} DROP COLUMN ${column}`);
  expect(()=>verifySchema(e.db)).toThrow('schema');
 }));

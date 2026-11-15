@@ -39,7 +39,7 @@ Normal operational stdout remains pretty JSON with its existing keys/order and a
 
 Frontend regression tests ship in `test/frontend-native.test.ts`. Use a private external `TMPDIR`, isolated HOME/XDG/cwd and OS public-network denial with only explicit localhost fixture access for the full suites. The FIFO backpressure portion uses POSIX `mkfifo` and is not exercised on Windows; no Windows support claim is made. These are source-run Bun entrypoints, not an installed binary. Frozen offline installation is `bun install --frozen-lockfile --offline --ignore-scripts`; no dependency upgrades are needed.
 
-Plain invocation still prints help to stdout/status 0. Pure missing operands, source/selection numeric requirements and `--image`/`--images` conflicts fail before `Engine.open`. `import-page` and `discover` also apply the existing pure source-path/official-HTTPS and canonical URL checks before opening SQLite; `archive` applies its existing pure source/endpoint identity check there too. These validation-only rejections perform no HTTP and do not create a fresh archive or change existing archive files. Supported retained official child pages are not restricted to static roots: retained-link membership and file-content checks still run inside the engine. Valid fresh status/import initialization remains supported; archive-dependent validation stays in the engine. `--allow-network` and `--human` remain boolean switches without explicit values: `--human=false` is rejected rather than treated as permission. Existing request authorization and source-specific gates are unchanged. Retained input files must remain regular private files; `--input -` is not stdin support.
+Plain invocation still prints help to stdout/status 0. Pure missing operands, source/selection numeric requirements and `--image`/`--images` conflicts fail before `Engine.open`. `import-page` and `discover` also apply the existing pure source-path/official-HTTPS and canonical URL checks before opening SQLite; `archive` applies its existing pure source/endpoint identity check there too. These validation-only rejections perform no HTTP and do not create a fresh archive or change existing archive files. Supported retained official child pages are not restricted to static roots: retained-link membership and file-content checks still run inside the engine. Valid fresh status/import initialization remains supported; archive-dependent validation stays in the engine. `--allow-network` remains a boolean switch without explicit values. The obsolete `--human` option is no longer recognized. Existing request authorization and source-specific gates are unchanged. Retained input files must remain regular private files; `--input -` is not stdin support.
 
 ## Private archive and bounded selection
 
@@ -68,14 +68,14 @@ Offline imports support retained bodies and original headers:
 
 Explicit positive-safe-integer work budgets, per authorized CLI operation (or `Transport` instance), not per archive lifetime:
 
-- `--max-requests N`: default 100 HTTP attempts including robots and failures.
+- `--max-requests N`: default 100 HTTP attempts including failures; no robots transfers are made.
 - `--max-bytes N`: default 536870912 (512 MiB), combined known wire bytes plus full unknown-body reservations. A complete transfer releases unused reservation only within its operation. Imports also honor this aggregate body budget; rendered review includes PDF plus supplied image bytes.
 - `--max-pdf-bytes N`: default 134217728 (128 MiB) for both wire and decompressed PDF content. The same bound is available to import, review, collect and sync, not a 5 MiB blockade. Library callers set `Engine.open(root,{maxPdfBytes})` and pass matching `Transport` work options; a transport cannot exceed its engine’s bound.
 - `--max-pages N`: default 50 metadata pages per discovery traversal. No fixed reference-page attempt count and no two-PDF/source quota.
 - Metadata remains at most 3 MiB wire/decoded per page and 2000 document occurrences across a source’s latest pages. Selection remains explicitly bounded at 2000; these are safety bounds, not a verification-year allowlist.
-- One complete body in flight; at least three seconds completion-to-next-start globally across these sources. Stricter robots/server waits persist even on HTTP 200.
+- One complete body in flight; at least three seconds completion-to-next-start globally across these sources. Stricter server waits persist even on HTTP 200.
 
-Each document/page is persisted before continuing the batch. Individual encoded/decoded PDF bodies are finite-buffered, not a constant-memory stream-to-disk implementation; the streamed fixture exercises chunked input and full-body bounds. Do not infer unlimited-size support. Increase finite work limits only with operator authorization; published defaults are not permission to exceed an assigned public-request group ceiling. Old attempts, unknown-wire reservations, server cooldowns, robots and stop gates remain global and are never deleted/reset by a new operation.
+Each document/page is persisted before continuing the batch. Individual encoded/decoded PDF bodies are finite-buffered, not a constant-memory stream-to-disk implementation; the streamed fixture exercises chunked input and full-body bounds. Do not infer unlimited-size support. Increase finite work limits only with operator authorization; published defaults are not permission to exceed an assigned public-request group ceiling. Old attempts, unknown-wire reservations, server cooldowns and stop gates remain global and are never deleted/reset by a new operation.
 
     bun run src/cli.ts collect --root "$ARCHIVE_DIRECTORY" --source budgets --year 2027 --role adopted --limit 1 --max-pdf-bytes 134217728 --max-bytes 268435456 --max-requests 8 --allow-network
 
@@ -87,15 +87,26 @@ Native Bun fetching explicitly uses `decompress:false`. Identity, gzip and Brotl
 
 The initial robots request encountered the old transparent-decompression classifier defect. That failed receipt remains unchanged. After local retained-body/compression and native Bun loopback regression tests, an explicit authorized resolution adopted the retained robots policy and recorded the previous gate/reason. The old representation is honestly `legacy-decoded-only`: original encoded hash/byte count remain unknown, with a full reservation. New observations retain both representations; no robots refetch was used to test the repair.
 
-## Explicit enCodePlus robots acknowledgement (partial historical workflow)
+## enCodePlus archive selector (partial historical workflow)
 
-`--human` is a boolean switch, false unless explicitly present. Library callers use the fourth constructor argument `new Transport(engine,deps,budget,{human:true})`; false/absent cannot acknowledge policy and nonboolean inputs are rejected. This is operator acknowledgement, NOT impersonating a human or a named search bot. It can override only a verified robots Disallow for the HTTPS `online.encodeplus.com/regs/traviscounty-tx/` tenant. It does not bypass corrupt policy, unknown-wire/unfinished stops, challenges, login/paywall, TLS, server cooldowns, budgets or complete-body pacing. Municode remains outside the supported live authorities, with its separately observed challenge unresolved.
-
-Each acknowledged attempt records the exact URL, retained robots SHA256 and matched rule in its versioned operation receipt, separately from unmodified publisher HTTP headers/status. Offline verification accepts those earlier receipts as historical evidence, never as fresh permission: a later unflagged request still rejects the retained Disallow. Existing blocked state/history is neither deleted nor reset.
+No robots.txt is fetched, parsed or enforced. Discovery, PDFs and archive-form
+requests use their ordinary request budgets directly. There is no `--human`
+requirement or fresh acknowledgement receipt. Retained robots rows/bindings and
+legacy acknowledgement metadata are inert history, not admission, cooldown or
+integrity evidence. Historical HTTP attempts, wire/decoded artifacts and classifier
+resolutions still undergo ordinary transfer/provenance verification. Legacy
+policy tables are kept in fresh physical-schema5 archives for compatibility but
+are no longer required by schema validation. Existing longer persisted deadlines
+and manual/unfinished stop gates are not cleared or shortened automatically.
+HTTP status/challenge checks, exact source/redirect allowlists, TLS, Retry-After,
+rate-limit headers and at least three-second ordinary completion pacing remain.
+Municode remains outside supported live authorities; this does not implement an
+authentication, paywall or challenge bypass. The deprecated library `human` option
+is ignored for compatibility, never validated or recorded as permission.
 
 A bounded native selector/catalog command is available, requiring a literal href evidenced by a retained official County Code root and a separately explicit secure endpoint:
 
-    bun run src/cli.ts archive --root "$ARCHIVE_DIRECTORY" --source-href http://online.encodeplus.com/regs/traviscounty-tx/archivedialog.aspx --page https://online.encodeplus.com/regs/traviscounty-tx/archivedialog.aspx --allow-network --human --max-requests 2 --max-bytes 4194304 --max-pdf-bytes 1048576
+    bun run src/cli.ts archive --root "$ARCHIVE_DIRECTORY" --source-href http://online.encodeplus.com/regs/traviscounty-tx/archivedialog.aspx --page https://online.encodeplus.com/regs/traviscounty-tx/archivedialog.aspx --allow-network --max-requests 1 --max-bytes 4194304 --max-pdf-bytes 1048576
 
 Without `--archive-value`, it returns actual available selector tokens/labels. An explicit published value follows only the source-returned read-only form POST, with fresh own same-origin anonymous session state and subsequent server-selected readback; all selected aliases are retained, not equated to a single chapter identifier. No cookies are borrowed from the operator. Original HTTP href and chosen HTTPS endpoint stay separate. The UUID `doclibrary.aspx?id=...` historical PDF parser recognizes arbitrary actual UUIDs/labels, not only a sample year/chapter.
 
@@ -146,7 +157,7 @@ Zero-HTTP verify checks required schema/version markers, SQLite integrity/FKs, e
 
 Fresh archives initialize archive schema 5 once, including all three transport tables, even for offline-only imports. The required cooldown contract includes `id`, `not_before` and `blocked`, with exactly one row at id 1. Its persisted timestamp must be a nonnegative safe integer (therefore finite); `blocked` is either null or a nonempty, non-whitespace string. Opening, offline verification and transport gates validate this same state before requests or budget changes. Missing columns, ambiguous text/numeric values, invalid stop reasons or missing/extra rows fail closed without resetting, coercing or repairing the durable wait. Distinct transport instances share the completion-to-next-start wait, including time spent consuming the entire body. Existing archives must already contain the full schema; neither opening nor constructing transport recreates missing established tables. Schema 2 and earlier archives require a separately evidenced, manual migration on a private backup. There is no automatic migration/repair CLI. Recover missing transport state from prior durable evidence or refuse continuation; a version-marker update alone is not a migration.
 
-The generic cooldown integrity check also rejects a well-typed deadline below independently retained successful completion, robots-policy/observation or server-header obligations. It runs on reopen, preflight (including local cache/offline operations), and pacing/reservation gates, including after awaited sleep. Common preflight revalidates after its final awaited representation read; shared run/artifact/commit mutation points synchronously recheck cooldown integrity after further awaits, including failure bookkeeping, so an intervening gate fault is rejected without adding local writes. It never silently advances a damaged deadline, shortens a longer hold, clears a manual stop, releases an unknown reservation or rewrites original evidence. Existing unversioned attempts retain their historical 2000ms minimum; operation-versioned attempts require 3000ms, with stricter robots delays in both cases.
+The generic cooldown integrity check also rejects a well-typed deadline below independently retained successful completion or server-header obligations. It runs on reopen, preflight (including local cache/offline operations), and pacing/reservation gates, including after awaited sleep. Common preflight revalidates after its final awaited representation read; shared run/artifact/commit mutation points synchronously recheck cooldown integrity after further awaits, including failure bookkeeping, so an intervening gate fault is rejected without adding local writes. It never silently advances a damaged deadline, shortens a longer hold, clears a manual stop, releases an unknown reservation or rewrites original evidence. Existing unversioned attempts retain their historical 2000ms minimum; operation-versioned attempts require 3000ms. Retained robots crawl delays and observation timestamps no longer create obligations; previously persisted longer deadlines remain unchanged.
 
 New transport run IDs use `transport-work-v2:` while preserving the existing `transport-work-v1:` operation/limits JSON format in the run-kind field. A new `headerTiming` receipt labels the header observation `{clockBasis:"unix-ms",observed:...}`; it is required for successful v2 completions and checked within the attempt's start/completion interval. Reopen and ledger verification share the same nonmutating reservation identity helper: supported run-ID version, operation receipt prefix/kind, full cap, operation identity and finite limits are checked before using header timing or selecting legacy fallback. Unsupported versions or contradictory receipts therefore refuse open and CLI status as well as preflight, without rewriting genuine old UUID/v1 receipts. The unchanged server parser is replayed at that retained receipt time, never reinterpreting an absolute epoch reset as a relative duration when a body crosses the reset. Historical receipts are not retrofitted with invented header times: completion is an explicitly conservative upper bound when replaying their relative server holds. An old gate insufficient for that bound refuses operator-reviewably, even if exact former header time is unavailable; this is not automatic migration permission. Old receipts without such conflicting timing, legacy classifier-resolution evidence and genuinely unknown stopped attempts retain their existing accounting. No schema change, new transport, public acquisition or enCodePlus feature change is part of this generic repair; independent review remains required.
 
@@ -187,7 +198,7 @@ Quality gates were run on an external private source mirror preserving sibling i
 
 ## City Council archives and municipal election publications
 
-Two distinct profiles reuse the document engine, private SQLite archive, source-link closure, operation budgets, pacing, robots and version replay:
+Two distinct profiles reuse the document engine, private SQLite archive, source-link closure, operation budgets, pacing and version replay:
 
 - `austin-council-archives`: starts at the official Council archive. Catalog retains publisher year labels and exact source hrefs; indexed years are not proof of surviving minutes. Source-linked year routes and evidenced same-year canonical 302s are supported. Committee/corporation entry links are discoverable; their deeper meeting-page layouts are not yet verified. This is not Legistar history equivalence.
 - `austin-election-publications`: starts at the City Clerk elections page and follows literal linked election/ballot pages. Notices, official-return labels, sample ballots, election calendars and ballot-related publications have separate City roles. This is not the Travis voter-PDF profile, Clarity exports or financial publications.
@@ -222,7 +233,7 @@ marked, and replay recomputes the complete7inventory from raw HTML. Omitted
 flag retains old metadata6 behavior, including zero rows for legacy HTTP.
 
 For either City Council or municipal-election source, `collect --capture-only`
-uses the SAME policy/transport/robots/pacing/COMPLETE-producing-body engine
+uses the SAME transport/pacing/COMPLETE-producing-body engine
 and retains a structural original with receipt9, `publisher-linked-original-v1`,
 quality `original-integrity-only`, `semanticIdentityValidated=false` and
 `structuredInterpretation=false`. It checks MIME, magic, bounds, pdfinfo/page

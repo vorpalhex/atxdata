@@ -15,7 +15,6 @@ import { importCsv } from "./importer";
 import { verifyArchive, verifyDatabase } from "./verify";
 import { openStore } from "./store";
 export const origin = "https://tctransparency.traviscountytx.gov";
-const robotsURL = origin + "/robots.txt";
 export const fileURL = (year: number) => `${origin}/Reports/DataSAP/PaymentRegister_${positiveInteger(year)}.csv`;
 type Binding = Batch & {
     importReused?: true;
@@ -59,8 +58,7 @@ async function usingArchive<T>(root: string, dependencies: Partial<Dependencies>
                 mode: 0o600,
             });
         archive = await Archive.open(root, dependencies);
-        archive.guard = (url) => ensure(url === robotsURL ||
-            /^https:\/\/tctransparency\.traviscountytx\.gov\/Reports\/DataSAP\/PaymentRegister_[1-9]\d*\.csv$/.test(url), "unsupported URL");
+        archive.guard = (url) => ensure(/^https:\/\/tctransparency\.traviscountytx\.gov\/Reports\/DataSAP\/PaymentRegister_[1-9]\d*\.csv$/.test(url), "unsupported URL");
         // Offline verification must not create scheduling facts in a reader's
         // different clock domain. Policy/manual-stop validation still applies.
         if (schedule) archive.setSpacing(3000);
@@ -227,60 +225,6 @@ function requireHTTP200(archive: Archive, run: string, label: string) {
     ).get(run,label);
     if (attempt?.status !== 200) throw new UnsupportedSource('unsupported source status');
 }
-async function policyText(archive: Archive, run: string) {
-    const prior = archive.store.db
-        .query<{
-        run: string;
-        status: number | null;
-    }, [
-        string
-    ]>("SELECT run,status FROM attempts WHERE url=? ORDER BY rowid DESC LIMIT 1")
-        .get(robotsURL);
-    if (unavailable(prior?.status))
-        return undefined;
-    let text: unknown;
-    if (prior) {
-        ensure(prior.status === 200 && archive.store.observation(prior.run, "robots"), "cached policy failure: manual review required");
-        text = await archive.read(prior.run, "robots");
-    }
-    else {
-        try {
-            text = await archive.request(run, "robots", robotsURL, "text", () => requireHTTP200(archive,run,'robots'));
-        }
-        catch (error) {
-            const outcome = archive.store.db
-                .query<{
-                status: number | null;
-            }, [
-                string
-            ]>("SELECT status FROM attempts WHERE run=? AND label='robots' ORDER BY rowid DESC LIMIT 1")
-                .get(run);
-            if (unavailable(outcome?.status))
-                return undefined;
-            throw error;
-        }
-    }
-    return text;
-}
-function applyPolicy(archive: Archive, text: unknown) {
-    ensure(typeof text === "string" && !/<(?:html|!doctype)/i.test(text), "unsupported policy/challenge");
-    // Conservative policy: any nonempty disallow (including another agent group)
-    // requires manual review. Never silently discard restrictive directives.
-    for (const line of text.split(/\r?\n/)) {
-        const clean = line.split("#")[0].trim();
-        ensure(!/^disallow\s*:\s*\S/i.test(clean), "robots restriction requires review");
-        if (/^crawl-delay\s*:/i.test(clean)) {
-            const delay = Number(clean.split(":").slice(1).join(":"));
-            ensure(Number.isFinite(delay) && delay >= 0, "invalid crawl delay");
-            archive.setSpacing(Math.max(3000, delay * 1000));
-        }
-    }
-}
-async function policy(archive: Archive, run: string) {
-    const text = await policyText(archive, run);
-    if (text !== undefined)
-        applyPolicy(archive, text);
-}
 type Bounds = ReturnType<typeof budget>;
 async function cachedCollection(archive: Archive, options: AcquisitionOptions, bounds: Bounds) {
     const receipts = await verifyBindings(archive, options.output);
@@ -340,7 +284,6 @@ async function collectFresh(archive: Archive, options: AcquisitionOptions, bound
         budget: bounds,
     });
     try {
-        await policy(archive, run);
         const raw = await archive.request(run, "csv", fileURL(options.fiscalYear), "file", (value) => {
             requireHTTP200(archive,run,'csv');
             validateCSV(value, options.fiscalYear, bounds.records);
@@ -466,8 +409,6 @@ function headDependencies(dependencies: Partial<Dependencies>) {
     return {
         ...dependencies,
         fetch: async (url: string, init: RequestInit) => {
-            if (url === robotsURL)
-                return wireFetch(url, init);
             const response = await wireFetch(url, { ...init, method: "HEAD" });
             const originalHeaders = Object.fromEntries(response.headers);
             await response.body?.cancel();
@@ -530,7 +471,6 @@ async function discoverFresh(archive: Archive, options: DiscoveryOptions, bounds
     const run = archive.store.start("financial:candidates", "discover");
     archive.store.saveOptions(run, { years: options.years, budget: bounds });
     try {
-        await policy(archive, run);
         const candidates = [];
         for (const year of options.years)
             candidates.push(await probeCandidate(archive, run, year));

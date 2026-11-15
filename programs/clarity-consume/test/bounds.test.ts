@@ -24,10 +24,9 @@ test('declared and streamed byte bounds stop acquisition without promotion or re
   expect(c.db.query("SELECT count(*) n FROM files WHERE name='summary' AND status='downloaded'").get()).toEqual({n:0});
  });
 });
-test('malformed version and robots policy changes stop before result routes',async()=>{
- for(const mode of ['version','robots'])await withCollector(async(url,base)=>{
-  if(mode==='version' && url.endsWith('current_ver.txt'))return new Response('../367565',{headers:{'content-type':'text/plain'}});
-  if(mode==='robots' && url.endsWith('robots.txt'))return new Response('User-agent: *\nDisallow: /',{headers:{'content-type':'text/plain'}});
+test('malformed version stops before result routes',async()=>{
+ await withCollector(async(url,base)=>{
+  if(url.endsWith('current_ver.txt'))return new Response('../367565',{headers:{'content-type':'text/plain'}});
   return base(url);
  },async(c,root,calls)=>{await expect(c.collect('125662')).rejects.toThrow();expect(calls.some(x=>x.includes('/json/'))).toBe(false);});
 });

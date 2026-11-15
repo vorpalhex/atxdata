@@ -11,7 +11,7 @@ export type ReferenceOptions = {
   referenceSha256?: string;
   helperRun?: string;
   dependencyTermsSha256?: string;
-  acknowledgeMapsRobotsOmission: true;
+  acknowledgeMapsRobotsOmission?: boolean;
   maxReferences: number;
   budget: {
     requests: number;
@@ -40,10 +40,7 @@ export function validateReferenceOptions(value: unknown): ReferenceOptions {
     ),
     "unknown reference option",
   );
-  ensure(
-    v.source === "austin" && v.acknowledgeMapsRobotsOmission === true,
-    "reference requires Austin and strict boolean maps robots omission",
-  );
+  ensure(v.source === "austin", "reference requires Austin");
   for (const k of ["wrapperRun", "parentRun", "helperRun"])
     if (k !== "helperRun" || v[k] !== undefined)
       ensure(
@@ -111,8 +108,6 @@ export function referenceOptions(
     ...(flags["--reference-sha256"]
       ? { referenceSha256: flags["--reference-sha256"] }
       : {}),
-    acknowledgeMapsRobotsOmission:
-      flags["--acknowledge-maps-robots-omission"] === "yes",
     maxReferences: n("--max-references", 256),
     budget: {
       requests: n("--max-requests", 2),

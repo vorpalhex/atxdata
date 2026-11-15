@@ -16,6 +16,48 @@ const options = (root: string) => ({
   pageSize: 2,
 });
 
+test("collection, inspection and discovery never request robots; reuse is offline", async () => {
+  const dir = await root(),
+    f = fixture();
+  const deps = {
+    ...f.deps,
+    fetch: async (url: string) => {
+      if (new URL(url).pathname === "/robots.txt")
+        throw Error("robots network denied");
+      return f.deps.fetch(url);
+    },
+  };
+  await collect(options(dir), deps);
+  await inspect({ root: dir, asset: "8c6z-qnmj" }, deps);
+  await discover({ root: dir, query: "payments", limit: 1 }, deps);
+  await collect({ ...options(dir), refresh: true }, deps);
+  expect(await verify(dir)).toMatchObject({ httpRequests: 0 });
+  expect(
+    await collect(options(dir), {
+      fetch: async () => {
+        throw Error("all network denied");
+      },
+    }),
+  ).toMatchObject({ reused: true });
+  expect(f.calls.every((url) => new URL(url).pathname !== "/robots.txt")).toBe(
+    true,
+  );
+  const db = new Database(join(dir, "transport/state.sqlite"), {
+    readonly: true,
+  });
+  expect(
+    db
+      .query("SELECT count(*) n FROM attempts WHERE label LIKE 'robots:%'")
+      .get(),
+  ).toEqual({ n: 0 });
+  expect(
+    db
+      .query("SELECT count(*) n FROM observations WHERE label LIKE 'robots:%'")
+      .get(),
+  ).toEqual({ n: 0 });
+  db.close();
+});
+
 test("complete bounded filtered selection, SQLite original rows, offline reuse, refresh version retention", async () => {
   const dir = await root(),
     f = fixture();

@@ -90,12 +90,7 @@ export function createProgram() {
       "Explicit inspect-app representation: json-or-empty-v2; omission is strict v1",
     ),
   );
-  program.addOption(
-    new Option(
-      waiverFlag,
-      "Explicitly omit maps robots for this literal wrapper HTML operation only",
-    ),
-  );
+  program.addOption(new Option(waiverFlag).hideHelp());
   program.addOption(new Option("--item <value>", "Catalog-backed item ID"));
   program.addOption(
     new Option(
@@ -230,11 +225,11 @@ function commandHelp(command?: string): string {
   if (!command) return createProgram().helpInformation() + "\n" + help;
   const purpose: Record<string, string> = {
     "collect-app-layer":
-      "Collect a whole bounded exact published WebMap layer. Requires --layer-url, --layer-terms-sha256, source/wrapper/parent producer selectors and explicit maps omission. Native schema/CRS/IDs retained; no catalog membership invented.",
+      "Collect a whole bounded exact published WebMap layer. Requires --layer-url, --layer-terms-sha256, source/wrapper/parent producer selectors. Native schema/CRS/IDs retained; no catalog membership invented.",
     "resolve-app":
-      "Versioned publisher-derived reference capture/context. Requires --source austin --wrapper-run UUID --wrapper-sha256 HASH --acknowledge-maps-robots-omission; --parent-run selects a completed child; --reference-sha256 explicitly selects a source-derived child. No arbitrary URL/automatic feature export.",
+      "Versioned publisher-derived reference capture/context. Requires --source austin --wrapper-run UUID --wrapper-sha256 HASH; --parent-run selects a completed child; --reference-sha256 explicitly selects a source-derived child. No arbitrary URL/automatic feature export.",
     "inspect-wrapper":
-      "Acquire one literal catalog-bound maps wrapper HTML, not bootstrap assets or services. Requires --source austin --item --archive --app-run --app-item-sha256 --acknowledge-maps-robots-omission (bare boolean only). Defaults/maxima: one request, 1000000 decoded bytes total/response/raw, zero retries. Exact reuse and verify are offline. Other origins refused; no robots request, redirects, resume, or terms overrides.",
+      "Acquire one literal catalog-bound maps wrapper HTML, not bootstrap assets or services. Requires --source austin --item --archive --app-run --app-item-sha256. Defaults/maxima: one request, 1000000 decoded bytes total/response/raw, zero retries. Exact reuse and verify are offline. Other origins refused; no robots request, redirects, resume, or terms overrides.",
     "inspect-policy":
       "Inspect raw maps policy only from an existing v2 app run and exact --app-item-sha256. Two requests/one literal GeoHub edge maximum; defaults 2 requests/2000000 total/1000000 response and raw bytes. Every result has permission=false/navigation=false; never fetches the published application. Requires --source austin --item --archive --app-run --app-item-sha256. No resume, terms/header/bypass flags or new archive initialization.",
     "inspect-app":

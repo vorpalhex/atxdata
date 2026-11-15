@@ -30,5 +30,5 @@ test("body interruption after headers leaves a durable stop gate",()=>temporary(
  await expect(transport.discover("budgets",sources.budgets.pages[0])).rejects.toThrow("body interrupted");
  const blocked=engine.db.query<{blocked:string|null},[]>("SELECT blocked FROM cooldowns WHERE id=1").get()!;
  expect(blocked.blocked).not.toBeNull();
- expect(calls).toBe(2);
+ expect(calls).toBe(1);
 }));

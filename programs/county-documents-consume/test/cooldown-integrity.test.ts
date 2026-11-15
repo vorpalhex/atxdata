@@ -55,10 +55,10 @@ test('distinct transport instances pace from completed body, not response header
  try{
   await new Transport(e,deps).discover('budgets',sources.budgets.pages[0]);
   await new Transport(e,deps).discover('budgets',sources.budgets.pages[1]);
-  expect(starts).toHaveLength(3); // robots + two page bodies, reused robots policy.
-  expect(completions).toHaveLength(3);
-  expect(sleeps).toBe(2);
-  for(let i=1;i<starts.length;i++)expect(starts[i]!-completions[i-1]!).toBeGreaterThanOrEqual(2000);
+  expect(starts).toHaveLength(2); // Two direct page bodies, no policy transfer.
+  expect(completions).toHaveLength(2);
+  expect(sleeps).toBe(1);
+  for(let i=1;i<starts.length;i++)expect(starts[i]!-completions[i-1]!).toBeGreaterThanOrEqual(3000);
   const rows=e.db.query<{started:number;ended:number},[]>('SELECT started,ended FROM attempts ORDER BY rowid').all();
   expect(rows.map(r=>r.started)).toEqual(starts);
   expect(rows.map(r=>r.ended)).toEqual(completions);

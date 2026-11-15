@@ -82,7 +82,7 @@ test("shipped Commander operational path acquires native HTTP bytes then zero-wi
     ).toBe(true);
     expect(
       s.f.calls.filter((u) => new URL(u).pathname === "/robots.txt").length,
-    ).toBe(1);
+    ).toBe(0);
     const reused = await native(args(root), s.endpoint);
     expect(reused.exit).toBe(0);
     expect(JSON.parse(reused.stdout).reused).toBe(true);

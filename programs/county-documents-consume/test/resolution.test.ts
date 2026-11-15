@@ -6,7 +6,7 @@ import {Transport} from "../src/transport";
 import {verifyRepresentations} from "../src/archive-verification";
 import {sources} from "../src/adapters";
 
-test("explicit local-classifier resolution adopts only retained decoded robots and preserves failed attempt/gate receipt",async()=>{
+test("legacy classifier resolution records decoded representation without a policy receipt",async()=>{
  const root=await realpath(await mkdtemp(join(process.env.TMPDIR!,"resolution-test-")));
  const engine=await Engine.open(root);
  try {
@@ -18,6 +18,7 @@ test("explicit local-classifier resolution adopts only retained decoded robots a
   let calls=0,now=10000;
   const transport=new Transport(engine,{now:()=>now,sleep:async ms=>{now+=ms;},fetch:async()=>{calls++;return new Response('<h2>FY 2030</h2><a href="/tax.pdf">Taxpayer Impact Statement</a>',{headers:{"Content-Type":"text/html"}});}});
   await transport.resolveDecodedRobots("old","operator continuation; local regression tests green");
+  expect(engine.db.query("SELECT 1 FROM robots").get()).toBeNull();
   const old=engine.db.query<{error:string;headers:string},[]>("SELECT * FROM attempts WHERE id='old'").get()!;
   expect(old.error).toBe("Error: Content-Length mismatch");expect(old.headers).toBe(headers);
   expect(engine.db.query<{previous_gate:string},[]>("SELECT previous_gate FROM classifier_resolutions").get()!.previous_gate).toContain("unfinished attempt");

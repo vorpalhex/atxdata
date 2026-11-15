@@ -20,7 +20,8 @@ test("Commander owns the command registry, option consumption and generated help
     assert.ok(program.commands.some(command => command.name() === "status"));
     assert.ok(program.helpInformation().includes("Commands:"));
     assert.ok(program.helpInformation().includes("--root"));
-    assert.equal(program.opts().human, false);
+    assert.equal(program.opts().human, undefined);
+    assert.ok(!program.helpInformation().includes("--human"));
     const parsed = program.parseOptions(["--root=/private-placeholder", "status"]);
     assert.deepEqual(parsed, {operands:["status"], unknown:[]});
     assert.equal(program.opts().root, "/private-placeholder");

@@ -120,6 +120,7 @@ function pageURL(s: Record<string, unknown>, label: string, actual: string) {
   return filtered(expected.href, s.where);
 }
 function expectedURL(run: Row, o: Row, label: string, actual: string): string {
+  // Historical artifacts only; new operations do not acquire or require these.
   if (label === `robots:${new URL(origin).hostname}`)
     return origin + "/robots.txt";
   if (run.command === "collect") return collectURL(o, label, actual);

@@ -108,7 +108,7 @@ export async function policyFixture(
     clock = join(base, "clock");
   await writeFile(
     preload,
-    `import{existsSync,readFileSync,writeFileSync}from"node:fs";const c=${JSON.stringify(clock)};let now=existsSync(c)?Number(readFileSync(c,"utf8")):0;Date.now=()=>now;Bun.sleep=async(ms)=>{now+=Number(ms);writeFileSync(c,String(now))};const native=globalThis.fetch;globalThis.fetch=(url,init)=>{const u=new URL(String(url));if(!["www.arcgis.com","maps.austintexas.gov","geohub.austintexas.gov","austin.maps.arcgis.com"].includes(u.hostname))throw Error("unexpected fixture authority");return native(${JSON.stringify(server.url.href)}+u.hostname+u.pathname+u.search,init)};process.on("exit",()=>Bun.gc(true));`,
+    `import{existsSync,readFileSync,writeFileSync}from"node:fs";const c=${JSON.stringify(clock)};let now=existsSync(c)?Number(readFileSync(c,"utf8")):0;Date.now=()=>now;Bun.sleep=async(ms)=>{now+=Number(ms);writeFileSync(c,String(now))};const native=globalThis.fetch;globalThis.fetch=(url,init)=>{const u=new URL(String(url));if(!["www.arcgis.com","maps.austintexas.gov","geohub.austintexas.gov","austin.maps.arcgis.com","services.arcgis.com"].includes(u.hostname))throw Error("unexpected fixture authority");return native(${JSON.stringify(server.url.href)}+u.hostname+u.pathname+u.search,init)};process.on("exit",()=>Bun.gc(true));`,
   );
   await writeFile(
     deny,

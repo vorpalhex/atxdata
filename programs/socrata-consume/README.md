@@ -12,7 +12,7 @@ acquired or its entire history is available.
 
 ## Source identity and old archives
 
-The canonical publisher and catalog authority is `https://datahub.austintexas.gov`; catalog queries filter that exact domain. Published catalog links must use that authority and name the matching asset. Source and catalog share one retained robots observation, without a separate api.us policy dependency. Asset IDs are preserved literally.
+The canonical publisher and catalog authority is `https://datahub.austintexas.gov`; catalog queries filter that exact domain. Published catalog links must use that authority and name the matching asset. Neither source nor catalog requests robots.txt or enforces its directives. Asset IDs are preserved literally.
 
 Fresh operations use `socrata-v3-catalog-decision`. Successful `socrata-v2-datahub` operations retain their earlier offline interpretation; no historical membership decisions are invented. Earlier `socrata-v1` archives used the old publisher/catalog identity and are unsupported: status, verification and collection reject with `unsupported old source identity; reviewed migration required` before opening writers or making requests. No automatic migration or rewriting of original URLs, options, bodies or aliases is performed. Preserve old held archives for explicit operator review; do not clear cooldowns or create another archive to evade an unresolved request.
 
@@ -71,7 +71,7 @@ Defaults are finite and support ordinary datasets rather than a proof-sample whi
 
 `--max-rows` has no default. Integer options reject zero, negative, fractional, unsafe and trailing-junk values. Flags take precedence over defaults; no environment/project configuration or secrets are loaded. Options may precede or follow commands; repeated options use Commander's last-value-wins behavior. `--` stops option parsing in its scope. There are no abbreviated options or prompts. There are no retries hidden behind the parser or HTTP provider.
 
-Successful repeated collection reuses verified retained state with zero requests. Current row/per-response ceilings still apply to reuse; aggregate acquisition budgets spend zero new body bytes on reuse. `--refresh` retains a NEW observation/version, preserving old pages and partials. It never clears unknown-transfer or damaged-policy stops.
+Successful repeated collection reuses verified retained state with zero requests. Current row/per-response ceilings still apply to reuse; aggregate acquisition budgets spend zero new body bytes on reuse. `--refresh` retains a NEW observation/version, preserving old pages and partials. It never clears unknown-transfer or damaged-scheduling stops.
 
 After a definite HTTP429 or an interruption between settled pages, repeat the exact selection and bounds with `--resume`. Retained pages are verified and not fetched again. The provider's original run attempt/aggregate ceilings are frozen: resume cannot raise them. A different page size/row bound requires explicit refresh. A changed source revision/count cannot be continued as the old traversal. A body checkpoint not yet indexed is reprocessed from its verified original. Offline verify does not promote pending files; request-side recovery may promote only a checksum-matching pending original using no-clobber links.
 
@@ -79,7 +79,7 @@ A process crash may leave the exclusive lock or an unknown request. Locks are ne
 
 ## Policy and CLI contracts
 
-All source requests, including robots, catalog, schema, counts and pages, are serial full-body operations. Persisted minimum spacing is at least 3 seconds or the stricter robots/server instruction. Successful responses and HTTP429 both preserve cooldowns across restart. Lowered gates, missing policy/timing tables, malformed versions, source derivation faults and orphan evidence reject before recovery/schema writes or new traffic. Robots Disallow is honored; challenges and malformed crawl delays stop acquisition. No redirects or automatic source retries are followed.
+All catalog, schema, count and page requests are serial full-body operations. Persisted minimum spacing is at least 3 seconds or the stricter server instruction. Successful responses and HTTP429 both preserve cooldowns across restart. Lowered gates, missing policy/timing tables, malformed versions, source derivation faults and orphan evidence reject before recovery/schema writes or new traffic. Robots directives do not gate acquisition or set spacing. Historical robots originals remain provenance only, without new fabricated receipts; existing cooldown/timing obligations and manual stops remain intact. Actual source challenges and unsupported responses still stop acquisition. No redirects or automatic source retries are followed.
 
 One process can own only one Socrata source session at a time. Private creation uses a scoped process umask of 077 while that owner is open, restored on close. Do not run unrelated concurrent file-creation code in that process. Cross-process ownership is an exclusive file lock. Untrusted writers racing within the private archive are not a supported threat model.
 

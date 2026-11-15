@@ -243,7 +243,7 @@ test("Austin catalog selection preserves native rows, offline reuse and explicit
   });
   expect(
     calls.some((u) => u === "https://services.arcgis.com/robots.txt"),
-  ).toBe(true);
+  ).toBe(false);
   expect(calls.some((u) => u.includes("traviscountytx"))).toBe(false);
   const before = calls.length;
   expect(((await main(args, f.deps)) as any).reused).toBe(true);

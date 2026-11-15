@@ -22,10 +22,10 @@ test("fixture collection preserves changed versions, global wire receipts and ze
   await transport.collect(row.id);
   expect(e.status().versions).toBe(2);
   expect(await e.verify('county-code',{chapter:'2',limit:1})).toMatchObject({versions:2,httpRequests:0});
-  expect(calls).toBe(4);
+  expect(calls).toBe(3);
   const wire=e.db.query<{wire_path:string},[]>("SELECT wire_path FROM representations WHERE representation='encoded-and-decoded' LIMIT 1").get()!;
   await unlink(join(root,wire.wire_path));
   await expect(e.verify('county-code',{chapter:'2',limit:1})).rejects.toThrow();
-  expect(calls).toBe(4);
+  expect(calls).toBe(3);
  }finally{await e.close();await rm(root,{recursive:true,force:true});}
 });

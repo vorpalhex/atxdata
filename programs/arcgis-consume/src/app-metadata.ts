@@ -20,7 +20,6 @@ import {
 import { itemUrl, type Source } from "./sources";
 import { catalogEntry } from "./catalog";
 import { terms } from "./rules";
-import { verifyProfilePolicy } from "./profile-policy";
 
 type Options = Selection & {
   termsSha256?: string;
@@ -186,7 +185,6 @@ async function summary(a: AppEvidence, r: Run, offline: boolean) {
     );
     data = await interpretData(a, r, s, offline);
   }
-  await verifyProfilePolicy(a, r.id);
   const bound = receipts(a, r.id);
   const labels = new Set([
     "robots-www.arcgis.com",
@@ -307,7 +305,6 @@ export async function inspectApp(a: Archive, source: Source, options: Options) {
       same(a.store.options(resume), saved),
       "resume app metadata selection/budget changed",
     );
-    await verifyProfilePolicy(a, resume);
     id = a.store.resume(resume, key, "inspect-app");
   } else {
     a.store.source(key, "Austin application metadata", itemUrl(selection.item));

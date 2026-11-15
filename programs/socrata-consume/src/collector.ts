@@ -1,8 +1,7 @@
-import robotsParser from "robots-parser";
 import { catalogDecision, saveDecision, finishResult } from "./decision";
 import { Database } from "bun:sqlite";
 import { type Dependencies } from "../../arcgis-consume/src/archive";
-import { readFileSync, existsSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { Session, budget, safePath, type Budget } from "./transport";
 import {
@@ -84,44 +83,6 @@ async function withSession<T>(
   rootPreflight(options.root);
   return result;
 }
-function read(s: Session, run: string, label: string): string {
-  const row = s.archive.store.observation(run, label);
-  ensure(row, "missing source original");
-  return readFileSync(join(s.archive.root, row.path), "utf8");
-}
-function applyPolicy(s: Session, url: string, text: string) {
-  ensure(
-    !/<(?:html|!doctype)/i.test(text),
-    "robots challenge/HTML requires review",
-  );
-  for (const line of text.split(/\r?\n/)) {
-    const clean = line.split("#")[0]!.trim();
-    if (/^crawl-delay\s*:/i.test(clean)) {
-      const raw = clean.slice(clean.indexOf(":") + 1).trim();
-      ensure(/^\d+(?:\.\d+)?$/.test(raw), "invalid robots crawl-delay");
-    }
-  }
-  const robots = robotsParser(new URL("/robots.txt", url).href, text);
-  ensure(
-    robots.isAllowed(url, "atxdata-arcgis") !== false,
-    "robots disallows source route",
-  );
-  const seconds = robots.getCrawlDelay("atxdata-arcgis") ?? 0;
-  ensure(Number.isFinite(seconds) && seconds >= 0, "invalid robots delay");
-  s.archive.setSpacing(Math.max(3000, Math.ceil(seconds * 1000)));
-}
-async function policy(s: Session, run: string, url: string) {
-  const robots = new URL("/robots.txt", url).href;
-  const previous = s.archive.store.db
-    .query<{ run: string; label: string }, [string]>(
-      "SELECT run,label FROM observations WHERE url=? ORDER BY rowid DESC LIMIT 1",
-    )
-    .get(robots);
-  const text = previous
-    ? read(s, previous.run, previous.label)
-    : await s.request(run, `robots:${new URL(url).hostname}`, robots);
-  applyPolicy(s, url, text);
-}
 async function request(
   s: Session,
   run: string,
@@ -129,7 +90,6 @@ async function request(
   url: string,
   validate: (text: string) => unknown,
 ) {
-  await policy(s, run, url);
   return s.request(run, label, url, validate);
 }
 async function catalog(s: Session, run: string, id: string) {

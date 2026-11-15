@@ -22,7 +22,7 @@ test("bounded discovery uses current voter group predicates and metadata only, i
       now += ms;
     },
     fetch: async (url) => {
-      if (url.endsWith("/robots.txt")) return new Response("User-agent: *\n");
+      if (url.endsWith("/robots.txt")) throw Error("robots request forbidden");
       const u = new URL(url);
       if (u.pathname.endsWith("/search")) {
         query = u.searchParams.get("q")!;
@@ -65,7 +65,7 @@ test("bounded discovery uses current voter group predicates and metadata only, i
     });
     expect(r.summary).toMatchObject({ catalogItems: 1 });
     expect(query).toBe("group:" + group);
-    expect(a.store.status().observations).toBe(7);
+    expect(a.store.status().observations).toBe(5);
     await expect(
       adapter.execute("voter", "sync", { termsSha256: "0".repeat(64) }),
     ).rejects.toThrow("terms changed");

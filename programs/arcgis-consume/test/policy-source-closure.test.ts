@@ -40,7 +40,6 @@ for (const label of [
   "catalog",
   "site-item",
   "site-data",
-  "robots-www.arcgis.com",
   "app-item",
 ])
   test(`direct source closure ${label}`, async () => {
@@ -48,7 +47,7 @@ for (const label of [
     let a: Archive | undefined;
     try {
       const args = await f.produce();
-      expect(f.wire.length).toBe(6);
+      expect(f.wire.length).toBe(5);
       if (label !== "unchanged") await damage(f.root, label);
       let calls = 0;
       a = await Archive.open(f.root, {
@@ -86,13 +85,7 @@ for (const label of [
       f.close();
     }
   }, 15000);
-for (const label of [
-  "unchanged",
-  "catalog",
-  "site-item",
-  "site-data",
-  "robots-www.arcgis.com",
-])
+for (const label of ["unchanged", "catalog", "site-item", "site-data"])
   test(`native source closure writer fence ${label}`, async () => {
     const f = await policyFixture();
     try {
@@ -126,7 +119,7 @@ for (const label of [
         expect(err).toMatch(/checksum|catalog|observation/);
       }
       expect(err).not.toContain("FETCH_FENCE");
-      expect(f.wire.length).toBe(6);
+      expect(f.wire.length).toBe(5);
       expect(await files(f.root)).toEqual(before);
     } finally {
       f.close();

@@ -3,20 +3,15 @@ import {
   policyFlags,
   validatePolicyOptions,
   type PolicyOptions,
-  mapsPolicy,
 } from "./policy-inspection-contract";
 export const wrapperMode = "app-wrapper-v1";
 export const wrapperKind = "wrapper-raw-v1";
 export const waiverFlag = "--acknowledge-maps-robots-omission";
 export type WrapperOptions = PolicyOptions & {
-  acknowledgeMapsRobotsOmission: true;
+  acknowledgeMapsRobotsOmission?: boolean;
 };
 export function validateWrapperOptions(value: unknown): WrapperOptions {
   const v = object(value);
-  ensure(
-    v.acknowledgeMapsRobotsOmission === true,
-    "wrapper requires explicit boolean maps robots omission acknowledgement",
-  );
   const { acknowledgeMapsRobotsOmission, ...selection } = v;
   const p = validatePolicyOptions(selection);
   ensure(
@@ -30,25 +25,14 @@ export function wrapperFlags(
   source: unknown,
   flags: Record<string, string>,
 ) {
-  if (command === "resolve-app" || command === "collect-app-layer") return;
-  if (command !== "inspect-wrapper") {
-    ensure(
-      flags[waiverFlag] === undefined,
-      "maps robots acknowledgement is inspect-wrapper only",
-    );
-    return;
-  }
-  ensure(
-    flags[waiverFlag] === "yes",
-    "inspect-wrapper requires --acknowledge-maps-robots-omission",
-  );
-  const { [waiverFlag]: ack, ...rest } = flags;
+  if (command !== "inspect-wrapper") return;
+  const { [waiverFlag]: legacy, ...rest } = flags;
   const p = policyFlags("inspect-policy", source, {
     "--max-requests": "1",
     "--max-bytes": "1000000",
     ...rest,
   })!;
-  return validateWrapperOptions({ ...p, acknowledgeMapsRobotsOmission: true });
+  return validateWrapperOptions(p);
 }
 export function validateWrapperCapture(
   value: unknown,
@@ -64,9 +48,8 @@ export function validateWrapperCapture(
       s.wrapperReceiptVersion === 1 &&
       s.wireKind === wrapperKind &&
       s.source === "austin" &&
-      same(s.budget, options.budget) &&
-      same(s.waiver, waiver(b, run)),
-    "raw wrapper requires exact versioned operator waiver",
+      same(s.budget, options.budget),
+    "raw wrapper requires exact versioned intent",
   );
   ensure(
     b.source === "austin" &&
@@ -103,14 +86,4 @@ export function admittedWrapperURL(value: unknown) {
   } catch {
     return false;
   }
-}
-export function waiver(binding: object, run: string) {
-  return {
-    ...binding,
-    kind: "operator-scoped-robots-omission-v1",
-    acknowledged: true,
-    resource: mapsPolicy,
-    operation: wrapperMode,
-    run,
-  };
 }

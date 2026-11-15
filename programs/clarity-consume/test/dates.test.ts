@@ -19,9 +19,9 @@ test('ambiguous and nonexistent catalog dates identify candidates without fetchi
  await fixture(async(c,d)=>{
   d.entries[0].Date=d.entries[1].Date;
   await expect(c.collectDate('2026-11-03')).rejects.toThrow('ambiguous catalog date 2026-11-03; candidates: 125662');
-  expect(d.calls.length).toBe(4);expect(d.calls.some(u=>u.includes('current_ver'))).toBe(false);
+  expect(d.calls.length).toBe(2);expect(d.calls.some(u=>u.includes('current_ver'))).toBe(false);
   await expect(c.collectDate('2020-01-01')).rejects.toThrow('nonexistent catalog date 2020-01-01; candidates: 125662');
-  expect(d.calls.length).toBe(4);
+  expect(d.calls.length).toBe(2);
   await expect(c.collect('777777')).rejects.toThrow('absent from current catalog');
   expect(d.calls.some(u=>u.includes('/777777/'))).toBe(false);
  });
@@ -69,7 +69,7 @@ test('CLI accepts catalog IDs and date, rejects invalid or competing selection b
  try{await fixture(async(_c,_d,root)=>{
   const target=join(root,'cli');
   expect(await main(['collect','--archive',target,'--date','2026-11-03'])).toMatchObject({reused:false});
-  expect(await main(['sync','--archive',target,'--election','009876'])).toMatchObject({reused:true});expect(d.calls.length).toBe(12);
+  expect(await main(['sync','--archive',target,'--election','009876'])).toMatchObject({reused:true});expect(d.calls.length).toBe(10);
   await expect(main(['status','--archive',target,'--date','2026-11-03'])).rejects.toThrow();
  });}finally{fetch.mockRestore();now.mockRestore();sleep.mockRestore();}
 });

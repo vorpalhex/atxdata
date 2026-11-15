@@ -3,7 +3,7 @@ import { resolve,join,sep } from 'node:path';
 import { readFile,open } from 'node:fs/promises';
 import { archiveLock,statFile,promote } from '../../civicclerk-consume/src/archive';
 import { PoliteHttpClient } from '../../civicclerk-consume/src/http';
-import { CAPS,hash,decode,COUNTY,HOST,OFFICIAL,catalog,token,isoDate,sourceDate,selectDate } from './source';
+import { CAPS,hash,decode,COUNTY,OFFICIAL,catalog,token,isoDate,sourceDate,selectDate } from './source';
 import { parseXml,xmlFromZip,reconcile } from './results';
 
 export type Dependencies={fetch:(url:string,init:RequestInit)=>Promise<Response>;now:()=>number;sleep:(ms:number)=>Promise<void>;random:()=>number};
@@ -135,9 +135,6 @@ export class Collector {
     }
   }
   private async preflight(obs:string,run:string){
-    const robots=(body:Buffer,status:number)=>{if(status!==200 && status!==404) throw new Error('robots gate');if(status===200 && /^\s*(Disallow|Crawl-delay|Request-rate)\s*:\s*\S/im.test(body.toString()) && body.toString().trim()!=='User-agent: *\nDisallow: /wp-admin/\nAllow: /wp-admin/admin-ajax.php\n\nSitemap: https://votetravis.gov/wp-sitemap.xml' && body.toString().trim()!=='User-agent: *\nDisallow: /wp-admin/') throw new Error('robots instructions require review');};
-    await this.acquire(obs,run,'clarity-robots',HOST+'/robots.txt','text/plain',robots,true);
-    await this.acquire(obs,run,'official-robots','https://votetravis.gov/robots.txt','text/plain',robots,true);
     await this.acquire(obs,run,'official-page',OFFICIAL,'text/html',(b,s)=>{if(s!==200 || !b.toString().includes(COUNTY)) throw new Error('official Clarity link changed/usage review required');},true);
   }
   private async listing(obs:string,run:string){
@@ -243,7 +240,7 @@ export class Collector {
       const settings=await json('settings');validateSettings(settings,obs.election);
       const x=parseXml(xmlFromZip(await get('export'))),before=token((await get('version-before')).toString()),after=token((await get('version-after')).toString());
       validateXmlIdentity(x,entry,settings);
-      for(const name of ['clarity-robots','official-robots','official-page'])await get(name);
+      await get('official-page');
       const result=coverageFor(x,await json('summary'),await json('details'),await json('status'),settings,before,after);
       if(obs.version!==before || obs.after_version!==after || JSON.stringify(result)!==obs.coverage || obs.status!==(result.mismatches.length?'disagreement':'complete'))throw new Error('coverage/identity mismatch');
       this.verifyRows(obs.id,x.rows);
@@ -294,8 +291,6 @@ function validateXmlIdentity(x:ReturnType<typeof parseXml>,entry:ReturnType<type
 function observationRoutes(election:string,version:string):Record<string,{url:string;mime:string}>{
   const prefix=COUNTY+election+'/'+version+'/';
   return {
-    'clarity-robots':{url:HOST+'/robots.txt',mime:'text/plain'},
-    'official-robots':{url:'https://votetravis.gov/robots.txt',mime:'text/plain'},
     'official-page':{url:OFFICIAL,mime:'text/html'},
     catalog:{url:COUNTY+'elections.json',mime:'application/json'},
     'version-before':{url:COUNTY+election+'/current_ver.txt',mime:'text/plain'},
@@ -326,7 +321,6 @@ function retryable(status:number|null,error:unknown){
   return error instanceof TypeError;
 }
 function requireHttp(status:number,name:string,type:string|null,mime:string){
-  if(name==='clarity-robots' && status===404)return;
   if(status!==200)throw new Error(`HTTP ${status}`);
   if(type?.split(';')[0]?.trim()!==mime)throw new Error('unexpected MIME');
 }

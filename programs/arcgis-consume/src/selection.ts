@@ -1,12 +1,7 @@
+import { sameAcquisition } from "./acquisition-compat";
 import { appRules } from "./app-metadata";
 import { acquirePublished, verifyPublished } from "./published";
 import { waterCatalog } from "./water";
-import {
-  unavailablePolicy,
-  sourcePolicy,
-  profileAllowed,
-  verifyProfilePolicy,
-} from "./profile-policy";
 import { Archive } from "./archive";
 import { array, ensure, integer, object, same } from "./check";
 import {
@@ -27,7 +22,7 @@ import {
   sourceService,
   catalogEntry,
 } from "./catalog";
-import { allowed, terms } from "./rules";
+import { terms } from "./rules";
 import { layerSchema, featurePage, featureIds } from "./schema";
 import { validateBudget } from "./policy";
 
@@ -206,52 +201,18 @@ export async function readCatalog(
     "catalog page budget exhausted; resume same run with unchanged budget or start an explicitly larger operation; not complete",
   );
 }
-function httpStatus(error: unknown, status: number) {
-  return error instanceof Error && "status" in error && error.status === status;
-}
-async function robotsPolicy(a: Archive, run: string, origin: string) {
-  const policyUrl = origin + "/robots.txt";
-  if (unavailablePolicy(a, run, policyUrl)) return undefined;
-  try {
-    return String(
-      await a.request(
-        run,
-        "robots-" + new URL(origin).hostname,
-        policyUrl,
-        "text",
-      ),
-    );
-  } catch (e) {
-    if (httpStatus(e, 403) && unavailablePolicy(a, run, policyUrl))
-      return undefined;
-    if (httpStatus(e, 404)) return "";
-    throw e;
-  }
-}
+/** Install an authority allowlist and ordinary minimum pacing, without policy traffic. */
 export async function gate(
   a: Archive,
   run: string,
   origins = ["https://www.arcgis.com", "https://gis.traviscountytx.gov"],
 ) {
-  a.guard = undefined;
   a.setSpacing(3000);
-  const source = a.store.options(run)?.source;
-  const rules: Record<string, string | undefined> = {};
-  for (const origin of origins) {
-    const text = await robotsPolicy(a, run, origin);
-    rules[origin] = text;
-    if (text !== undefined)
-      a.setSpacing(
-        allowed(origin + "/robots.txt", text, origin + "/robots.txt"),
-      );
-  }
-  a.guard = (url) => {
-    const origin = new URL(url).origin;
-    ensure(origin in rules, "authority missing robots gate");
-    const text = rules[origin];
-    if (text !== undefined)
-      a.setSpacing(profileAllowed(source, origin + "/robots.txt", text, url));
-  };
+  a.guard = (url) =>
+    ensure(
+      origins.includes(new URL(url).origin),
+      "authority outside acquisition allowlist",
+    );
 }
 function validateAppOnlyInvocation(
   source: Source,
@@ -461,7 +422,7 @@ export async function executeSelection(
       await a.verify();
       const summary = await verifySelection(a, prior.id, selected);
       ensure(
-        same(summary, JSON.parse(prior.summary)),
+        sameAcquisition(summary, JSON.parse(prior.summary)),
         "stored summary differs from original content",
       );
       validateCachedRecords(summary, selected.maxRecords);
@@ -668,7 +629,6 @@ export async function verifySelection(
   ensure(s, "missing selection checkpoint");
   validateSelection(s);
   validateSource(s.source);
-  await verifyProfilePolicy(a, run);
   const expected: Record<string, string> = {
     "item-before": itemUrl(s.item),
     "item-after": itemUrl(s.item),
@@ -713,7 +673,6 @@ export async function verifySelection(
   if (!["Feature Service", "Map Service"].includes(String(item.type)))
     return {
       source: s.source,
-      ...sourcePolicy(a, run),
       ...(await verifyPublished(
         a,
         run,
@@ -768,7 +727,6 @@ export async function verifySelection(
   }
   return {
     source: s.source,
-    ...sourcePolicy(a, run),
     strategy: "catalog-feature-query",
     catalogItem: s.item,
     layer: s.layer,
